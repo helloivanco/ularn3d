@@ -1,0 +1,959 @@
+'use strict';
+
+const ESC = 'escape';
+const ENTER = 'return';
+const SPACE = 'space';
+const TAB = 'tab';
+const DEL = `backspace`;
+const CAPS = `CAPS`;
+var UPPERCASE = false;
+
+
+const CALLBACK_COMPLETE = 1;
+const CONTINUE_CALLBACK = 0;
+var blocking_callback;
+var keyboard_input_callback;
+let text_input_event;
+
+
+
+/* extra handling to allow running on keyboards with numpads */
+Mousetrap.prototype.handleKey = function (char, mod, evt) {
+  // add extra argument to the keyboard event to signify if shift key is being held
+  arguments[2].shift = mod[0] === `shift`;
+  var self = this;
+  return self._handleKey.apply(self, arguments);
+};
+
+
+
+function simulateKeypress(key) {
+  // code/keyCode/which are incorrect, but not needed for our purposes
+  mousetrap(new KeyboardEvent('keydown', { key: key, code: '', keyCode: 0, which: 0, bubbles: true }), key);
+  playerInputCount--;
+}
+
+
+
+function mousetrap(e, key) {
+  // debug(`mousetrap: ${key} ${JSON.stringify(e)}`);
+  playerInputCount++;
+  if (key == SPACE) key = ' ';
+  if (key == TAB) return false;
+
+  mainloop(e, key);
+
+  if (text_input_event) {
+    // debug(`text_input_event: ${key}`);
+    text_input_event(key);
+  }
+
+  return false; // disable default browser behaviour
+}
+
+
+
+function setKeyPressEventListener(func) {
+  text_input_event = func;
+}
+
+
+
+function clearKeyPressEventListener() {
+  text_input_event = null;
+}
+
+
+
+function setCharCallback(func) {
+  blocking_callback = func;
+  nomove = NOMOVE;
+}
+
+
+
+function setTextCallback(func, maxTextLength) {
+  setMaxInputLength(maxTextLength || 24);
+  blocking_callback = getTextInput;
+  keyboard_input_callback = func;
+}
+
+
+
+function setNumberCallback(func, allowAsterisk, maxNumLength) {
+  setMaxInputLength(maxNumLength || 8);
+  if (allowAsterisk)
+    blocking_callback = getNumberOrAsterisk;
+  else
+    blocking_callback = getNumberInput;
+  keyboard_input_callback = func;
+}
+
+
+
+function shouldRun(e, key) {
+  // var run = key.indexOf('shift+') >= 0 || key.match(/[YKUHLBJN]/);
+  return e ? e.shift : false || key.match(/[YKUHLBJN]/);
+}
+
+
+
+//const diroffx = { 0,  0, 1,  0, -1,  1, -1, 1, -1 };
+//const diroffy = { 0,  1, 0, -1,  0, -1, -1, 1,  1 };
+function parseDirectionKeys(key) {
+  var dir = 0;
+  if (key == 7 || key == 'y' || key == 'Y' || key.indexOf('home') >= 0) { // UP,LEFT
+    dir = 6;
+  } else if (key == 9 || key == 'u' || key == 'U' || key.indexOf('pageup') >= 0) { // UP,RIGHT
+    dir = 5;
+  } else if (key == 8 || key == 'k' || key == 'K' || key.indexOf('up') >= 0) { // UP
+    dir = 3;
+  } else if (key == 4 || key == 'h' || key == 'H' || key.indexOf('left') >= 0) { // LEFT
+    dir = 4;
+  } else if (key == 6 || key == 'l' || key == 'L' || key.indexOf('right') >= 0) { // RIGHT
+    dir = 2;
+  } else if (key == 1 || key == 'b' || key == 'B' || key.indexOf('end') >= 0) { // DOWN,LEFT
+    dir = 8;
+  } else if (key == 3 || key == 'n' || key == 'N' || key.indexOf('pagedown') >= 0) { // DOWN,RIGHT
+    dir = 7;
+  } else if (key == 2 || key == 'j' || key == 'J' || key.indexOf('down') >= 0) { // DOWN
+    dir = 1;
+  }
+  return dir;
+}
+
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+/*****************************************************************************/
+
+
+
+async function parse(e, key) {
+  // debug(`parse(): got: ${key}`);
+
+  // if (keyboard_input_callback)
+  // debug(`keyboard_input_callback: ` + keyboard_input_callback.name);
+
+  //
+  // upper/lower case keyboard input for mobile
+  //
+
+  // console.log(`parse: moves=`, player.MOVESMADE);
+
+  if (key == CAPS) {
+    nomove = NOMOVE;
+    UPPERCASE = !UPPERCASE;
+    return;
+  }
+
+
+  if (blocking_callback) {
+    // debug(blocking_callback.name + `: `);
+    var before = blocking_callback;
+    var done = blocking_callback(key);
+
+    // dumb hack until everything gets moved to async/await
+    var isPromise = Promise.resolve(done) == done;
+    if (isPromise) {
+      debug('parse: ispromise');
+      return;
+    }
+
+    var after = blocking_callback;
+    // debug(blocking_callback.name + `: ` + done);
+
+    // if a blocking callback assigns a new one, we're not done yet
+    // i think i have created my own special callback hell
+    if (before == after && done) {
+      blocking_callback = null;
+
+      // Handle autotravel here
+      // This is a bit ugly, but it needs to be awaited, which can't be done from the blocking callback
+      if (explorerCallback) {
+        nomove = NOMOVE;
+        const tmpCallback = explorerCallback; // avoid re-entrancy bug
+        explorerCallback = null;
+        await tmpCallback();
+        return;
+      }
+    }
+    if (!done) {
+      nomove = NOMOVE;
+    }
+    return;
+  }
+
+  if (!game_started) {
+    debug(`parse(): game not started`);
+    return;
+  }
+  
+  if (!player) {
+    debug(`parse(): null player`);
+    return;
+  }
+
+  const item = itemAt(player.x, player.y);
+
+  if (!item) {
+    doRollbar(ROLLBAR_ERROR, `parse(): null item at player position`, `key=${key} (${player.x},${player.y}), ${GAMEOVER}, ${game_started}, ${mazeMode}, ${napping}, ${level}, ${gtime}`);
+    nomove = NOMOVE;
+    return;
+  }
+
+
+  //
+  // MOVE PLAYER
+  //
+  var dir = parseDirectionKeys(key);
+  if (dir > 0) {
+    if (shouldRun(e, key)) {
+      run(dir);
+    } else {
+      moveplayer(dir);
+    }
+    return;
+  }
+
+
+
+  //
+  // STAY HERE
+  //
+  if (key == '.' || key == '5') {
+    viewflag = 1;
+    return;
+  }
+
+
+/*
+  // 
+  // USE ITEM
+  //
+  if (key == '`') {
+    if (item.matches(OPOTION)) {
+      key = 'q'; // quaff potion
+    } else if (item.matches(OBOOK) || item.matches(OSCROLL)) {
+      key = 'r'; // read book
+    } else if (item.matches(OCOOKIE)) {
+      key = 'e'; // eat cookie
+    } else if (item.isArmor()) {
+      key = 'W'; // wear
+    } else if (item.isWeapon()) {
+      key = 'w'; // wield
+    } else if (item.matches(OCHEST)) {
+      key = 'o'; // open
+    } else if (item.matches(OSPEED) || item.matches(OHASH) || item.matches(OCOKE) ) {
+      key = 's'; // snort/smoke
+    } else if (item.matches(OSHROOMS) || item.matches(OACID)) {
+      key = 'e'; // eat
+    // } else if (item.matches(OSTAIRSUP)) {
+    //   key = '<'; // go up stairs
+    // } else if (item.matches(OSTAIRSDOWN)) {
+    //   key = '>'; // go down stairs
+    // } else if (item.isStore()) {
+    //   key = 'e'; // enter
+    // } else if (item.canCarry()) {
+    //   key = 't'; // take
+    }
+    else {
+      nomove = NOMOVE;
+      return;
+    }
+  } 
+*/
+
+  //
+  // CAST A SPELL
+  //
+  if (key == 'c') {
+    pre_cast();
+    return;
+  }
+
+  //
+  // v12.5.4 CAST THE LAST SPELL AGAIN
+  //
+  if (key == 'a') {
+    castLastSpell();
+    return;
+  }
+
+  //
+  // DROP
+  //
+  if (key == 'd') {
+    if (player.TIMESTOP == 0) {
+      updateLog(`What do you want to drop [<b>space</b> to view] ? `);
+      setCharCallback(act_drop);
+    }
+    return;
+  }
+
+  //
+  // EAT COOKIE
+  //
+  if (key == 'e') {
+    if (player.TIMESTOP == 0) {
+      if (item.isStore()) {
+        enter();
+        return;
+      }
+
+      if (item.matches(OCOOKIE)) {
+        appendLog(` eat${period}`);
+        eatCookie(item, false);
+      } else if (item.matches(OSHROOMS)) {
+        forget();
+        eatShrooms();
+      } else if (item.matches(OACID)) {
+        forget();
+        dropAcid();
+      } else {
+        updateLog(`What do you want to eat [<b>space</b> to view] ? `);
+        setCharCallback(act_eat);
+      }
+    }
+    return;
+  }
+
+  //
+  // TIDY UP AT FOUNTAIN
+  //
+  if (key == 'f') {
+    if (player.TIMESTOP == 0) {
+      wash_fountain(null);
+      dropflag = 1;
+    }
+    return;
+  }
+
+  //
+  // PACK WEIGHT
+  //
+  if (key == 'g') {
+    nomove = NOMOVE;
+    updateLog(`The stuff you are carrying presently weighs ${Math.round(packweight())} pounds`);
+    return;
+  }
+
+  //
+  // INVENTORY
+  //
+  if (key == 'i') {
+    nomove = NOMOVE;
+    setCharCallback(parse_inventory);
+    drawInventory(isItem, true, true, true, false);
+    return;
+  }
+
+  //
+  // OPEN (in a direction)
+  //
+  if (key == 'o') {
+    if (player.TIMESTOP == 0) {
+      /* check for confusion. */
+      if (player.CONFUSE > 0) {
+        updateLog(`You're too confused!`);
+        beep();
+        return;
+      }
+      /* check for player standing on a chest.  If he is, prompt for and
+          let him open it.  If player ESCs from prompt, quit the Open
+          command.
+      */
+      if (item.matches(OCHEST)) {
+        act_open_chest(player.x, player.y);
+        dropflag = 1; /* prevent player from picking back up if fail */
+        return;
+      } else {
+        if (nearPlayer(OCLOSEDDOOR) || nearPlayer(OCHEST)) {
+          prepare_direction_event(open_something);
+        } else {
+          updateLog(`There is nothing to open!`);
+        }
+      }
+      dropflag = 1;
+    }
+    return;
+  }
+
+  //
+  // PRAY
+  //
+  if (key == 'p') {
+    if (player.TIMESTOP == 0) {
+      pray_at_altar();
+      dropflag = 1;
+      prayed = 1;
+    }
+    return;
+  }
+
+  //
+  // QUAFF POTION
+  //
+  if (key == 'q') {
+    if (player.TIMESTOP == 0) {
+      if (item.matches(OPOTION)) {
+        appendLog(` quaff${period}`);
+        forget();
+        quaffpotion(item, true);
+      } else {
+        updateLog(`What do you want to quaff [<b>space</b> to view] ? `);
+        setCharCallback(act_quaff);
+      }
+    }
+    return;
+  }
+
+  //
+  // READ BOOK OR SCROLL
+  //
+  if (key == 'r') {
+    if (player.BLINDCOUNT > 0) {
+      cursors();
+      updateLog(`You can't read anything when you're blind!`);
+      dropflag = 1;
+    }
+    //
+    else if (player.TIMESTOP == 0) {
+      if (item.matches(OBOOK)) {
+        appendLog(` read${period}`);
+        forget();
+        readbook(item);
+      } else if (item.matches(OSCROLL)) {
+        appendLog(` read${period}`);
+        forget();
+        read_scroll(item);
+      } else {
+        updateLog(`What do you want to read [<b>space</b> to view] ? `);
+        setCharCallback(act_read);
+      }
+    }
+    return;
+  }
+
+  //
+  // SIT ON THRONE
+  //
+  if (key == 's') {
+    if (player.TIMESTOP == 0) {
+      if (item.matches(OSPEED)) {
+        forget();
+        doSpeed();
+      }
+      else if (item.matches(OHASH)) {
+        forget();
+        smokeHash();
+      }
+      else if (item.matches(OCOKE)) {
+        forget();
+        doCoke();
+      }
+      else {
+        sit_on_throne();
+        dropflag = 1;
+      }
+    }
+    return;
+  }
+
+  //
+  // PICK UP
+  //
+  if (key == 't' || key == ',') {
+    /* pickup, don't identify or prompt for action */
+    if (player.TIMESTOP == 0) {
+      lookforobject(false, true);
+    }
+    return;
+  }
+
+  //
+  // PRINT VERSION
+  //
+  if (key == 'v') {
+    nomove = NOMOVE;
+    var larnString = ULARN ? `The Addiction of JS Ularn` : `JS Larn`;
+    updateLog(`${larnString}, Version ${VERSION} Build ${BUILD}`);
+    updateLog(`  ${logname}`);
+    if (ULARN) appendLog(`, ${player.char_picked}, ${player.gender}`);
+    appendLog(`, Difficulty ${getDifficulty()}`);
+    if (debug_used) updateLog(`  Debug`);
+    if (wizard) updateLog(`  Wizard`);
+    if (cheat) updateLog(`  Cheater`);
+    return;
+  }
+
+  //
+  // WIELD
+  //
+  if (key == 'w') {
+    if (item.isWeapon() && !pocketfull()) {
+      appendLog(` wield${period}`);
+      if (take(item)) {
+        forget(); // remove from board
+        wieldWeapon(item);
+      } 
+    } else {
+      updateLog(`What do you want to wield [<b>-</b> for nothing, <b>space</b> to view] ? `);
+      setCharCallback(act_wield);
+    }
+    return;
+  }
+
+  //
+  // SHOW SCORES
+  //
+  if (key == 'z') {
+    nomove = NOMOVE;
+    loadScores(null, true, false);
+  }
+
+  //
+  // DESECRATE
+  //
+  if (key == 'A') {
+    if (player.TIMESTOP == 0) {
+      desecrate_altar();
+      dropflag = 1;
+    }
+    return;
+  }
+
+  //
+  // CLOSE DOOR
+  //
+  if (key == 'C') {
+    if (player.TIMESTOP == 0) {
+      /* check for confusion. */
+      if (player.CONFUSE > 0) {
+        updateLog(`You're too confused!`);
+        beep();
+        return;
+      }
+      if (item.matches(OOPENDOOR)) {
+        close_something(0);
+        return;
+      } else {
+        if (nearPlayer(OOPENDOOR)) {
+          prepare_direction_event(close_something);
+        } else {
+          updateLog(`There is nothing to close!`);
+        }
+        dropflag = 1;
+        return;
+      }
+    }
+    return;
+  }
+
+  //
+  // DRINK FROM FOUNTAIN
+  //
+  if (key == 'D') {
+    if (player.TIMESTOP == 0) {
+      drink_fountain(null);
+      dropflag = 1;
+    }
+    return;
+  }
+
+  //
+  // ENTER A BUILDING
+  //
+  if (key == 'E' || key == 'e' || key == ENTER) {
+    if (player.TIMESTOP == 0) {
+      enter();
+    }
+    return;
+  }
+
+  //
+  // v12.5.4: GO TO SYMBOL
+  //
+  if (key == 'G') {
+    nomove = NOMOVE;
+    if (getPref('explore_object')) {
+      updateLog(`What object do you want to travel to? `);
+      setCharCallback(parseTravelToItem);
+    } else {
+      updateLog(`Travel to object is disabled -- it can be enabled in the (<b>O</b>)ptions menu${period}`);
+    }
+
+    return;
+  }
+
+  //
+  // LIST KNOWN ITEMS
+  //
+  if (key == 'I') {
+    nomove = NOMOVE;
+    seemagic(false);
+    setCharCallback(parse_see_all);
+    return;
+  }
+
+
+  // 
+  // v12.5.3: WAIT MULTIPLE TURNS
+  //
+  if (key == 'M') {
+    nomove = NOMOVE;
+    viewflag = 1;
+    waitUntilRecovered();
+    return;
+  }
+
+  //
+  // v12.5.4 OPTIONS
+  //
+  if (key == 'O') { 
+    nomove = NOMOVE;
+    print_options();
+    return;
+  }
+
+  //
+  // v12.5.3 AUTO-PRAY
+  //
+  if (key == 'P') {
+    if (item.matches(OALTAR)) {
+      if (player.TIMESTOP == 0) {
+        autoPray();
+        dropflag = 1;
+        prayed = 1;
+      }
+    } else {
+      updateLog(`I see no altar to pray at here!`);
+    }
+    return;
+  }
+
+  //
+  // Q - QUIT
+  //
+  if (key == 'Q') {
+    nomove = NOMOVE;
+    setCharCallback(parseQuit);
+    updateLog(`Do you really want to quit (all progress will be lost) [<b>y</b>/<b>n</b>] ? `)
+    return;
+  }
+
+  //
+  // REMOVE GEMS
+  //
+  if (key == 'R') {
+    if (player.TIMESTOP == 0) {
+      if (item.matches(OBRASSLAMP)) {
+        act_rub_lamp();
+      } else {
+        remove_gems();
+      }
+      dropflag = 1;
+    }
+    return;
+  }
+
+
+
+  //
+  // S - SAVE GAME
+  //
+  if (key == 'S') {
+    nomove = NOMOVE;
+
+    if (GOTW) {
+      updateLog(`Nice try...`);
+      return;
+    }
+
+    if (saveGame()) died(DIED_SAVED_GAME, false); /* saved game */
+    return;
+  }
+
+  //
+  // TAKE OFF ARMOR
+  //
+  if (key == 'T') {
+    if (player.SHIELD) {
+      player.SHIELD = null;
+      updateLog(`Your shield is off${period}`);
+    } else
+      if (player.WEAR) {
+        player.WEAR = null;
+        updateLog(`Your armor is off${period}`);
+      } else
+        updateLog(`You aren't wearing anything${period}`);
+    return;
+  }
+
+  //
+  // WEAR ARMOR
+  //
+  if (key == 'W') {
+    if (item.isArmor() && !pocketfull()) {
+      appendLog(` wear${period}`);
+      if (take(item)) {
+        forget(); // remove from board
+        wearArmor(item);
+      } 
+    } else {
+      updateLog(`What do you want to wear [<b>-</b> for nothing, <b>space</b> to view] ? `);
+      setCharCallback(act_wear);
+    }
+    return;
+  }
+
+  //
+  // v12.5.? VIEW CONDUCTS
+  //
+  if (key == 'V') {
+    updateLog(`Conducts observed: ${player.getConductString(true)}`);
+    return;
+  }
+  
+  // 
+  //  v12.5.4 MAZE EXPLORER
+  //
+  if (key === 'X') {
+    nomove = NOMOVE;
+    if (getPref('explore_toggle')) {
+      if (!activeExplorer) {
+        const explorer = Object.create(MazeExplorer);
+        updateLog(`Exploring...`);
+        explorer.setupExplore();
+        const result = await explorer.explore();
+      }
+    } else {
+      updateLog(`Auto explore is disabled -- it can be enabled in the (<b>O</b>)ptions menu${period}`);
+    }
+    return;
+  }
+
+  //
+  // TELEPORT
+  //
+  if (key == 'Z') {
+    if (player.LEVEL > 9) {
+      if (player.TIMESTOP == 0) {
+        oteleport(1, `Zaaaappp!`);
+      }
+      return;
+    }
+    cursors();
+    updateLog(`As yet, you don't have enough experience to use teleportation${period}`);
+    return;
+  }
+
+  //
+  // UP STAIRS
+  //
+  if (key == '<') {
+
+    if (DEBUG_STAIRS_EVERYWHERE) {
+      if (level == MAXLEVEL) {
+        newcavelevel(0);
+        return;
+      }
+      if (level != 0) {
+        newcavelevel(level - 1);
+        return;
+        // if (level == 1) newcavelevel(0);
+        // if (level == MAXLEVEL) moveNear(OVOLUP, true);
+        // if (level <= VBOTTOM) moveNear(OSTAIRSUP, true);
+        // up_stairs();
+        // return;
+      }
+    }
+
+    if (player.TIMESTOP == 0) {
+      up_stairs();
+    }
+
+    return;
+  }
+
+  //
+  // DOWN STAIRS
+  //
+  if (key == '>') {
+
+    if (DEBUG_STAIRS_EVERYWHERE) {
+      if (!item.matches(OVOLDOWN) && level != DBOTTOM && level != VBOTTOM) {
+        newcavelevel(level + 1);
+        return;
+        // if (level == 0 && !itemAt(player.x, player.y).matches(OVOLDOWN)) moveNear(OENTRANCE, true);
+        // else if (level <= VBOTTOM) moveNear(OSTAIRSDOWN, true);
+        // down_stairs();
+        // return;
+      }
+    }
+
+    if (player.TIMESTOP == 0) {
+      down_stairs();
+    }
+
+    return;
+  }
+
+  //
+  // v12.5.4 TRAVEL TO UP STAIRS
+  //
+  if (key == '{') {
+    if (item.matches(OSTAIRSUP) || item.matches(OVOLUP)) {
+      up_stairs();
+      return;
+    }
+    
+    nomove = NOMOVE;
+    if (getPref('explore_stairs')) {
+      updateLog(`Travelling to stairs`);
+      const explorer = Object.create(MazeExplorer);
+      let upItem = OSTAIRSUP;
+      if (level === 1) upItem = OHOMEENTRANCE;
+      if (level === MAXLEVEL) upItem = OVOLUP; // ularn has stairs up and volcanic shaft up, do this to go to the right one
+      explorer.setupTravelToItem([upItem]);
+      await autotravelCallback(explorer);
+    } else {
+      updateLog(`Travel to stairs is disabled -- it can be enabled in the (<b>O</b>)ptions menu${period}`);
+    }
+    return;
+  }
+
+  //
+  // v12.5.4 TRAVEL TO DOWN STAIRS
+  //
+  if (key == '}') {
+    if (item.matches(OSTAIRSDOWN) || item.matches(OENTRANCE)) {
+      down_stairs();
+      return;
+    }
+    
+    nomove = NOMOVE;
+    if (getPref('explore_stairs')) {
+      updateLog(`Travelling to stairs`);
+      const explorer = Object.create(MazeExplorer);
+      const downItem = level === 0 ? OENTRANCE : OSTAIRSDOWN;
+      explorer.setupTravelToItem([downItem]);
+      await autotravelCallback(explorer);
+    } else {
+      updateLog(`Travel to stairs is disabled -- it can be enabled in the (<b>O</b>)ptions menu${period}`);
+    }
+    return;
+  }
+
+  //
+  // IDENTIFY TRAPS
+  //
+  if (key == '^') {
+    let trapFound = false;
+    for (let j = vy(player.y - 1); j <= vy(player.y + 1); j++) {
+      for (let i = vx(player.x - 1); i <= vx(player.x + 1); i++) {
+        const potentialTrap = itemAt(i, j);
+        if (potentialTrap?.isTrap()) {
+          updateLog(`It's ${potentialTrap}${period}`);
+          trapFound = true;
+      }
+      }
+    }
+    if (!trapFound)
+      updateLog(`No traps are visible${period}`);
+    return;
+  }
+
+  //
+  // LOOK AT OBJECT
+  //
+  if (key == ':') {
+    nomove = NOMOVE; /* assumes look takes no time */
+    /* identify, don't pick up or prompt for action */
+    lookforobject(true, false);
+    return;
+  }
+
+
+
+  //
+  // v12.5.1 HIDE/REVEAL CONFIG BUTTONS
+  //
+  if (key == '⚙️') {
+    nomove = NOMOVE;
+    setPref('showConfigButtons', !getPref('showConfigButtons'));
+    onResize();
+    return;
+  }
+
+  //
+  // HELP SCREEN
+  //
+  if (key == '?') {
+    nomove = NOMOVE;
+    currentpage = 0;
+    setCharCallback(parse_help);
+    print_help();
+    return;
+  }
+
+  //
+  // v12.5.0 TOGGLE EXTRA KEYBOARD HELP MODE
+  //
+  if (key == '!') {
+    nomove = NOMOVE;
+    setPref('keyboard_hints', !getPref('keyboard_hints'));
+    updateLog(`Keyboard hints: ${getPref('keyboard_hints') ? `on` : `off`}`);
+    if (getPref('keyboard_hints'))
+      lookforobject(true, false);
+    return;
+  }
+
+  // v12.5.0 TOGGLE AUTO PICKUP
+  if (key == '@') {
+    nomove = NOMOVE;
+    setPref('auto_pickup', !getPref('auto_pickup'));
+    updateLog(`Auto-pickup: ${getPref('auto_pickup') ? `on` : `off`}`);
+    return;
+  }
+
+  //
+  // WIZARD MODE
+  //
+  if (key == '_') {
+    nomove = NOMOVE;
+    updateLog(`Enter Password: `);
+    setTextCallback(wizardmode, 14);
+    return;
+  }
+
+
+  //
+  // v12.5.0 REPORT BUG
+  //
+  if (key == '🐞') {
+    nomove = NOMOVE;
+    reportBug();
+    return;
+  }
+
+  // if we get here, it's an invalid key, and shouldn't take any time
+  nomove = NOMOVE;
+}
+
+
+
+function parseQuit(key) {
+  nomove = NOMOVE;
+  if (key == ESC || key == 'n' || key == 'N') {
+    appendLog(`no${period}`);
+    return 1;
+  }
+  if (key == 'y' || key == 'Y') {
+    appendLog(`yes${period}`);
+    died(DIED_QUITTER, false); /* a quitter */
+    return 1;
+  }
+  return 0;
+}

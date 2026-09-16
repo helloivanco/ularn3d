@@ -1,0 +1,425 @@
+'use strict';
+
+var ULARN = false; // are we playing LARN or ULARN?
+var GOTW = false; // game of the week
+var NONAP = false; 
+
+var DEBUG_STATS = false;
+var DEBUG_OUTPUT = false;
+var DEBUG_STAIRS_EVERYWHERE = false;
+var DEBUG_KNOW_ALL = false;
+var DEBUG_NO_MONSTERS = false;
+var DEBUG_PAINT = 0;
+var DEBUG_LPRCAT = 0;
+var DEBUG_LPRC = 0;
+var DEBUG_PROXIMITY = false;
+
+var dofs = false; /* use fullstory */
+
+
+
+async function play() {
+
+  initRB();
+
+  console.log(`gameID ${gameID}`);
+  console.log(`ismobile`, isMobile(), `isPhone`, isPhone(), `isLocal`, isLocal(), `isFile`, isFile());
+  console.log(`cloudflare`, CF_BROADCAST_HOST);
+
+  document.getElementById('LARN').addEventListener('click', onMouseClick); // left click
+  document.getElementById('LARN').addEventListener('dblclick', onMouseClick); // double click
+  document.getElementById('LARN').addEventListener('contextmenu', onMouseClick); // right click
+
+  document.addEventListener(`dblclick`, preventDoubleClick); // for buttons
+  document.addEventListener('onmouseup', larnmouseup);
+  document.addEventListener('touchend', larnmouseup);
+
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+  window.addEventListener('resize', () => { onResize(); paint(); });
+
+  initWorkers();
+
+  /* warn the player that closing their window will kill the game */
+  if (isLocal() || isAlphaSite()) {
+    enableDebug();
+  } else {
+    window.onbeforeunload = confirmExit;
+  }
+
+  PARAMS = loadURLParameters();
+  ULARN = PARAMS.ularn == `true`;
+  GOTW = PARAMS.gotw == `true`;
+  amiga_mode = PARAMS.mode == `amiga`;
+
+  const tmpID = Math.random().toString(36).substring(2, 7)
+  playerID = localStorageGetObject('playerID', tmpID);
+  localStorageSetObject('playerID', playerID);
+  
+  logname = localStorageGetObject('logname', logname);
+
+  loadPreferences();
+  if (isMobile()) {
+    // override defaults, yes do both on left click
+    overridePref('identify_button', MOUSE_LEFT_CLICK);
+    overridePref('travel_button', MOUSE_LEFT_CLICK);
+  }
+  if (GOTW) overridePref('no_intro', false); // game-of-the-week always shows intro
+
+  setGameConfig();
+
+  document.title = GAMENAME;
+
+  initHelpPages();
+  
+  await loadFonts();
+
+  setMode(amiga_mode, getPref('retro_mode'), getPref('original_objects'));
+
+  welcome(); // show welcome screen, start the game
+
+  loadPreference('player_char'); // player must exist before this is applied
+
+  updateRB();
+
+  // do_fail_now();
+  
+  if (document.getElementById('FAIL')) 
+    document.getElementById('FAIL').classList.remove('failed');
+  document.getElementById('LARN').classList.add('loaded');
+}
+
+
+
+function handleOnline() {
+  console.log('Browser is online');
+  updateLog(`(Network connection restored)`.padStart(78));
+  paint();
+}
+
+function handleOffline() {
+  console.log('Browser is offline');
+  updateLog(`(Network connection lost)`.padStart(78));
+  paint();
+}
+
+
+
+function confirmExit() {
+  if (!GAMEOVER)
+    return `Are you sure? Your game will be lost!`;
+}
+
+
+
+// function toggleFullscreen() {
+//   if (!document.fullscreenElement) {
+//     document.documentElement.requestFullscreen().catch((err) => {});
+//   } else {
+//     if (document.exitFullscreen) {
+//       document.exitFullscreen();
+//     }
+//   }
+// }
+
+
+
+function initKeyBindings() {
+  Mousetrap.bind('.', mousetrap); // stay here
+  Mousetrap.bind(',', mousetrap); // take
+  // Mousetrap.bind('`', mousetrap); // use
+  Mousetrap.bind('<', mousetrap); // go up
+  Mousetrap.bind('>', mousetrap); // go down
+  Mousetrap.bind('^', mousetrap); // identify traps
+  Mousetrap.bind(':', mousetrap); // examine
+  Mousetrap.bind('!', mousetrap); // keyboard hints
+  Mousetrap.bind('@', mousetrap); // auto-pickup
+  // Mousetrap.bind('#', mousetrap); // inventory 
+  Mousetrap.bind('?', mousetrap); // help
+  Mousetrap.bind('_', mousetrap); // password
+  Mousetrap.bind('-', mousetrap); // disarm 
+  Mousetrap.bind('+', mousetrap); // load games via password
+  Mousetrap.bind('±', mousetrap);
+  // Mousetrap.bind('alt+enter', toggleFullscreen); // fullscreen toggle
+
+  Mousetrap.bind(['(', ')'], mousetrap); // allow () for pvnert(x)
+
+  //Mousetrap.bind('enter', mousetrap);
+  Mousetrap.bind('tab', mousetrap); // so we can block default browser action
+  Mousetrap.bind('return', mousetrap);
+  Mousetrap.bind('escape', mousetrap);
+  //Mousetrap.bind('del', mousetrap);
+  Mousetrap.bind('backspace', mousetrap);
+  Mousetrap.bind('space', mousetrap);
+
+  Mousetrap.bind(['up', 'shift+up'], mousetrap);
+  Mousetrap.bind(['down', 'shift+down'], mousetrap);
+  Mousetrap.bind(['left', 'shift+left'], mousetrap);
+  Mousetrap.bind(['right', 'shift+right'], mousetrap);
+  Mousetrap.bind(['pageup', 'shift+pageup'], mousetrap);
+  Mousetrap.bind(['pagedown', 'shift+pagedown'], mousetrap);
+  Mousetrap.bind(['home', 'shift+home'], mousetrap);
+  Mousetrap.bind(['end', 'shift+end'], mousetrap);
+
+  Mousetrap.bind(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'], mousetrap);
+  Mousetrap.bind(['n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'], mousetrap);
+
+  Mousetrap.bind(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'], mousetrap);
+  Mousetrap.bind(['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'], mousetrap);
+
+  Mousetrap.bind('*', mousetrap);
+  Mousetrap.bind(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], mousetrap);
+
+
+  // Item symbols for autotravel
+  Mousetrap.bind(['=', '$', '\\', '/', '%', '{', '|', '\'', '&', '[', ']', '~', '}', ';', '"'], mousetrap);
+}
+
+
+
+function enableDebug() {
+  debug_used = 1;
+  document.body.style.backgroundColor = "#002222";
+  console.log(`DEBUG_MODE: ON`);
+  Mousetrap.bind('alt+`', eventToggleDebugStats);
+  Mousetrap.bind('alt+1', eventToggleDebugOutput);
+  Mousetrap.bind('alt+2', eventToggleDebugWTW);
+  Mousetrap.bind('alt+3', eventToggleDebugStairs);
+  Mousetrap.bind('alt+4', eventToggleDebugKnowAll);
+  Mousetrap.bind('alt+5', eventToggleDebugStealth);
+  Mousetrap.bind('alt+6', eventToggleDebugAwareness);
+  Mousetrap.bind('alt+7', eventToggleDebugImmortal);
+  Mousetrap.bind('alt+8', eventMagicMap);
+  Mousetrap.bind('alt+9', eventEngolden);
+  Mousetrap.bind('alt+0', eventToggleDebugNoMonsters);
+  Mousetrap.bind('alt+-', eventToggleDebugProximity);
+}
+
+
+
+function reportBug() {
+  let email = `eye@larn.org`;
+  let subject = `${logname} found a bug in Larn`;
+  let body_message = `
+[Thanks for reporting a bug, please add as much info as you can here]
+
+---- Other useful info ----:
+version:${VERSION} 
+build:${BUILD}
+name:${logname}
+playerID:${playerID}
+gameID:${gameID}
+cookies:${navigator.cookieEnabled}
+host:${location.hostname}
+params:${JSON.stringify(loadURLParameters())}
+mobile:${isMobile()} 
+mobileString: ${mobileString}
+phone:${isPhone()}
+screen dimensions:${window.screen.width},${window.screen.height}
+browser dimensions:${window.innerWidth},${window.innerHeight}
+
+GAMEOVER:${GAMEOVER}
+game_started:${game_started}
+mazeMode:${mazeMode}
+napping:${napping}
+
+showConfigButtons:${getPref('showConfigButtons')}
+original_objects:${getPref('original_objects')}
+keyboard_hints:${getPref('keyboard_hints')}
+auto_pickup:${getPref('auto_pickup')}
+side_inventory:${getPref('side_inventory')}
+show_color:${getPref('show_color')}
+log_color:${getPref('log_color')}
+bold_objects:${getPref('bold_objects')}
+amiga_mode:${amiga_mode}
+retro_mode:${getPref('retro_mode')}
+wall_char:${getPref('wall_char')}
+identify_button:${getPref('identify_button')}
+travel_button:${getPref('travel_button')}
+floor_char:${getPref('floor_char')}
+custom_monsters:${getPref('custom_monsters')}
+no_intro:${getPref('no_intro')}
+
+dnd_item:${dnd_item}
+genocide:${genocide}
+
+debug_used:${debug_used}
+cheat:${cheat}
+level:${level}
+wizard:${wizard}
+gtime:${gtime}
+HARDGAME:${HARDGAME}
+
+lastmonst:${lastmonst}
+lastnum:${lastnum}
+hitflag:${hitflag}
+playerx:${player ? player.x : "NA"}
+playery:${player ? player.y : "NA"}
+lastpx:${lastpx}
+lastpy:${lastpy}
+lasthx:${lasthx}
+lasthy:${lasthy}
+prayed:${prayed}
+dropflag:${dropflag}
+rmst:${rmst}
+viewflag:${viewflag}
+lasttime:${lasttime}
+
+bottomline:${player ? player.getBottomLine() : "NA"}
+useragent:${navigator.userAgent}
+  `;
+  // window.location.href = "mailto:mail@domain.tld"; // this opens in same window which would be bad
+  var mailto_link = 'mailto:' + email + '?subject=' + subject + '&body=' + encodeURIComponent(body_message);
+  window.open(mailto_link, 'emailWindow');
+}
+
+
+
+
+function eventToggleDebugStats() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_STATS = !DEBUG_STATS;
+  updateLog(`DEBUG_STATS: ${DEBUG_STATS}`);
+  paint();
+}
+
+
+
+function eventToggleDebugOutput() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_OUTPUT = !DEBUG_OUTPUT;
+  updateLog(`DEBUG_OUTPUT: ${DEBUG_OUTPUT}`);
+  paint();
+}
+
+
+
+function eventToggleDebugWTW() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  player.updateWTW(player.WTW == 0 ? 100000 : -player.WTW);
+  updateLog(`DEBUG_WALK_THROUGH_WALLS: ${(player.WTW > 0)}`);
+  paint();
+}
+
+
+
+function eventToggleDebugStairs() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_STAIRS_EVERYWHERE = !DEBUG_STAIRS_EVERYWHERE;
+  updateLog(`DEBUG_STAIRS_EVERYWHERE: ${DEBUG_STAIRS_EVERYWHERE}`);
+  paint();
+}
+
+
+
+function eventToggleDebugKnowAll() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_KNOW_ALL = true;
+  learnAll();
+  updateLog(`DEBUG_KNOW_ALL: ${DEBUG_KNOW_ALL}`);
+  paint();
+}
+
+
+
+function learnAll() {
+  for (let i = 0; i < spelcode.length; i++) {
+    learnSpell(spelcode[i]);
+  }
+  for (let i = 0; i < SCROLL_NAMES.length; i++) {
+    learnScroll(createObject(OSCROLL, i));
+  }
+  for (let i = 0; i < POTION_NAMES.length; i++) {
+    learnPotion(createObject(OPOTION, i));
+  }
+}
+
+
+
+function eventToggleDebugStealth() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  if (player.STEALTH <= 0) {
+    player.updateHoldMonst(100000);
+    player.updateStealth(100000);
+    updateLog(`DEBUG: FREEZING MONSTERS`);
+  } else {
+    player.updateHoldMonst(-player.HOLDMONST);
+    player.updateStealth(-player.STEALTH);
+    updateLog(`DEBUG: UNFREEZING MONSTERS`);
+  }
+  paint();
+}
+
+
+
+function eventToggleDebugAwareness() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  if (player.AWARENESS <= 0) {
+    player.AWARENESS = 100000;
+    updateLog(`DEBUG: EXPANDED AWARENESS++`);
+  } else {
+    player.AWARENESS = 0;
+    updateLog(`DEBUG: EXPANDED AWARENESS--`);
+  }
+  paint();
+}
+
+
+
+function eventMagicMap() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  read_scroll(createObject(OSCROLL, 15));
+  paint();
+}
+
+
+
+function eventEngolden() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  player.GOLD += 250000;
+  paint();
+}
+
+
+
+function eventToggleDebugImmortal() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  if (player.LIFEPROT <= 0) {
+    player.LIFEPROT = 100000;
+    updateLog(`DEBUG: LIFE PROTECTION++`);
+  } else {
+    player.LIFEPROT = 0;
+    updateLog(`DEBUG: LIFE PROTECTION--`);
+  }
+  paint();
+}
+
+
+
+function eventToggleDebugNoMonsters() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_NO_MONSTERS = !DEBUG_NO_MONSTERS;
+  updateLog(`DEBUG: NO MONSTERS: ${DEBUG_NO_MONSTERS}`);
+  paint();
+}
+
+
+
+function eventToggleDebugProximity() {
+  nomove = NOMOVE;
+  debug_used = 1;
+  DEBUG_PROXIMITY = !DEBUG_PROXIMITY;
+  updateLog(`DEBUG: PROXIMITY: ${DEBUG_PROXIMITY}`);
+  paint();
+}

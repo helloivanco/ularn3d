@@ -1,0 +1,543 @@
+'use strict';
+
+
+const ENCH_SCROLL = 0;   /* Enchantment from reading a scroll */
+const ENCH_ALTAR = 1;    /* Enchantment from an altar         */
+const ENCH_FOUNTAIN = 2; /* Enchantment from a fountain       */
+
+function positionplayer(x, y, exact) {
+  if (x == null) x = player.x;
+  if (y == null) y = player.y;
+  if (exact == null) exact = false;
+
+  // short circuit for moving to exact location
+  var distance = 0;
+  if (exact && canMove(x, y)) {
+    player.x = x;
+    player.y = y;
+    //debug(`positionplayer: (` + distance + `) got ` + xy(x, y));
+    setKnow(player.x, player.y, KNOWALL);
+    return true;
+  }
+
+  // try 20 times to be 1 step away, then 2 steps, etc...
+  distance = 1;
+  var maxTries = 20;
+  var numTries = maxTries;
+  while (distance < 10) {
+    while (numTries-- > 0) {
+      var newx = x + (rnd(3) - 2) * distance;
+      var newy = y + (rnd(3) - 2) * distance;
+      // debug(`positionplayer: (` + distance + `) try ` + newx + `,` + newy);
+      if ((newx != x || newy != y)) {
+        if (canMove(newx, newy)) {
+          player.x = newx;
+          player.y = newy;
+          setKnow(player.x, player.y, KNOWALL);
+          //debug(`positionplayer: (` + distance + `) got ` + newx + `,` + newy);
+          return true;
+        }
+      }
+    }
+    numTries = maxTries;
+    distance++;
+  }
+
+  debug(`positionplayer: couldn't place player`);
+  return false;
+}
+
+
+
+function canMove(x, y) {
+  if (!inBounds(x, y)) {
+    return false;
+  }  
+  const item = itemAt(x, y);
+  return (!item.matches(OWALL) && !item.matches(OCLOSEDDOOR) && !monsterAt(x, y));
+}
+
+
+
+/*
+    recalc()    function to recalculate the weapon and armor class of the player
+ */
+function recalc() {
+  if (!player) return;
+
+  var oldAC = player.AC;
+  var oldWC = player.WCLASS;
+
+  player.WCLASS = 0;
+  player.AC = 0;
+
+  var armor = player.WEAR;
+  var weapon = player.WIELD;
+  var shield = player.SHIELD;
+
+  var extra;
+
+  if (armor) {
+    player.AC = getAC(armor);
+  }
+
+  if (shield && shield.matches(OSHIELD)) {
+    player.AC += getAC(shield);
+  }
+
+  player.AC += player.MOREDEFENSES;
+
+  if (weapon) {
+    player.WCLASS = getWC(weapon);
+  }
+  player.WCLASS += player.MOREDAM;
+
+  player.REGEN = 1;
+  player.ENERGY = 0;
+
+  for (var i = 0; i < player.inventory.length; i++) {
+    var item = player.inventory[i];
+    if (!item)
+      continue;
+
+    if (item.matches(OBELT)) player.WCLASS += ((item.arg << 1)) + 2;
+
+    /*  now for regeneration abilities based on rings   */
+    if (item.matches(OPROTRING)) player.AC += item.arg + 1;
+    if (item.matches(ODAMRING)) player.WCLASS += item.arg + 1;
+    if (item.matches(OREGENRING)) player.REGEN += item.arg + 1;
+    if (item.matches(ORINGOFEXTRA)) player.REGEN += 5 * (item.arg + 1);
+    if (item.matches(OENERGYRING)) player.ENERGY += item.arg + 1;
+  }
+
+  // 12.4.5: prevent negative WC and AC
+  player.WCLASS = Math.max(0, player.WCLASS);
+  player.AC = Math.max(0, player.AC);
+
+  if (oldAC != player.AC) changedAC = millis();
+  if (oldWC != player.WCLASS) changedWC = millis();
+}
+
+
+
+function getWC(weapon) {
+  if (!weapon) return 0;
+  if (!weapon.isWeapon()) return 0;
+  let wc = 0;
+  if (weapon.matches(ODAGGER)) wc = 3;
+  if (weapon.matches(OBELT)) wc = 7;
+  if (weapon.matches(OSHIELD)) wc = 8;
+  if (weapon.matches(OPSTAFF)) wc = 10;
+  if (weapon.matches(OSPEAR)) wc = 10;
+  if (weapon.matches(OFLAIL)) wc = 14;
+  if (weapon.matches(OBATTLEAXE)) wc = 17;
+  if (weapon.matches(OLANCE)) wc = (ULARN ? 20 : 19);
+  if (weapon.matches(OLONGSWORD)) wc = 22;
+  if (weapon.matches(OVORPAL)) wc = 22;
+  if (weapon.matches(O2SWORD)) wc = 26;
+  if (weapon.matches(OSWORDofSLASHING)) wc = 30;
+  if (weapon.matches(OSLAYER)) wc = 30;
+  if (weapon.matches(OSWORD)) wc = 32;
+  if (weapon.matches(OHAMMER)) wc = 35;
+  if (wc !== 0) wc += weapon.arg; // return 0 for non-weapons with args
+  return wc;
+}
+
+
+
+function getAC(armor) {
+  if (!armor) return 0;
+  if (!armor.isArmor()) return 0;
+  let ac = 0;
+  if (armor.matches(OSHIELD)) ac = 2;
+  if (armor.matches(OLEATHER)) ac = 2;
+  if (armor.matches(OSTUDLEATHER)) ac = 3;
+  if (armor.matches(ORING)) ac = 5;
+  if (armor.matches(OCHAIN)) ac = 6;
+  if (armor.matches(OSPLINT)) ac = 7;
+  if (armor.matches(OPLATE)) ac = 9;
+  if (armor.matches(OPLATEARMOR)) ac = 10;
+  if (armor.matches(OSSPLATE)) ac = 12;
+  if (armor.matches(OELVENCHAIN)) ac = 15;
+  if (ac !== 0) ac += armor.arg; // return 0 for non-armor with args
+  return ac;
+}
+
+
+
+function createGem() {
+  var gem, arg;
+  switch (rnd(4)) {
+    case 1:
+      gem = ODIAMOND;
+      arg = 50;
+      break;
+    case 2:
+      gem = ORUBY;
+      arg = 40;
+      break;
+    case 3:
+      gem = OEMERALD;
+      arg = 30;
+      break;
+    default:
+      gem = OSAPPHIRE;
+      arg = 20;
+      break;
+  }
+  return createObject(gem, rnd(arg) + arg / 10);
+}
+
+
+
+function createGold(amount) {
+  if (amount > 250) {
+    amount = Math.round(amount / 100) * 100;
+  }
+  return createObject(OGOLDPILE, amount);
+}
+
+
+
+function createRandomItem(lev) {
+  return newobject(lev);
+}
+
+
+
+/*
+ * function to ask --more--. If the user enters a space, returns 0.  If user
+ * enters Escape, returns 1.  If user enters alphabetic, then returns that
+ *  value.
+ */
+function more(select_allowed) {
+  cltoeoln();
+  lprcat(`Press <b>space</b> to continue`);
+
+  if (select_allowed) {
+    lprcat(`, <b>escape</b> to cancel, letter to select: `);
+  }
+}
+
+
+
+/*
+    function to enchant armor player is currently wearing
+ */
+function enchantarmor(enchant_source) {
+  var armor;
+
+  if (player.WEAR) {
+    armor = player.WEAR;
+  } else if (player.SHIELD) {
+    armor = player.SHIELD;
+  } else {
+    cursors();
+    beep();
+    if (enchant_source != ENCH_FOUNTAIN) updateLog(`You feel a sense of loss${period}`);
+    return false;
+  }
+  if (!armor.matches(OSCROLL) && !armor.matches(OPOTION)) {
+    if (enchant_source == ENCH_FOUNTAIN && armor.arg >= 0) {
+      return false; // fountains should only improve negative stats
+    }
+    if (ULARN) {
+      // choose what to enchant
+      armor = (rund(100) < 50) ? player.SHIELD : player.WEAR;
+      if (!armor) armor = (armor == player.SHIELD) ? player.WEAR : player.SHIELD;
+    }
+
+    // enchant
+    armor.arg++;
+    var armorMessage = (armor === player.SHIELD) ? `shield` : `armor`;
+
+    if (ULARN) {
+      // check for destruction at >= +10.
+      if (armor.arg >= 10) {
+        if (enchant_source == ENCH_ALTAR) {
+          armor.arg--;
+          updateLog(`Your ${armorMessage} glows briefly${period}`);
+          return false;
+        } else if (rnd(10) <= 9) {
+          destroyInventory(armor);
+          updateLog(`  Your ${armorMessage} vibrates violently and crumbles into dust!`);
+          return false;
+        }
+      } else {
+        updateLog(`  Your ${armorMessage} glows for a moment${period}`);
+        return true;
+      }
+    } // end ULARN
+    else {
+      updateLog(`  You feel your ${armorMessage} vibrate for a moment`);
+      return true;
+    }
+  }
+  return false;
+}
+
+/*
+    function to enchant a weapon presently being wielded
+ */
+function enchweapon(enchant_source) {
+  var weapon = player.WIELD;
+  if (!weapon) {
+    cursors();
+    beep();
+    if (!enchant_source != ENCH_FOUNTAIN) {
+      if (ULARN) updateLog(`  You feel depressed${period}`);
+      else updateLog(`  You feel a sense of loss${period}`);
+    }
+    return false;
+  }
+  if (!weapon.matches(OSCROLL) && !weapon.matches(OPOTION)) {
+    if (enchant_source == ENCH_FOUNTAIN && weapon.arg >= 0) {
+      return false; // fountains should only improve negative stats
+    }
+    weapon.arg++;
+    if (weapon.matches(OCLEVERRING)) {
+      player.setIntelligence(player.INTELLIGENCE + 1);
+    } else if (weapon.matches(OSTRRING)) {
+      player.setStrExtra(player.STREXTRA + 1);
+    } else if (weapon.matches(ODEXRING)) {
+      player.setDexterity(player.DEXTERITY + 1);
+    }
+
+    if (ULARN) {
+      if (weapon.arg >= 10 && rnd(10) <= 9) {
+        if (enchant_source == ENCH_ALTAR) {
+          weapon.arg--;
+          updateLog(`  Your weapon glows a little${period}`);
+          return false;
+        } else {
+          destroyInventory(weapon);
+          updateLog(`  Your weapon vibrates violently and crumbles into dust!`);
+          return false;
+        }
+      } else {
+        updateLog(`  Your weapon glows for a moment${period}`);
+        return true;
+      }
+    } // end ULARN
+    else {
+      updateLog(`  You feel your weapon vibrate for a moment${period}`);
+      return true;
+    }
+  }
+  return false;
+}
+
+
+
+function destroyInventory(item) {
+  const destroyindex = player.inventory.indexOf(item);
+  if (!item || destroyindex < 0) {
+    debug(`destroyInventory: item not found in inventory: ${item}`);
+    return;
+  }
+  if (item === player.WEAR) player.WEAR = null;
+  if (item === player.SHIELD) player.SHIELD = null;
+  if (item === player.WIELD) player.WIELD = null;
+  player.inventory[destroyindex] = null;
+  player.adjustcvalues(item, false);
+}
+
+
+
+/*
+    function to return 1 if a monster is next to the player else returns 0
+ */
+function nearbymonst() {
+  for (var tmpx = vx(player.x - 1); tmpx <= vx(player.x + 1); tmpx++) {
+    for (var tmpy = vy(player.y - 1); tmpy <= vy(player.y + 1); tmpy++) {
+      if (monsterAt(tmpx, tmpy)) return (true); /* if monster nearby */
+    }
+  }
+  return (false);
+}
+
+
+
+function nearbymonsters() {
+  const near = [];
+  for (let tmpx = vx(player.x - 1); tmpx <= vx(player.x + 1); tmpx++) {
+    for (let tmpy = vy(player.y - 1); tmpy <= vy(player.y + 1); tmpy++) {
+      const monster = monsterAt(tmpx, tmpy);
+      if (monster) {
+        near.push(monster);
+      }
+    }
+  }
+  return near;
+}
+
+
+
+function nearPlayer(item) {
+  for (var tmpx = vx(player.x - 1); tmpx <= vx(player.x + 1); tmpx++) {
+    for (var tmpy = vy(player.y - 1); tmpy <= vy(player.y + 1); tmpy++) {
+      if (itemAt(tmpx, tmpy).matches(item)) return true;
+    }
+  }
+  return false;
+}
+
+
+
+/*
+    makemonst(lev)
+        int lev;
+
+    function to return monster number for a randomly selected monster
+        for the given cave level
+ */
+function makemonst(lev) {
+  var x, tmp;
+  if (lev < 1) {
+    lev = 1;
+  } else if (lev > 12) {
+    lev = 12;
+  }
+
+  if (lev < 5) {
+    x = monstlevel[lev - 1];
+    if (x == 0) x = 1;
+    tmp = rnd(x);
+  } else {
+    x = monstlevel[lev - 1] - monstlevel[lev - 4];
+    if (x == 0) x = 1;
+    tmp = rnd(x) + monstlevel[lev - 4];
+  }
+
+  while (isGenocided(tmp) && tmp < monsterlist.length - 1)
+    tmp++; /* genocided? */
+
+  if (ULARN && level < MAXLEVEL) {
+    if (rnd(100) < 10) {
+      tmp = LEMMING;
+    }
+  }
+
+  return (tmp);
+}
+
+
+
+/*
+ * function to steal an item from the players pockets
+ * returns the item if steals something else returns null
+ */
+function stealsomething() {
+  var j = 100;
+  for (; ;) {
+    var i = rund(26);
+    var item = player.inventory[i];
+    if (item && item !== player.WIELD && item !== player.WEAR && item !== player.SHIELD) {
+      updateLog(`  ${getCharFromIndex(i)}) ${item}`);
+      destroyInventory(item);
+      return item;
+    }
+    if (--j <= 0) return null;
+  }
+}
+
+
+
+/* function to return 1 is player carrys nothing else return 0 */
+function emptyhanded() {
+  for (var i = 0; i < 26; i++) {
+    var item = player.inventory[i];
+    if (item && item !== player.WIELD && item !== player.WEAR && item !== player.SHIELD) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+
+/*
+    function to calculate the pack weight of the player
+    returns the number of pounds the player is carrying
+ */
+// TODO: this could go into a new object.weight field
+function packweight() {
+  var weight = player.GOLD / 1000;
+  for (var i = 0; i < player.inventory.length; i++) {
+    var item = player.inventory[i];
+    if (!item) continue;
+    switch (item.id) {
+      case OSSPLATE.id:
+      case OPLATEARMOR.id:
+        weight += 40;
+        break;
+      case OPLATE.id:
+        weight += 35;
+        break;
+      case OHAMMER.id:
+        weight += 30;
+        break;
+      case OSPLINT.id:
+        weight += 26;
+        break;
+      case OSWORDofSLASHING.id:
+        weight += (ULARN ? 15 : 23);
+        break;
+      case OCHAIN.id:
+      case OBATTLEAXE.id:
+      case O2SWORD.id:
+        weight += 23;
+        break;
+      case OLONGSWORD.id:
+      case OPSTAFF.id:
+      case OSWORD.id:
+      case ORING.id:
+      case OFLAIL.id:
+        weight += 20;
+        break;
+      case OELVENCHAIN.id:
+      case OLANCE.id:
+      case OSLAYER.id:
+      case OVORPAL.id:
+      case OSTUDLEATHER.id:
+        weight += 15;
+        break;
+      case OLEATHER.id:
+      case OSPEAR.id:
+        weight += 8;
+        break;
+      case OORBOFDRAGON.id:
+      case OORB.id:
+      case OBELT.id:
+        weight += 4;
+        break;
+      case OSHIELD.id:
+        weight += 7;
+        break;
+      case OCHEST.id:
+        weight += 30 + item.arg;
+        break;
+      default:
+        weight++;
+        break;
+    }
+  }
+  return (weight);
+}
+
+
+
+function revealLevel() {
+  for (let i = 0; i < MAXX; i++) // magic map
+    for (let j = 0; j < MAXY; j++)
+      setKnow(i, j, KNOWALL);
+}
+
+
+
+async function nap(time) {
+  if (NONAP) time = 10;
+  return new Promise(resolve => {
+    setTimeout(() => { resolve('resolved'); }, time);
+  });
+}

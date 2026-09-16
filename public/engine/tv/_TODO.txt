@@ -1,0 +1,84 @@
+
+big, amiga, performance is still shit
+http://localhost:8000/tv/index_local.html?gameid=sqcfaiblsz
+http://localhost:8001/alpha/tv/?gameid=sqcfaiblsz
+
+first file doesn't exist
+http://localhost:8001/alpha/tv/?gameid=jorz4hhxes
+
+small, good, savegame at 444
+http://localhost:8001/alpha/tv/?gameid=jr0ldn7viw
+
+small, amiga, runs really slow at times
+https://larn.org/larn/tv/index.html?gameid=qjrydqx99l
+http://localhost:8001/alpha/tv/?gameid=qjrydqx99l
+
+big, non-amiga, causes RangeError when scrubbing
+https://larn.org/alpha/tv/?gameid=uu5wf8u9al
+http://localhost:8001/alpha/tv/?gameid=uu5wf8u9al
+
+amiga, win by me --> use to test "seeking..."
+http://localhost:8000/tv/index_local.html?gameid=q73yvndje4
+http://localhost:8001/alpha/tv/?gameid=q73yvndje4
+
+
+
+bugs:
+*** saving a game 3(?) from the end of a buffer causes a null patch, then error on reload
+- scrolling on safari is wonky. seems to be easier when paused
+- probably need to await fonts loading on replay
+- modern font is too wide on replay
+- broken replay: https://larn.org/larn/tv/?gameid=d9vaatk563
+- can't load alpha mobile game https://larn.org/larn/tv/?gameid=o0fni21j87 
+- double screen https://larn.org/larn/tv/?gameid=ve9np2m30v
+- made game list but doesn't load 53.json empty file also double screen https://larn.org/larn/tv/?gameid=jch32olu09
+- final frames are botched: https://larn.org/larn/tv/?gameid=ai2n1hrgnq
+- 106.json is broken: https://larn.org/larn/tv/?gameid=n8l1xbhg2j -> coming back from save game
+  --> bug mitigated, but cause is a missing frame on save (or frame # is one too high on reload)
+
+todo:
+- download multiple .json in parallel
+- Link from watch screen back to list
+- Save playback speed via cookie
+- add play options to larntv list
+- restrict uploads to .json/etc
+- put a size limit on uploads
+- cloud savegames?
+- hold inventory views (and others?) for a little longer somehow?
+
+live mode:
+- support classic fonts
+- mobile fonts have big gaps in the walls
+- message to viewer when player disconnects?
+- # of watchers doesn't reset when cf worker restarted
+
+
+alternative data structure
+--------------------------
+recording > bundles > diffs > frames > divs
+
+div
+- id
+- content
+
+frame
+- num
+- timestamp
+- divs[]
+- compressedFormat???
+
+diff
+- num
+- timestamp
+- divs[]
+- uncompressedFormat???
+
+bundle
+- id
+- diffs[]
+- compress()
+- decompress()
+
+recording
+- gameid
+- bundles[]

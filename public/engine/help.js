@@ -1,0 +1,205 @@
+'use strict';
+
+const helppages = [];
+
+let currentpage = 0;
+
+
+
+function parse_help(key) {
+  nomove = NOMOVE;
+  if (key == ESC) {
+    return exitbuilding();
+  } else if (key == ' ') {
+    print_help();
+  }
+}
+
+
+
+function print_help() {
+  mazeMode = false;
+
+  clear();
+
+  if (++currentpage > helppages.length - 1) {
+    currentpage = 1;
+  }
+  lprcat(helppages[currentpage]);
+  cursors();
+  lprcat(`              ---- Press <b>space</b> for more help, <b>escape</b> to exit ----`);
+
+  blt();
+}
+
+function initHelpPages() {
+
+helppages[0] = !GOTW ?
+    `Welcome to the game of ${GAMENAME}. At this moment, you face a great problem.\n\
+Your daughter has contracted a strange disease, and none of your home remedies\n\
+seem to have any effect. You sense that she is in mortal danger, and you must\n\
+try to save her. Time ago you heard of a land of great danger and opportunity.\n\
+Perhaps here is the solution you need.\n\
+\n\
+    It has been said that there once was a great magician who called himself\n\
+Polinneaus. Many years ago, after having many miraculous successes, Polinneaus\n\
+retired to the caverns of ${GAMENAME}, where he devoted most of his time to the\n\
+creation of magic. Rumors have it that one day Polinneaus set out to dispel\n\
+an attacking army in a forest some distance to the north. It is believed that\n\
+here he met his demise.\n\
+\n\
+    The caverns of ${GAMENAME}, it is thought, must be magnificent in design,\n\
+and contain much magic and treasure. One option you have is to undertake a\n\
+journey into these caverns.\n\
+\n\
+\n\
+    Good Luck!  You're going to need it!\n\
+`
+:
+// <b>Subject:</b> A Weekly Ordeal for One So Unworthy\n\
+`                      <b>Count Endelford's Weekly Dungeon</b>                      \n\
+\n\
+<b>From:</b> Count Endelford ${lt}endelford@larn.org${gt}\n\
+<b>Subject:</b> Thinking of you\n\
+\n\
+I have devised a trial for you, worm. Your reputation precedes you though \n\
+I find it laughable.\n\
+\n\
+The rules for this challenge are as follows:\n\
+o The contest resets as Sunday falls (23:59 UTC).\n\
+o You may play only once. Should you attempt a second journey, expect no mercy.\n\
+o Saving progress is forbidden. Only the weak seek refuge in such cowardice.\n\
+o Wizard mode is strictly and severely forbidden. Invoke it, and my wrath will\n\
+  be swift and absolute.\n\
+\n\
+I present this challenge because I despise you and the opportunity to watch\n\
+you fail weekly delights me. I eagerly await your inevitable demise.\n\
+\n\
+With deepest contempt,\n\
+Endelford\n\
+`;
+
+const helpIDMouseImage = getPref('identify_button') === MOUSE_LEFT_CLICK ? `↖` :
+                         getPref('identify_button') === MOUSE_SHIFT_CLICK ? `↖` :
+                         getPref('identify_button') === MOUSE_RIGHT_CLICK ? `↗` :
+                         getPref('identify_button') === MOUSE_DOUBLE_CLICK ? `⇈` : ` `;
+const helpGoMouseImage = getPref('travel_button') === MOUSE_LEFT_CLICK ? `↖` :
+                         getPref('travel_button') === MOUSE_SHIFT_CLICK ? `↖` :
+                         getPref('travel_button') === MOUSE_RIGHT_CLICK ? `↗` :
+                         getPref('travel_button') === MOUSE_DOUBLE_CLICK ? `⇈` : ` `;
+
+const helpIDLabel1 = getPref('identify_button') === MOUSE_NONE ? `click to ` : `${mouseOptions[getPref('identify_button')]} to`;
+const helpIDLabel2 = `identify an object`;
+const helpGoLabel1 = getPref('travel_button') === MOUSE_NONE ? `click to ` : `${mouseOptions[getPref('travel_button')]} to`;
+const helpGoLabel2 = `go to a location`;
+
+const helpidstarttag = getPref('identify_button') === MOUSE_NONE ? `<dim>` : ``;
+const helpidendtag = getPref('identify_button') === MOUSE_NONE ? `</dim>` : ``;
+const helpgostarttag = getPref('travel_button') === MOUSE_NONE ? `<dim>` : ``;
+const helpgoendtag = getPref('travel_button') === MOUSE_NONE ? `</dim>` : ``;
+
+const objectstarttag = getPref('explore_object') ? `` : `<dim>`;
+const objectendtag = getPref('explore_object') ? `` : `</dim>`;
+const stairstarttag = getPref('explore_stairs') ? `` : `<dim>`;
+const stairendtag = getPref('explore_stairs') ? `` : `</dim>`;
+const explorestarttag = getPref('explore_toggle') ? `` : `<dim>`;
+const exploreendtag = getPref('explore_toggle') ? `` : `</dim>`;
+
+const teleportstarttag = player?.LEVEL >= 10 ? `` : `<dim>`;
+const teleportendtag = player?.LEVEL >= 10 ? `` : `</dim>`;
+
+helppages[1] =
+`                       <b>Help File for The Caverns of ${GAMENAME}</b>
+
+  move using arrow keys     y k u            ↖ ↑ ↗       .  rest one turn
+                            h   l     or     ←   →       M  rest many turns
+  shift+key to run          b j n            ↙ ↓ ↘       ${explorestarttag}X  auto-explore${exploreendtag}
+
+  a  cast last spell again   A  desecrate an altar       <  go up stairs
+  c  cast a spell            C  close a door             >  go down stairs
+  d  drop an item            D  drink at a fountain      ${stairstarttag}{  travel to up${stairendtag}
+  e  eat something           E  enter a store, dungeon   ${stairstarttag}}  travel to down${stairendtag}
+  f  tidy up at a fountain      or volcanic shaft        
+  g  get pack weight         ${objectstarttag}G  travel to object         ${objectendtag}^  identify a trap
+  i  inventory your pockets  I  list all known items     :  look at object you
+  o  open a door or chest    O  options                     are standing on
+  p  pray at an altar        P  autopray                 ${helpIDMouseImage}  ${helpidstarttag}${helpIDLabel1}${helpidendtag}
+  q  quaff a potion          Q  quit the game               ${helpidstarttag}${helpIDLabel2}${helpidendtag}
+  r  read a scroll or book   R  remove gems from throne  ${helpGoMouseImage}  ${helpgostarttag}${helpGoLabel1}${helpgoendtag}
+  s  sit on a throne         S  save the game               ${helpgostarttag}${helpGoLabel2}${helpgoendtag}
+  t  take an item            T  take off armor           !  toggle key hints
+  v  print program version   V  view conducts            @  toggle auto-pickup
+  w  wield a weapon          W  wear armor 
+  z  show scores             ${teleportstarttag}Z  teleport yourself${teleportendtag}        ?  this help screen`;
+  
+  // letters remaining:
+  // F
+  // m  move without picking up an object
+  // x  view log history
+  // /  identify objects in the game?
+
+
+helppages[2] =
+`                                 <b>Special Notes</b> \n\
+\n\
+To drop gold, press '<b>.</b>' after pressing '<b>d</b>'. When dropping gold, if you\n\
+type '<b>*</b>' as your amount, all your gold is dropped.\n\
+\n\
+In general, typing in '<b>*</b>' means all of what you're interested in. This is true\n\
+when visiting the bank, or when contributing at altars.\n\
+\n\
+When in the store, trading post, school, or home, an <b>escape</b> will get you out.\n\
+\n\
+When casting a spell, if you need a list of spells you can cast, type <b>space</b> \n\
+at any time and the available list of spells will be shown.\n\
+\n\
+When an inventory list is on the screen from a drop, quaff, read, or similar\n\
+command, you can type the letter of the object that you wish to act apon,\n\
+without having to type a space to get back to the prompt.\n\
+\n\
+If NumLock is off, the Keypad functions in the obvious way for movement. Hold\n\
+Shift when pressing any direction on the Keypad to run in that direction. The\n\
+5 key on the Keypad is the same as 'stay here', which really means skip your\n\
+turn.\n\
+`;
+
+helppages[3] =
+`                      <b>Background Information for ${GAMENAME}</b> \n\
+\n\
+    Welcome to the game of ${GAMENAME}. At this moment, you face a great problem.\n\
+Your daughter has contracted a strange disease, and none of your home remedies\n\
+seem to have any effect. You sense that she is in mortal danger, and you must\n\
+try to save her. Time ago you heard of a land of great danger and opportunity.\n\
+Perhaps here is the solution you need.\n\
+\n\
+    It has been said that there once was a great magician who called himself\n\
+Polinneaus. Many years ago, after having many miraculous successes, Polinneaus\n\
+retired to the caverns of ${GAMENAME}, where he devoted most of his time to the\n\
+creation of magic. Rumors have it that one day Polinneaus set out to dispel\n\
+an attacking army in a forest some distance to the north. It is believed that\n\
+here he met his demise.\n\
+\n\
+    The caverns of ${GAMENAME}, it is thought, must be magnificent in design,\n\
+and contain much magic and treasure. One option you have is to undertake a\n\
+journey into these caverns.\n\
+\n\
+    Good Luck!  You're going to need it!\n\
+`;
+
+helppages[4] =
+`                  <b>Explanation of the ${GAMENAME} scoreboard facility </b> \n\
+\n\
+${GAMENAME} supports TWO scoreboards, one for winners, and one for deceased\n\
+characters. Each player (by the name entered when you start the game)\n\
+is allowed one slot on each scoreboard. This design helps ensure that \n\
+frequent players of ${GAMENAME} do not hog the scoreboard, and gives more\n\
+players a chance for glory. Level of difficulty is also noted on the\n\
+scoreboards, and this takes precedence over score for determining what\n\
+entry is on the scoreboard. For example: if 'Yar, the Bug Slayer' has\n\
+a score of 128003 on the scoreboard at diff 0, then a game at diff 1\n\
+and a score of 4112 would replace the previous entry on the scoreboard.\n\
+Note that when a player dies, the inventory is stored in the scoreboard\n\
+so that everyone can see what items the player had at the time of death.\n\
+`;
+
+}

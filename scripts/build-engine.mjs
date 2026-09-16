@@ -1,0 +1,65 @@
+import { readFileSync, writeFileSync } from "node:fs";
+const files = [
+  "common/util",
+  "common/larn_config",
+  "common/frame",
+  "common/patch",
+  "common/roll",
+  "common/cloudflare",
+  "common/movie",
+  "common/live",
+  "config",
+  "larn",
+  "main",
+  "object",
+  "options",
+  "global",
+  "monster",
+  "monsterdata",
+  "player",
+  "mazes",
+  "level",
+  "create",
+  "data",
+  "parse",
+  "buttons",
+  "scores",
+  "inventory",
+  "movem",
+  "action",
+  "io",
+  "display",
+  "storedata",
+  "store",
+  "mcdopes",
+  "savelev",
+  "spells",
+  "spellsinfo",
+  "regen",
+  "spheres",
+  "help",
+  "state",
+  "bill",
+  "altar",
+  "fountain",
+  "potion",
+  "scroll",
+  "stairs",
+  "throne",
+  "devmode",
+  "gotw",
+  "explore",
+];
+const source = files
+  .map(
+    (file) =>
+      `\n// Source: ${file}.js\n${readFileSync(`public/engine/${file}.js`, "utf8")}\n`,
+  )
+  .join("\n");
+writeFileSync(
+  "public/engine/game.js",
+  `/* Ularn engine: Copyright (c) 2015-Present Jason Primeau. MIT; see /engine/LICENSE. */\n${source}\n${readFileSync("src/bridge.js", "utf8")}`,
+);
+console.log(
+  `Assembled ${files.length} original engine modules plus the 3D bridge.`,
+);

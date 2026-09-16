@@ -1,0 +1,573 @@
+'use strict';
+
+let video;
+const EMPTY_LARN_FRAME = "                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                            SAVING GAME                                        \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n";
+
+
+
+// a collection of rolls of film
+class Video {
+  constructor(gameID) {
+    this.frameBuffer = [];
+    this.recording = ENABLE_RECORDING || ENABLE_RECORDING_REALTIME;
+    this.gameID = gameID;
+    this.currentFrameNum = -1;
+    this.totalFrames; // total number of frames when replaying
+    
+    this.currentRoll = new Roll([]);
+    this.currentRollNum = 0;
+
+    this.divs = []; // divs to record
+  }
+
+
+
+  getFrame(frameNum) {
+    // console.log(`video.getFrame(): ${frameNum}`);
+
+    // build initial frame
+    if (frameNum < 0) {
+      // console.log(`video.getFrame(): returning blank frame`);
+      return this.createEmptyFrame();
+    } 
+    
+    const frame = this.frameBuffer[frameNum];
+      
+    // protection for occasional missing frame when returning from saved game
+    if (!frame) {
+      console.log(`video.getFrame(): missing frame: ${frameNum}`);
+      return this.createEmptyFrame(frameNum);
+    }
+
+    // memory management - build frames as needed and leave them compressed
+    if (frame.isPatch) {
+      const prevFrame = this.getFrame(frameNum - 1);
+      decompressFrame(prevFrame);
+      const newFrame = buildFrame(frame /*actually a patch*/, prevFrame);
+      // compressFrame(prevFrame, true); // this is handled by frameCompressionJob now
+      destroyPatch(frame);
+      if (newFrame) {
+        this.frameBuffer[frameNum] = newFrame;
+      }
+    }
+
+    return this.frameBuffer[frameNum];
+  }
+
+
+
+  createEmptyFrame(frameNum) {
+    let newFrame = new Frame();
+    // populate the first frame with the names of the divs that were recorded
+    this.divs.forEach(div => {
+      newFrame.divs[div] = ``;
+    });
+    newFrame.id = frameNum || video.currentFrameNum + 1;
+    newFrame.ts = Date.now();
+
+    // console.log(`video.createEmptyFrame(): ${newFrame.id}`);
+    return newFrame;
+  }
+
+
+
+  createInfoFrame(text) {
+    let infoFrame = new Frame();
+    const spaces = ' '.repeat(text.length / 2);
+    infoFrame.divs = {
+      LARN: EMPTY_LARN_FRAME.replace(`${spaces}SAVING GAME`, text),
+      STATS: ``
+    };
+    return infoFrame;
+  };
+
+
+
+  getCurrentRoll() {
+    return this.currentRoll;
+  }
+
+
+
+  addRoll(roll) {
+    destroyRoll(this.currentRoll); // memory management
+    this.currentRoll = null;
+    this.currentRoll = roll;
+    this.currentRollNum++;
+  }
+
+
+
+  addRollToFrameBuffer(roll) {
+    if (!roll) {
+      return;
+    }
+
+    for (const patch of roll.patches) {
+      patch.isPatch = true;
+      this.frameBuffer[patch.id] = patch;
+      if (this.totalFrames < patch.id) this.totalFrames = patch.id;
+      // roll.patches[patch.id] = null; // memory management - too soon
+    }
+
+    // destroyRoll(roll); // memory management -- too soon
+    // roll = null; // memory management -- too soon
+
+    updateProgressBarCallback();
+  }
+
+
+
+  getNextFrame() {
+    this.updateCurrentFrame(1);
+    let frame = this.getFrame(this.currentFrameNum);
+    return frame;
+  }
+
+
+
+  updateCurrentFrame(amount) {
+    if (amount > 0) {
+      this.currentFrameNum = Math.min(this.currentFrameNum + amount, this.frameBuffer.length - 1);
+    } else {
+      this.currentFrameNum = Math.max(this.currentFrameNum + amount, 0);
+    }
+    return this.currentFrameNum;
+  }
+
+
+
+  getCurrentFrame() {
+    return this.getFrame(this.currentFrameNum);
+  }
+
+
+
+  getPreviousFrame() {
+    this.updateCurrentFrame(-1);
+    let frame = this.getFrame(this.currentFrameNum);
+    return frame;
+  }
+
+
+
+  setTotalFrames(num) {
+    this.totalFrames = num;
+  }
+
+
+} 
+// END VIDEO CLASS
+// END VIDEO CLASS
+// END VIDEO CLASS
+// END VIDEO CLASS
+// END VIDEO CLASS
+
+
+
+function uploadRoll(roll, num, metadata) {
+  let filename = `${num}.json`;
+  let uncompressed = JSON.stringify(roll);
+
+  // WORKER STEP 1 - rollCompressionWorker
+  if (rollCompressionWorker) {
+    // console.log(`uploadroll:`, filename, uncompressed.length);
+    rollCompressionWorker.postMessage([filename, uncompressed, `ENCODED_URI`, `roll`, metadata]);
+    uncompressed = null; // memory management
+  } else {
+    // don't upload
+  }
+}
+
+
+
+// WORKER STEP 3 - rollCompressionWorker
+function rollCompressionCallback(event) {
+  let filename = event.data[0];
+  let file = event.data[1];
+  let metadata = event.data[2];
+  uploadFile(gameID, filename, file, metadata);
+  
+  // memory management
+  event.data[0] = null;
+  event.data[1] = null;
+  event.data[2] = null;
+  event.data.length = 0;
+}
+
+
+
+function canRecord() {
+if (!ENABLE_RECORDING && !ENABLE_RECORDING_REALTIME) return false;
+  if (!navigator.onLine) return false;
+  if (!video) video = new Video(gameID);
+  return video.recording;
+}
+
+
+
+// sometimes we can get patches with duplicate IDs which messes up replays
+let LAST_RECORDED_FRAME_ID = -1;
+
+function processRecordedFrame(frame) {
+if (!ENABLE_RECORDING && !ENABLE_RECORDING_REALTIME) return false;
+  if (!navigator.onLine) return false;
+  if (!frame) return false;
+
+  try {
+    if (!video) video = new Video(gameID);
+
+    // console.log(`processRecordedFrame(): frame id: ${frame.id}`);
+    if (LAST_RECORDED_FRAME_ID === frame.id) {
+      // console.error(`processRecordedFrame(): DUPE`);
+      return;
+    }
+    LAST_RECORDED_FRAME_ID = frame.id;
+
+    let prevFrame = video.getFrame(video.currentFrameNum);
+
+    // WORKER STEP 1 - buildPatchWorker
+    if (buildPatchWorker) {
+      buildPatchWorker.postMessage([prevFrame, frame, `patch`]);
+      return;
+    } else {
+      // don't add a frame
+    }
+  } catch (error) {
+    console.error(`processRecordedFrame():`, error);
+  }
+
+}
+
+
+const DELIMITER = '|';
+
+function deflate(htmlString) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlString, 'text/html');
+  const divs = doc.querySelectorAll('.image');
+  
+  const results = [];
+  
+  divs.forEach(div => {
+    const style = div.getAttribute('style');
+    const match = style?.match(/img\/([^"]+)\.png/);
+    const textContent = div.textContent;
+    
+    let token;
+    if (match) {
+      const imageName = match[1]; // Extract filename without extension
+      // If image is o94 and there's text content, use the text
+      if (imageName === 'o94' && textContent) {
+        token = textContent;
+      } else {
+        // Otherwise use the image name
+        token = imageName;
+      }
+    } else if (textContent) {
+      // No image found, but there's text content
+      token = textContent;
+    }
+    
+    if (token) {
+      results.push(token);
+    } else {
+      console.log(`No valid token found in div:`, div);
+    }
+  });
+
+  return results.join(DELIMITER);
+}
+
+
+
+function inflate(tokenString, width = 80) {
+  const tokens = tokenString.split(DELIMITER);
+  
+  const divs = [];
+  let x = 0;
+  let y = 0;
+  
+  tokens.forEach(token => {
+    // Determine if token is an image name or text content
+    let imageName = 'o0'; // default
+    let textContent = ' '; // default empty space
+    
+    // Check if token looks like an image name
+    // Patterns: o + digits | m + digits + optional 'v' or 'u' | w + digits | 'player'
+    if (/^[ow]\d+$/.test(token) || /^m\d+[uv]?$/.test(token) || token === 'player') {
+      // It's an image name
+      imageName = token;
+    } else {
+      // It's text content, so use o94 as the image
+      imageName = 'o94';
+      textContent = token;
+    }
+    
+    // Create the div HTML
+    const div = `<div id="${x},${y}" class="image" style="background-image:url(img/${imageName}.png);">${textContent}</div>`;
+    divs.push(div);
+    
+    // Update position (move to next column, wrap to next row at width)
+    x++;
+    if (x >= width) {
+      x = 0;
+      y++;
+      divs.push('\n'); // add line break
+    }
+  });
+  
+  return divs.join('');
+}
+
+
+
+// WORKER STEP 3 - buildPatchWorker
+function buildPatchCallback(event) {
+  let newPatch = event.data[0];
+  let newFrame = event.data[1];
+
+  // memory management
+  event.data[0] = null;
+  event.data[1] = null;
+  event.data.length = 0;
+
+  // don't record empty frames
+  let empty = true;
+  Object.values(newPatch.divs).forEach(div => {
+    empty &= div == ``;
+  });
+  if (empty) {
+    console.error(`buildPatchCallback(event): empty frame`);
+    return;
+  }
+  if (!video.getCurrentRoll()) {
+    // shouldn't happen but just in case
+    console.log(`buildPatchCallback(): creating first roll`);
+    video.addRoll(new Roll([]));
+  }
+  // console.log(`buildPatchCallback(): adding frame to roll`);
+  video.getCurrentRoll().addPatch(newPatch);
+  if (video.getCurrentRoll().isFull()) {
+    // console.log(`buildPatchCallback(): writing roll`);
+    uploadRoll(video.getCurrentRoll(), video.currentRollNum);
+    video.addRoll(new Roll([]));
+  }
+  video.currentFrameNum = newFrame.id;
+  video.frameBuffer[video.currentFrameNum] = newFrame;
+
+  if (video.currentFrameNum > 0) {
+    video.frameBuffer[video.currentFrameNum - 1] = null; // memory management
+  }
+}
+
+
+
+// this is called by larn
+function endRecording(endData, isUlarn) {
+  try {
+    if (!canRecord()) return;
+
+    let currentRoll = video.getCurrentRoll();
+
+    // save games don't have endData
+    if (endData) {
+      // don't write a file with a '+' in it
+      if (endData.gameID.slice(-1) === `+`) {
+        endData.gameID = endData.gameID.slice(0, -1);
+      }
+
+      try {
+        const lastPatch = currentRoll.patches[currentRoll.patches.length - 1];
+        endData.frames = lastPatch ? lastPatch.id : 0;
+      } catch (error) {
+        console.error(`endRecording(): currentRoll problem`, error);
+        endData.frames = 0;        
+      }
+      // can't use ULARN here because larnTV doesn't have the ULARN var. This function probably should be moved...
+      endData.ularn = isUlarn;
+      endData.numRolls = video.currentRollNum  + 1;
+
+      //console.log(`endRecording(): enddata: `, endData);
+      uploadFile(gameID, `${gameID}.txt`, JSON.stringify(endData));
+    }
+    
+    uploadRoll(currentRoll, video.currentRollNum, {});
+
+  } catch (error) {
+    console.error(`endRecording(): caught: `, error);
+  }
+}
+
+
+
+// this is called by larn
+function getRecordingInfo() {
+
+  if (!canRecord()) return null;
+
+  let recordingInfo = {
+    'frames': video?.currentFrameNum || 0,
+    'rolls': video?.currentRollNum + 1 || 1,
+  };
+  // console.log(`getRecordingInfo(): ${JSON.stringify((recordingInfo))}`);
+  return recordingInfo;
+}
+
+
+
+// this is called by larn for reloading from savegames
+function setRecordingInfo(info) {
+
+  if (!canRecord()) return;
+  if (!info) return;
+
+  video = new Video(video.gameID);
+
+  debug(`setRecordingInfo(): info: ${JSON.stringify(info)}`);
+  video.currentFrameNum = parseInt(info.frames);
+  video.currentRollNum = parseInt(info.rolls);
+  video.frameBuffer[video.currentFrameNum] = video.createEmptyFrame();
+}
+
+
+// game style metadata for recorded games on larntv
+function getStyleData() {
+  try {
+    let larnStyle = {};
+    let larnElement = document.getElementById(`LARN`);
+    larnStyle.fontFamily = getComputedStyle(larnElement).fontFamily;
+    return larnStyle;
+  } catch (error) {
+    console.error(`failed to compute style`, error);
+  }
+}
+
+
+
+// send style metadata to larntv for recorded games
+function uploadStyle(style) {
+  if (canRecord()) {
+    try {
+      // console.log(`uploadStyle(): style: `, style);
+      uploadFile(gameID, `${gameID}.css`, JSON.stringify(style));
+    } catch (error) {
+      console.error(`failed to upload style`, error)
+    }
+  }
+  return true; // only try to upload once
+}
+
+
+
+// memory management
+
+
+
+function startFrameCompressionJob(interval) {
+  if (compressionInterval) {
+    clearInterval(compressionInterval);
+  }
+  compressionInterval = setInterval(frameCompressionJob, interval);
+}
+
+// unused
+function stopFrameCompressionJob() {
+  if (compressionInterval) {
+    clearInterval(compressionInterval);
+    compressionInterval = null;
+  }
+}
+
+function frameCompressionJob() {
+  const currentFrame = video?.currentFrameNum || 0;
+  const bufferSize = video?.frameBuffer.length || 0;
+  let compressedCount = 0;
+  
+  for (let frameIndex = 0; frameIndex < bufferSize; frameIndex++) {
+    const frame = video.frameBuffer[frameIndex];
+    
+    // Skip if frame doesn't exist, is already compressed, or is a patch
+    if (!frame || frame.compressed || frame.compressionStarted || frame.isPatch) {
+      continue;
+    }
+    
+    const distanceFromCurrent = Math.abs(frameIndex - currentFrame);
+    if (distanceFromCurrent > 5) {
+      compressFrame(frame, true /* async */);
+      compressedCount++;
+    }
+  }
+}
+
+
+
+function compressFrame(frame, doasync) {
+  if (!frame.compressed) {
+    // console.log(`compressFrame():`, frame.id, doasync);
+    frame.compressionStarted = true;
+    if (doasync) {
+      // WORKER STEP 1 - frameCompressionWorker
+      frameCompressionWorker.postMessage([frame.id, JSON.stringify(frame.divs), `UTF16`]);
+    } else {
+      frame.divs = LZString.compressToUTF16(JSON.stringify(frame.divs));
+      frame.compressed = true;
+      frame.compressionStarted = false;
+      video.frameBuffer[frame.id] = null;
+      video.frameBuffer[frame.id] = frame;
+    }
+  }
+}
+
+// WORKER STEP 3 - frameCompressionWorker
+function frameCompressionCallback(event) {
+  try {
+    let id = event.data[0];
+    let frame = video.frameBuffer[id];
+    if (frame) {
+      frame.divs = null;
+      frame.divs = event.data[1];
+      frame.compressed = true;
+      frame.compressionStarted = false;
+
+    }
+    else {
+      console.error(`frameCompressionCallback(): no frame for id`, id);
+    }
+    
+    // memory management
+    event.data[0] = null;
+    event.data[1] = null;
+    event.data.length = 0;
+  } catch (error) {
+    console.error(`frameCompressionCallback()`, error);
+  }
+}
+
+function decompressFrame(frame) {
+  if (frame.compressed) {
+    frame.divs = JSON.parse(LZString.decompressFromUTF16(frame.divs));
+    // console.log(`decompressFrame():`, frame.id);
+    frame.compressed = false;
+  }
+}
+
+function destroyPatch(patch) {
+  if (!patch) return;
+  patch.id = null;
+  patch.ts = null;
+  if (patch.divs) {
+    for (const key of Object.keys(patch.divs)) {
+      patch.divs[key] = null;
+    }
+    patch.divs = null;
+  }
+}
+
+function destroyRoll(roll) {
+  if (!roll) return;
+  roll.patches.forEach(patch => {
+    destroyPatch(patch);
+  });
+  roll.patches = null;
+}
