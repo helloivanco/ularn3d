@@ -40,6 +40,7 @@ test("gold is always auto-looted even when auto-loot is off", async ({ page }) =
 
 test("dungeon maps are more square at the same footprint and town is a smaller square", async ({ page }) => {
   await start(page);
+  await page.screenshot({ path: "test-results/town_square_map.png" });
   const shape = await page.evaluate(() => {
     const town = ularn.snapshot();
     const bounds = townBounds();
@@ -71,6 +72,12 @@ test("dungeon maps are more square at the same footprint and town is a smaller s
 
 test("character stats sit beside the journal and the map glyphs are large enough to read", async ({ page }) => {
   await start(page);
+  await page.evaluate(() => {
+    setItem(player.x + 1, player.y, createObject(OBOOK, 1));
+    setItem(player.x + 1, player.y + 1, createObject(OSCROLL, 0));
+    paint();
+  });
+  await page.waitForTimeout(400);
   await expect(page.locator("#attributes")).toBeVisible();
   await expect(page.locator("#attributes")).toContainText("STR");
   await expect(page.locator("#attributes")).toContainText("DEX");
@@ -94,6 +101,7 @@ test("character stats sit beside the journal and the map glyphs are large enough
   expect(layout.cellHeight).toBeGreaterThan(14);
   expect(layout.canvas.w).toBeGreaterThan(700);
   expect(layout.canvas.h).toBeGreaterThan(500);
+  await page.screenshot({ path: "test-results/hud_stats_beside_journal.png" });
 });
 
 test("camera angle is restored after a floor change", async ({ page }) => {
@@ -108,6 +116,7 @@ test("camera angle is restored after a floor change", async ({ page }) => {
   const after = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
   expect(after.length).toBe(3);
   after.forEach((value, index) => expect(Math.abs(value - turned[index])).toBeLessThan(0.05));
+  await page.screenshot({ path: "test-results/dungeon_camera_after_floor_change.png" });
 });
 
 test("book and scroll models carry a clear B and S", async ({ page }) => {
