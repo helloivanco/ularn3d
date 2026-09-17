@@ -719,10 +719,7 @@ function lookforobject(do_ident, do_pickup) {
     return;
   }
   else if (item.matches(OGOLDPILE)) {
-    if (!do_pickup) {
-      if (do_ident) updateLog(`There are ${Number(item.arg).toLocaleString()} gold pieces here.`, formatHint('t', 'to take'));
-      return;
-    }
+    // Gold is always auto-looted. Other items still honor do_pickup / auto-loot.
     if (ULARN) {
       updateLog(`${youFound} ${Number(item.arg).toLocaleString()} gold pieces${period}`)
     }

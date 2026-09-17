@@ -23,9 +23,10 @@ async function snap(page) {
 }
 async function mapClick(page, x, y) {
   const b = await page.locator("#minimap").boundingBox();
+  const size = await page.evaluate(() => ({ w: MAXX, h: MAXY }));
   await page.mouse.click(
-    b.x + ((x + 0.5) / 67) * b.width,
-    b.y + ((y + 0.5) / 17) * b.height,
+    b.x + ((x + 0.5) / size.w) * b.width,
+    b.y + ((y + 0.5) / size.h) * b.height,
   );
 }
 

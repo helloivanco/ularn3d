@@ -124,9 +124,10 @@ test("door clicks resolve one action without leaving queued direction input", as
   });
   const clickDoor = async () => {
     const box = await page.locator("#minimap").boundingBox();
+    const size = await page.evaluate(() => ({ w: MAXX, h: MAXY }));
     await page.mouse.click(
-      box.x + (11.5 / 67) * box.width,
-      box.y + (8.5 / 17) * box.height,
+      box.x + (11.5 / size.w) * box.width,
+      box.y + (8.5 / size.h) * box.height,
     );
   };
   const before = await page.evaluate(() => player.MOVESMADE);

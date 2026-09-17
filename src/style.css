@@ -481,7 +481,7 @@ select {
   height: auto;
   display: block;
   margin-top: 16px;
-  image-rendering: pixelated;
+  image-rendering: auto;
 }
 .map-legend {
   display: flex;
