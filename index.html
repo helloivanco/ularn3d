@@ -4,11 +4,62 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0c1417" />
-    <meta
-      name="description"
-      content="Enter the Caves of Ularn in 3D. Explore 20 dangerous floors, master spells, and return with the cure in this complete turn-based roguelike."
-    />
-    <title>Ularn — The Caves Below</title>
+    <title>Ularn — Play Free Online or Download for Windows</title>
+    <meta name="description" content="Play Ularn, a free turn-based dungeon crawler, in your browser. Explore 20 floors with eight classes, or download the Windows game for offline adventures." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://ularn-3d.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ularn — The Caves Below" />
+    <meta property="og:title" content="Ularn — Play Free Online or Download for Windows" />
+    <meta property="og:description" content="Eight classes. Twenty dungeon floors. Play this free turn-based roguelike in your browser, or take the Windows game offline." />
+    <meta property="og:url" content="https://ularn-3d.vercel.app/" />
+    <meta property="og:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
+    <meta property="og:image:width" content="1440" />
+    <meta property="og:image:height" content="1000" />
+    <meta property="og:image:alt" content="Ularn gameplay with an overhead town view, symbol map, inventory, and bottom adventure controls" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Ularn — Play Free Online or Download for Windows" />
+    <meta name="twitter:description" content="Explore 20 floors with eight classes in a free turn-based dungeon crawler. Play online or download for Windows." />
+    <meta name="twitter:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
+    <meta name="twitter:image:alt" content="Ularn's overhead town, symbol map, inventory, and adventure controls" />
+    <script type="application/ld+json">
+{
+      "@context": "https://schema.org",
+      "@type": [
+            "VideoGame",
+            "SoftwareApplication"
+      ],
+      "@id": "https://ularn-3d.vercel.app/#game",
+      "name": "Ularn — The Caves Below",
+      "url": "https://ularn-3d.vercel.app/",
+      "description": "A free, single-player turn-based dungeon crawler with eight character classes, 20 underground floors, and browser and offline Windows editions.",
+      "applicationCategory": "GameApplication",
+      "genre": [
+            "Roguelike",
+            "Role-playing game",
+            "Dungeon crawler"
+      ],
+      "operatingSystem": "Windows 10 or later (64-bit); macOS, Linux, and Windows through a WebGL2 browser",
+      "browserRequirements": "JavaScript and WebGL2 enabled",
+      "gamePlatform": [
+            "Web browser",
+            "Windows"
+      ],
+      "playMode": "SinglePlayer",
+      "isAccessibleForFree": true,
+      "inLanguage": "en",
+      "downloadUrl": "https://ularn-3d.vercel.app/downloads/Ularn.windows.exe",
+      "screenshot": "https://ularn-3d.vercel.app/social/ularn.png",
+      "image": "https://ularn-3d.vercel.app/social/ularn.png",
+      "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+      },
+      "license": "https://ularn-3d.vercel.app/engine/LICENSE"
+}
+    </script>
+    <script src="/site-runtime.js" defer></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -33,25 +84,28 @@
             aria-pressed="false"
             title="Enable sound"
           >
-            <span data-icon="soundOff"></span><span class="button-label">Sound off</span></button
+            <span data-icon="soundOff"></span
+            ><span class="button-label">Sound off</span></button
           ><button id="guide" class="icon-button" aria-label="How to play">
-            <span data-icon="book"></span><span class="button-label">Field guide</span></button
+            <span data-icon="book"></span
+            ><span class="button-label">Field guide</span></button
           ><button
             id="pause"
             class="icon-button"
             hidden
             aria-label="Pause and settings"
           >
-            <span data-icon="pause"></span><span class="button-label">Menu</span>
+            <span data-icon="pause"></span
+            ><span class="button-label">Menu</span>
           </button>
         </nav>
       </header>
       <section id="welcome" aria-labelledby="title">
         <div class="eyebrow"><span></span> A CLASSIC REAWAKENED</div>
-        <h1 id="title">The caves call.<br /><em>Will you return?</em></h1>
+        <h1 id="title">Ularn.<br /><em>The caves below.</em></h1>
         <p class="intro">
-          Your child is dying. Somewhere beneath Ularn lies the only cure. Take
-          up your weapon. Descend into the unknown.
+          A free, turn-based dungeon crawler. Eight classes. Twenty floors.
+          Play in your browser, or take the Windows game offline.
         </p>
         <form id="start-form">
           <div class="form-row">
@@ -78,7 +132,7 @@
           <div id="classes" role="group" aria-labelledby="class-label"></div>
           <p id="class-description"></p>
           <button type="submit" class="primary" id="begin">
-            Begin expedition <span data-icon="northeast"></span>
+            Play in browser <span data-icon="northeast"></span>
           </button>
           <button type="button" id="continue" class="secondary" hidden>
             Continue expedition <span data-icon="east"></span>
@@ -88,6 +142,12 @@
           </p>
           <p id="start-error" role="alert"></p>
         </form>
+        <div class="play-options web-only">
+          <a id="download-windows" class="windows-download" href="/downloads/Ularn.windows.exe" download="Ularn.windows.exe">
+            <span data-icon="take" aria-hidden="true"></span><span>Download for Windows <small>Free · 64-bit · Offline .exe</small></span><span aria-hidden="true">↗</span>
+          </a>
+          <div class="site-links"><a id="about-game" href="/about/">About &amp; controls</a><a href="/downloads/SHA256SUMS.txt">Verify download</a></div>
+        </div>
         <div class="welcome-note">
           <span data-icon="hourglass"></span> Time moves only when you do.
         </div>
@@ -98,64 +158,30 @@
         <p>15 dungeon floors · 5 volcanic depths · One chance</p>
       </div>
       <div id="hud" hidden>
-        <aside class="hero-panel panel">
-          <div class="hero-heading">
-            <span class="hero-seal" data-icon="swords"></span>
-            <div>
-              <h2 id="player-name"></h2>
-              <p id="player-class"></p>
-            </div>
-            <span id="player-rank" class="rank"></span>
-          </div>
-          <div class="meter-label">
-            <span>VITALITY</span><strong id="health-text"></strong>
-          </div>
-          <div class="meter health"><i id="health-bar"></i></div>
-          <div class="meter-label">
-            <span>SPELL POWER</span><strong id="mana-text"></strong>
-          </div>
-          <div class="meter mana"><i id="mana-bar"></i></div>
-          <div class="combat-stats">
-            <div><span>GOLD</span><strong id="gold"></strong></div>
-            <div><span>ARMOR</span><strong id="armor"></strong></div>
-            <div><span>WEAPON</span><strong id="weapon"></strong></div>
-          </div>
-          <div id="attributes"></div>
-          <div id="effects"></div>
-        </aside>
         <aside class="map-panel panel">
           <div class="panel-heading">
             <span>CHARTED TERRITORY</span><span id="map-depth">SURFACE</span>
           </div>
           <canvas
             id="minimap"
-            width="402"
-            height="102"
-            aria-label="Map of explored tiles"
+            width="1072"
+            height="272"
+            aria-label="Symbol map of explored tiles; @ marks your position"
           ></canvas>
-          <div class="map-legend">
-            <span><i class="dot gold"></i>You</span
-            ><span><i class="dot green"></i>Landmark</span
-            ><span><i class="dot red"></i>Creature</span>
-          </div>
-        </aside>
-        <aside class="quest-panel">
-          <div class="eyebrow">YOUR EXPEDITION</div>
-          <h3 id="quest-title">A cure for your child</h3>
-          <p id="quest-text">
-            Seek the Eye of Larn in the deepest dungeon. Then brave the volcano
-            for the cure.
-          </p>
-          <div class="time">
-            <span data-icon="hourglass"></span><strong id="time-left">400</strong
-            ><span>mobuls remain</span>
-          </div>
           <div id="town-travel">
-            <label for="destination">TOWN LANDMARKS</label
-            ><select id="destination" aria-label="Travel to town landmark">
+            <select id="destination" aria-label="Travel to town landmark">
               <option value="">Choose a destination…</option>
             </select>
           </div>
+        </aside>
+        <aside id="inventory-panel" class="panel" aria-label="Pinned inventory">
+          <div class="panel-heading"><span>INVENTORY</span><span id="inventory-count"></span></div>
+          <div id="inventory-list"></div>
+          <div class="inventory-help">Manage items with <kbd>i</kbd> · Hide with <kbd>F3</kbd></div>
+        </aside>
+        <aside id="effects-panel" aria-label="Active effects" hidden>
+          <div class="panel-heading">ACTIVE EFFECTS</div>
+          <div id="effects"></div>
         </aside>
         <div id="tile-label" hidden></div>
         <div class="camera-tools">
@@ -177,39 +203,88 @@
             aria-label="Rotate camera right"
           >
             <span data-icon="rotateRight"></span></button
-          ><button id="zoom-in" aria-label="Zoom in"><span data-icon="plus"></span></button
-          ><button id="zoom-out" aria-label="Zoom out"><span data-icon="minus"></span></button>
+          ><button id="zoom-in" aria-label="Zoom in">
+            <span data-icon="plus"></span></button
+          ><button id="zoom-out" aria-label="Zoom out">
+            <span data-icon="minus"></span>
+          </button>
         </div>
-        <section class="journal panel">
+        <div class="adventure-bar panel" aria-label="Adventure controls">
+        <aside class="hero-panel panel">
+          <div class="hero-heading">
+            <span class="hero-seal" data-icon="swords"></span>
+            <div>
+              <h2 id="player-name"></h2>
+              <p id="player-class"></p>
+            </div>
+            <span id="player-rank" class="rank"></span>
+          </div>
+          <div class="vital-pair"><div class="vital"><div class="meter-label">
+            <span>VITALITY</span><strong id="health-text"></strong>
+          </div>
+          <div class="meter health"><i id="health-bar"></i></div></div><div class="vital">
+          <div class="meter-label">
+            <span>SPELL POWER</span><strong id="mana-text"></strong>
+          </div>
+          <div class="meter mana"><i id="mana-bar"></i></div></div></div>
+          <div class="combat-stats">
+            <div><span>GOLD</span><strong id="gold"></strong></div>
+            <div><span>ARMOR</span><strong id="armor"></strong></div>
+            <div><span>WEAPON</span><strong id="weapon"></strong></div>
+          </div>
+          <div id="attributes"></div>
+        </aside>
+        <section class="journal">
           <div class="panel-heading">
-            <span>EXPEDITION JOURNAL</span><span id="turn-count">TURN 0</span>
+            <span>JOURNAL</span><span id="turn-count">TURN 0</span>
           </div>
           <div id="journal-lines" role="log" aria-live="polite"></div>
           <div id="CONTEXT" class="native-buttons"></div>
         </section>
         <div class="actionbar">
-          <button data-key="i"><span data-icon="backpack"></span>Inventory<kbd>i</kbd></button
-          ><button data-key="c"><span data-icon="spell"></span>Cast spell<kbd>c</kbd></button
-          ><button data-key="q"><span data-icon="potion"></span>Quaff<kbd>q</kbd></button
-          ><button data-key="r"><span data-icon="scroll"></span>Read<kbd>r</kbd></button
-          ><button data-key="o"><span data-icon="chest"></span>Open<kbd>o</kbd></button
-          ><button data-key="t"><span data-icon="take"></span>Take<kbd>t</kbd></button
-          ><button data-key="."><span data-icon="hourglass"></span>Wait<kbd>·</kbd></button
+          <button data-key="i">
+            <span data-icon="backpack"></span>Inventory<kbd>i</kbd></button
+          ><button data-key="c">
+            <span data-icon="spell"></span>Cast spell<kbd>c</kbd></button
+          ><button data-key="q">
+            <span data-icon="potion"></span>Quaff<kbd>q</kbd></button
+          ><button data-key="r">
+            <span data-icon="scroll"></span>Read<kbd>r</kbd></button
+          ><button data-key="o">
+            <span data-icon="chest"></span>Open<kbd>o</kbd></button
+          ><button data-key="t">
+            <span data-icon="take"></span>Take<kbd>t</kbd></button
+          ><button data-key=".">
+            <span data-icon="hourglass"></span>Wait<kbd>·</kbd></button
+          ><button id="auto-loot" aria-pressed="true" title="Toggle auto-loot (F2)"><span data-icon="take"></span><span class="button-label">Auto-loot on</span><kbd>F2</kbd></button
+          ><button id="inventory-pin" aria-pressed="true" title="Toggle pinned inventory (F3)"><span data-icon="backpack"></span><span class="button-label">Pin inventory</span><kbd>F3</kbd></button
           ><button id="save"><span data-icon="save"></span>Save</button>
         </div>
         <div class="movement">
           <span>MOVE / ATTACK</span>
           <div class="dpad">
-            <button data-key="y" aria-label="Move northwest"><span data-icon="northwest"></span></button
-            ><button data-key="k" aria-label="Move north"><span data-icon="north"></span></button
-            ><button data-key="u" aria-label="Move northeast"><span data-icon="northeast"></span></button
-            ><button data-key="h" aria-label="Move west"><span data-icon="west"></span></button
-            ><button data-key="." aria-label="Wait one turn"><span data-icon="hourglass"></span></button
-            ><button data-key="l" aria-label="Move east"><span data-icon="east"></span></button
-            ><button data-key="b" aria-label="Move southwest"><span data-icon="southwest"></span></button
-            ><button data-key="j" aria-label="Move south"><span data-icon="south"></span></button
-            ><button data-key="n" aria-label="Move southeast"><span data-icon="southeast"></span></button>
+            <button data-key="y" aria-label="Move northwest">
+              <span data-icon="northwest"></span></button
+            ><button data-key="k" aria-label="Move north">
+              <span data-icon="north"></span></button
+            ><button data-key="u" aria-label="Move northeast">
+              <span data-icon="northeast"></span></button
+            ><button data-key="h" aria-label="Move west">
+              <span data-icon="west"></span></button
+            ><button data-key="." aria-label="Wait one turn">
+              <span data-icon="hourglass"></span></button
+            ><button data-key="l" aria-label="Move east">
+              <span data-icon="east"></span></button
+            ><button data-key="b" aria-label="Move southwest">
+              <span data-icon="southwest"></span></button
+            ><button data-key="j" aria-label="Move south">
+              <span data-icon="south"></span></button
+            ><button data-key="n" aria-label="Move southeast">
+              <span data-icon="southeast"></span>
+            </button>
           </div>
+        </div>
+        <div class="run-clock" title="Time remaining"><span data-icon="hourglass"></span><strong id="time-left">400</strong> mobuls</div>
         </div>
         <div class="bottom-hint">
           Arrow keys to move <span>·</span> Click a tile to travel
@@ -219,7 +294,9 @@
       <div id="interaction" class="panel" hidden>
         <div class="panel-heading">
           <span id="interaction-title">CHOOSE AN ACTION</span
-          ><button data-key="escape" aria-label="Cancel action">Esc <span data-icon="close"></span></button>
+          ><button data-key="escape" aria-label="Cancel action">
+            Esc <span data-icon="close"></span>
+          </button>
         </div>
         <div id="ACTIONS" class="native-buttons"></div>
         <div id="KEYBOARD" class="native-buttons"></div>
@@ -232,7 +309,7 @@
       >
         <div class="terminal-card panel">
           <div class="panel-heading">
-            <span id="engine-title">ULARN · YOUR EXPEDITION</span
+            <span id="engine-title">ULARN</span
             ><button data-key="escape" aria-label="Close game panel">
               Esc <span data-icon="close"></span>
             </button>
@@ -242,12 +319,16 @@
             <button data-key="space">Continue / next page</button
             ><button data-key="return">Enter ↵</button
             ><button data-key="escape">Return to game</button
-            ><button id="new-after-death" hidden>New expedition <span data-icon="northeast"></span></button>
+            ><button id="new-after-death" hidden>
+              New expedition <span data-icon="northeast"></span>
+            </button>
           </div>
         </div>
       </section>
       <dialog id="guide-dialog" class="panel dialog">
-        <button class="close-dialog" aria-label="Close field guide"><span data-icon="close"></span></button>
+        <button class="close-dialog" aria-label="Close field guide">
+          <span data-icon="close"></span>
+        </button>
         <div class="eyebrow">THE ADVENTURER’S FIELD GUIDE</div>
         <h2>Every step matters.</h2>
         <p>
@@ -278,7 +359,8 @@
             <p>
               <kbd>i</kbd> inventory · <kbd>w</kbd> wield · <kbd>W</kbd> wear ·
               <kbd>q</kbd> drink · <kbd>r</kbd> read · <kbd>d</kbd> drop ·
-              <kbd>c</kbd> cast. The town’s stores, bank, and college can help.
+              <kbd>c</kbd> cast. <kbd>F2</kbd> toggles auto-loot; <kbd>F3</kbd>
+              pins your inventory. The town’s stores, bank, and college can help.
             </p>
           </section>
           <section>
@@ -307,11 +389,14 @@
         </div>
       </dialog>
       <dialog id="pause-dialog" class="panel dialog compact">
-        <button class="close-dialog" aria-label="Close menu"><span data-icon="close"></span></button>
+        <button class="close-dialog" aria-label="Close menu">
+          <span data-icon="close"></span>
+        </button>
         <div class="eyebrow">TAKE A BREATH</div>
         <h2>Your adventure waits.</h2>
         <p>This is a turn-based world. Nothing moves while you take a break.</p>
-        <button id="resume-game" class="primary">Return to expedition <span data-icon="east"></span></button
+        <button id="resume-game" class="primary">
+          Return to expedition <span data-icon="east"></span></button
         ><button id="save-exit" class="secondary">Save & return to title</button
         ><button id="original-help" class="secondary">
           Original game manual
@@ -343,6 +428,7 @@
         <div id="RUN"></div>
         <div id="KEYPAD"></div>
       </div>
+      <noscript><div class="no-script"><h2>Play Ularn online or on Windows</h2><p>The browser game needs JavaScript and WebGL2. You can also <a href="/downloads/Ularn.windows.exe">download the Windows game</a> or read the <a href="/about/">game overview and controls</a>.</p></div></noscript>
       <div id="loading">Preparing the caves…</div>
     </main>
     <script src="/engine/lib/lz-string.min.js"></script>

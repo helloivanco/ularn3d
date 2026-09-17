@@ -1,0 +1,114 @@
+import { test, expect } from "@playwright/test";
+
+const origin = "https://ularn-3d.vercel.app";
+const routes = ["/", "/about/"];
+test.use({ javaScriptEnabled: false });
+
+test("indexable pages expose unique metadata, headings and canonical URLs without JavaScript", async ({ page }) => {
+  const titles = [], descriptions = [];
+  for (const route of routes) {
+    const response = await page.goto(route);
+    expect(response.status()).toBe(200);
+    titles.push(await page.title());
+    descriptions.push(await page.locator('meta[name="description"]').getAttribute("content"));
+    expect(titles.at(-1)).toContain("Ularn");
+    expect(descriptions.at(-1).length).toBeGreaterThan(40);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h1")).toContainText(/Ularn/i);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}${route}`);
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", `${origin}${route}`);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", `${origin}/social/ularn.png`);
+    await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute("content", /\S+/);
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
+    const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
+    expect(blocks.length).toBeGreaterThan(0);
+    const nodes = blocks.flatMap((text) => {
+      const value = JSON.parse(text);
+      return value["@graph"] || (Array.isArray(value) ? value : [value]);
+    });
+    expect(nodes.every((node) => !!node["@type"])).toBe(true);
+    if (route === "/") expect(nodes.some((node) => [node["@type"]].flat().includes("SoftwareApplication"))).toBe(true);
+    expect(await page.locator('img:not([alt])').count()).toBe(0);
+  }
+  expect(new Set(titles).size).toBe(routes.length);
+  expect(new Set(descriptions).size).toBe(routes.length);
+  await page.goto("/?utm_source=seo-regression");
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}/`);
+});
+
+test("field guide and optional Windows download are reachable through normal links", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#about-game")).toHaveAttribute("href", "/about/");
+  await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
+  await expect(page.locator("#download-windows")).toContainText(/Windows|\.exe/i);
+  await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
+  await page.goto("/about/");
+  await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/");
+  await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toBeVisible();
+  await expect(page.locator('a[href="/downloads/SHA256SUMS.txt"]')).toBeVisible();
+  await expect(page.locator(".class-grid article")).toHaveCount(8);
+  await expect(page.locator("#controls")).toContainText("F2");
+  await expect(page.locator("#controls")).toContainText("F3");
+  await expect(page.locator("#windows")).toContainText(/separate from browser saves/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("robots and sitemap advertise only canonical public pages", async ({ request }) => {
+  const robots = await request.get("/robots.txt");
+  expect(robots.status()).toBe(200);
+  const rules = await robots.text();
+  expect(rules).toMatch(/^Sitemap:\s*https:\/\/ularn-3d\.vercel\.app\/sitemap\.xml\s*$/im);
+  expect(rules).not.toMatch(/^Disallow:\s*\/(?:engine\/)?\s*$/im);
+  const sitemap = await request.get("/sitemap.xml");
+  expect(sitemap.status()).toBe(200);
+  const xml = await sitemap.text();
+  expect(xml).toContain('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"');
+  const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  expect(locations.sort()).toEqual(routes.map((route) => `${origin}${route}`).sort());
+  const image = await request.get("/social/ularn.png");
+  expect(image.status()).toBe(200);
+  expect(image.headers()["content-type"]).toContain("image/png");
+  expect((await image.body()).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
+test("published Windows link serves a real executable and its checksum", async ({ request }) => {
+  test.skip(process.env.DOWNLOAD_AVAILABLE !== "1", "Enable after the optional Windows artifact has been published.");
+  const path = "/downloads/Ularn.windows.exe";
+  const head = await request.head(path);
+  expect(head.status()).toBe(200);
+  expect(head.headers()["content-type"]).not.toContain("text/html");
+  expect(Number(head.headers()["content-length"])).toBeGreaterThan(65536);
+  if (process.env.SEO_DEPLOYED === "1") {
+    expect(head.headers()["content-type"]).toContain("application/vnd.microsoft.portable-executable");
+    expect(head.headers()["content-disposition"]).toContain('attachment; filename="Ularn.windows.exe"');
+    expect(head.headers()["x-robots-tag"]).toContain("noindex");
+  }
+  // Avoid transferring the entire desktop runtime during a routine site check.
+  if (head.headers()["accept-ranges"]?.includes("bytes")) {
+    const prefix = await request.get(path, { headers: { Range: "bytes=0-1" } });
+    expect(prefix.status()).toBe(206);
+    expect((await prefix.body()).toString()).toBe("MZ");
+  }
+  const checksum = await request.get("/downloads/SHA256SUMS.txt");
+  expect(checksum.status()).toBe(200);
+  expect(await checksum.text()).toMatch(/^[a-f\d]{64}\s+\*?Ularn\.windows\.exe\s*$/im);
+});
+
+test("deployed utility pages stay out of search and unknown routes are real 404s", async ({ request }) => {
+  test.skip(process.env.SEO_DEPLOYED !== "1", "Vercel response headers and 404 routing are deployment checks.");
+  for (const route of routes) {
+    const page = await request.get(route);
+    expect(page.status()).toBe(200);
+    expect(page.headers()["x-robots-tag"] || "").not.toContain("noindex");
+  }
+  for (const [duplicate, canonical] of [["/index.html", "/"], ["/about", "/about/"], ["/about/index.html", "/about/"]]) {
+    const redirect = await request.get(duplicate, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(308);
+    expect(new URL(redirect.headers().location, origin).pathname).toBe(canonical);
+  }
+  const utility = await request.get("/engine/larn_local.html");
+  expect(utility.headers()["x-robots-tag"]).toContain("noindex");
+  const missing = await request.get("/seo-regression-page-that-does-not-exist");
+  expect(missing.status()).toBe(404);
+});

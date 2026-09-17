@@ -67,14 +67,209 @@ mousetrap = function (event, key) {
     paint();
     return false;
   }
+  if (key === "@" && mazeMode && !blocking_callback && !GAMEOVER) {
+    const enabled = window.ularn.setAutoLoot(!getPref("auto_pickup"));
+    updateLog(`Auto-loot: ${enabled ? "on" : "off"}`);
+    paint();
+    return false;
+  }
   return originalInput3D(event, key);
 };
 
 const SAVE_KEY_3D = "ularn3d.expedition.v1";
+const AUTO_LOOT_KEY_3D = "ularn3d.autoLoot";
+function readAutoLoot3D() {
+  try {
+    return localStorage.getItem(AUTO_LOOT_KEY_3D) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+// Presentation identity belongs outside the saved rule objects. Weak references
+// also let dead monsters and discarded levels be collected normally.
+const monsterPresentation3D = new WeakMap();
+let nextMonsterID3D = 1;
+function monsterView3D(monster) {
+  if (!monsterPresentation3D.has(monster))
+    monsterPresentation3D.set(monster, {
+      uid: nextMonsterID3D++,
+      facing: { x: 0, y: 1 },
+    });
+  return monsterPresentation3D.get(monster);
+}
+const originalMonsterMove3D = mmove;
+mmove = function (sx, sy, dx, dy) {
+  const monster = monsterAt(sx, sy);
+  if (monster)
+    monsterView3D(monster).facing = {
+      x: Math.sign(dx - sx),
+      y: Math.sign(dy - sy),
+    };
+  return originalMonsterMove3D(sx, sy, dx, dy);
+};
+
+function plainText3D(value) {
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&lt;?/g, "<")
+    .replace(/&gt;?/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// Match stairs.js without changing its rules. Only known, unmasked stair tiles
+// receive this presentation metadata; shafts and the home exit are separate.
+function stairView3D(id) {
+  if (id === OSTAIRSUP.id)
+    return {
+      direction: "up",
+      blocked: level <= 1 || level === MAXLEVEL || (ULARN && level === DBOTTOM),
+    };
+  if (id === OSTAIRSDOWN.id)
+    return {
+      direction: "down",
+      blocked: level === 0 || level === DBOTTOM || level === VBOTTOM ||
+        (ULARN && level >= VBOTTOM - 2),
+    };
+  return null;
+}
+
+function weaponView3D(item = player.WIELD) {
+  const name = item ? plainText3D(item.shortName()) : "bare hands";
+  let type = "unarmed";
+  if (item) {
+    if (item.matches(OBATTLEAXE)) type = "axe";
+    else if (item.matches(OSPEAR)) type = "spear";
+    else if (item.matches(OLANCE)) type = "lance";
+    else if (item.matches(ODAGGER)) type = "dagger";
+    else if (item.matches(OFLAIL)) type = "flail";
+    else if (item.matches(OHAMMER)) type = "hammer";
+    else if (item.matches(OPSTAFF)) type = "staff";
+    else if ([OSWORD, O2SWORD, OLONGSWORD, OSWORDofSLASHING, OVORPAL, OSLAYER].some((weapon) => item.matches(weapon))) type = "sword";
+    else type = "blunt";
+  }
+  return { id: item?.id ?? null, name, type };
+}
+
+const effectNames3D = {
+  PROTECTIONTIME: "Protection +2", ALTPRO: "Protection +5",
+  DEXCOUNT: "Dexterity", STRCOUNT: "Strength", GIANTSTR: "Giant strength",
+  CHARMCOUNT: "Charm", INVISIBILITY: "Invisibility", CANCELLATION: "Cancellation",
+  HASTESELF: "Haste", GLOBE: "Invulnerability", SCAREMONST: "Scare monsters",
+  HOLDMONST: "Hold monsters", TIMESTOP: "Time stop", WTW: "Walk through walls",
+  FIRERESISTANCE: "Fire resistance", STEALTH: "Stealth", AWARENESS: "Awareness",
+  SEEINVISIBLE: "See invisible", SPIRITPRO: "Spirit protection", UNDEADPRO: "Undead protection",
+  HERO: "Heroism", COKED: "Stimulation", BLINDCOUNT: "Blindness", CONFUSE: "Confusion",
+  AGGRAVATE: "Aggravate monsters", HASTEMONST: "Hasted monsters", HALFDAM: "Weakened attacks",
+  ITCHING: "Itching", CLUMSINESS: "Clumsiness",
+};
+
+function emitCombat3D(detail) {
+  window.dispatchEvent(new CustomEvent("ularn:combat", { detail }));
+}
+const originalHitMonster3D = hitmonster;
+hitmonster = function (x, y) {
+  const monster = monsterAt(x, y);
+  if (!monster || player.TIMESTOP) return originalHitMonster3D(x, y);
+  const weapon = weaponView3D();
+  const from = { x: player.x, y: player.y };
+  const beforeHP = monster.hitpoints;
+  const combatLevel = level;
+  const result = originalHitMonster3D(x, y);
+  emitCombat3D({
+    kind: "weapon", phase: "impact", level: combatLevel,
+    name: weapon.name, weapon, from, to: { x, y }, path: [from, { x, y }],
+    hit: monster.hitpoints < beforeHP || monsterAt(x, y) !== monster,
+  });
+  return result;
+};
+
+// The engine calls the acceptance hook only after its level/intelligence checks.
+// Direction prompts do not animate a cast until an actual direction is selected.
+let acceptedSpell3D = null;
+let projectileSpell3D = null;
+let nextCastID3D = 1;
+function spellAccepted3D(id) {
+  acceptedSpell3D = {
+    kind: "spell", level, castId: nextCastID3D++,
+    name: spelname[id], spell: { id, code: spelcode[id], name: spelname[id] },
+    from: { x: player.x, y: player.y },
+  };
+}
+function emitSpellCast3D(spell, direction) {
+  const from = spell.from;
+  const to = direction && !projectileSpell3D
+    ? { x: from.x + diroffx[direction], y: from.y + diroffy[direction] }
+    : from;
+  const visibleTo = inBounds(to.x, to.y) && (!direction || (!player.BLINDCOUNT && (getKnow(to.x, to.y) & KNOWHERE))) ? to : from;
+  emitCombat3D({ ...spell, phase: "cast", to: visibleTo, path: [from, ...(visibleTo === from ? [] : [visibleTo])] });
+}
+const originalSpellDamage3D = speldamage;
+speldamage = function (id) {
+  acceptedSpell3D = null;
+  const result = originalSpellDamage3D(id);
+  const spell = acceptedSpell3D;
+  acceptedSpell3D = null;
+  if (!spell) return result;
+  if (blocking_callback === getdirectioninput && keyboard_input_callback) {
+    const resolveDirection = keyboard_input_callback;
+    keyboard_input_callback = function (direction) {
+      const confused = !!player.CONFUSE;
+      const value = resolveDirection(direction);
+      if (projectileSpell3D) projectileSpell3D.castId = spell.castId;
+      if (!confused) emitSpellCast3D(spell, direction);
+      return value;
+    };
+  } else {
+    emitSpellCast3D(spell);
+  }
+  return result;
+};
+const originalSetupProjectile3D = setup_godirect;
+setup_godirect = function (delay, id, ...args) {
+  projectileSpell3D = player.CONFUSE ? null : {
+    kind: "spell", level,
+    name: spelname[id], spell: { id, code: spelcode[id], name: spelname[id] },
+    from: { x: player.x, y: player.y }, lastVisible: { x: player.x, y: player.y },
+  };
+  return originalSetupProjectile3D(delay, id, ...args);
+};
+const originalProjectileStep3D = godirect;
+godirect = function (id, x, y, dx, dy, ...args) {
+  const spell = projectileSpell3D;
+  const to = { x: x + dx, y: y + dy };
+  if (spell && !player.CONFUSE && !player.BLINDCOUNT && inBounds(to.x, to.y) && (getKnow(to.x, to.y) & KNOWHERE)) {
+    const from = { x, y };
+    const path = (getKnow(x, y) & KNOWHERE) ? [from, to] : [to];
+    spell.lastVisible = to;
+    emitCombat3D({ ...spell, phase: "projectile", from: path[0], to, path });
+  }
+  return originalProjectileStep3D(id, x, y, dx, dy, ...args);
+};
+const originalExitSpell3D = exitspell;
+exitspell = function () {
+  const spell = projectileSpell3D;
+  projectileSpell3D = null;
+  if (spell) emitCombat3D({ ...spell, phase: "impact", to: spell.lastVisible, path: [spell.lastVisible] });
+  return originalExitSpell3D();
+};
+
+// The upstream difficulty routine mutates these templates. Start every attempt
+// from the original values, then apply difficulty exactly once, including resume.
+const baseMonsterStats3D = ULARN_monsterlist.map((monster) => ({
+  hitpoints: monster.hitpoints,
+  damage: monster.damage,
+  gold: monster.gold,
+  armorclass: monster.armorclass,
+  experience: monster.experience,
+}));
 buttonCache.forEach((button, key) => {
   button.id = `engine-${key}`;
 });
-let saveTimer3D;
+let saveTimer3D = null;
 let initialized3D = false;
 let saveError3D = "";
 const originalPaint3D = paint;
@@ -82,19 +277,36 @@ paint = function () {
   originalPaint3D();
   if (!initialized3D) return;
   window.dispatchEvent(new Event("ularn:update"));
-  clearTimeout(saveTimer3D);
   if (GAMEOVER) {
+    clearTimeout(saveTimer3D);
+    saveTimer3D = null;
     try {
       localStorage.removeItem(SAVE_KEY_3D);
     } catch {
       /* Storage may be disabled. */
     }
-  } else if (mazeMode && !blocking_callback && !napping) {
-    saveTimer3D = setTimeout(() => window.ularn.save(), 250);
+  } else if (mazeMode && !blocking_callback && !napping && saveTimer3D === null) {
+    // Compressing all explored floors on every slow keystroke caused steadily
+    // longer stalls. Coalesce changes, but still save during continuous travel.
+    saveTimer3D = setTimeout(() => {
+      saveTimer3D = null;
+      window.ularn.save();
+    }, 2000);
   }
 };
 
 window.ularn = {
+  setAutoLoot(enabled) {
+    const value = !!enabled;
+    overridePref("auto_pickup", value);
+    try {
+      localStorage.setItem(AUTO_LOOT_KEY_3D, String(value));
+    } catch {
+      /* Keep the control usable when storage is unavailable. */
+    }
+    window.dispatchEvent(new Event("ularn:update"));
+    return value;
+  },
   interruptTravel() {
     if (activeExplorer) {
       activeExplorer = null;
@@ -119,11 +331,15 @@ window.ularn = {
     GOTW = false;
     PARAMS = { ularn: "true" };
     playerID = "local";
+    ULARN_monsterlist.forEach((monster, index) =>
+      Object.assign(monster, baseMonsterStats3D[index]),
+    );
     setGameConfig();
     loadPreferences();
     overridePref("no_intro", true);
     overridePref("side_inventory", false);
-    overridePref("auto_pickup", true);
+    const autoLoot = readAutoLoot3D();
+    overridePref("auto_pickup", autoLoot);
     initHelpPages();
     initialized3D = true;
     if (resume) {
@@ -168,10 +384,36 @@ window.ularn = {
               throw new Error("Invalid floor");
           }
         }
+        if (data.equipment) {
+          for (const field of ["WIELD", "WEAR", "SHIELD"]) {
+            const index = data.equipment[field];
+            const equipped = saved.player[field];
+            if (index === null && !equipped) continue;
+            const item = saved.player.inventory[index];
+            if (
+              !Number.isInteger(index) ||
+              index < 0 ||
+              index >= 26 ||
+              !item ||
+              item.id !== equipped?.id ||
+              item.arg !== equipped?.arg
+            )
+              throw new Error("Invalid equipment slot");
+          }
+        }
         loadState(saved);
+        if (data.equipment) {
+          for (const field of ["WIELD", "WEAR", "SHIELD"])
+            player[field] =
+              data.equipment[field] === null
+                ? null
+                : player.inventory[data.equipment[field]];
+        }
+        setGameDifficulty(getDifficulty());
         game_started = true;
         onResize();
         overridePref("side_inventory", false);
+        overridePref("auto_pickup", autoLoot);
         blocking_callback = null;
         keyboard_input_callback = null;
         napping = false;
@@ -213,11 +455,31 @@ window.ularn = {
     if (!initialized3D) return;
     mousetrap({ shift, preventDefault() {} }, key);
   },
+  openToward(direction) {
+    this.key("o");
+    // A confused hero or a chest underfoot can resolve Open without asking for
+    // a direction. Never turn the follow-up into an unrelated movement command.
+    if (
+      blocking_callback === getdirectioninput &&
+      keyboard_input_callback === open_something
+    )
+      this.key(direction);
+  },
   save() {
     if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping)
       return false;
+    clearTimeout(saveTimer3D);
+    saveTimer3D = null;
     try {
-      const data = { version: 1, state: new GameState(true) };
+      // Equal-looking items can occupy different slots. Preserve their identity,
+      // since the original loader matches equipment only by item ID and bonus.
+      const equipment = Object.fromEntries(
+        ["WIELD", "WEAR", "SHIELD"].map((field) => [
+          field,
+          player[field] ? player.inventory.indexOf(player[field]) : null,
+        ]),
+      );
+      const data = { version: 1, state: new GameState(true), equipment };
       localStorage.setItem(
         SAVE_KEY_3D,
         LZString.compressToUTF16(JSON.stringify(data)),
@@ -254,11 +516,14 @@ window.ularn = {
         const masked =
           item.isInvisibleTrap() ||
           (monster && know & KNOWHERE && !seenMonster);
+        const stair = masked ? null : stairView3D(item.id);
         tiles.push({
           x,
           y,
           id: masked ? 0 : item.id,
-          name: masked ? "The floor" : item.shortName(),
+          name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
+          stair,
+          symbol: plainText3D(itemlist[masked ? 0 : item.id].ularnchar),
           wall: !masked && item.matches(OWALL),
           hazard: !masked && !!item.isTrap(),
           closed: !masked && item.matches(OCLOSEDDOOR),
@@ -266,7 +531,9 @@ window.ularn = {
           monster: seenMonster
             ? {
                 id: mimic || monster.arg,
+                ...monsterView3D(monster),
                 name: mimic ? monsterlist[mimic].desc : monster.desc,
+                symbol: plainText3D(monsterlist[mimic || monster.arg].char),
                 hp: monster.hitpoints,
                 color: monsterlist[mimic || monster.arg].color,
               }
@@ -298,6 +565,8 @@ window.ularn = {
       bank: player.BANKACCOUNT,
       ac: player.AC,
       wc: player.WCLASS,
+      weapon: weaponView3D(),
+      autoLoot: !!getPref("auto_pickup"),
       moves: player.MOVESMADE,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
       log: LOG.slice(-7),
@@ -314,23 +583,18 @@ window.ularn = {
           item
             ? {
                 key: getCharFromIndex(index),
-                name: item.toString(),
+                slot: index,
+                name: plainText3D(item.shortName()),
                 id: item.id,
+                equipped: ["WIELD", "WEAR", "SHIELD"].filter((field) => player[field] === item),
               }
             : null,
         )
         .filter(Boolean),
-      effects: [
-        "BLINDCOUNT",
-        "CONFUSE",
-        "INVISIBILITY",
-        "HASTESELF",
-        "FIRERESISTANCE",
-        "POISON",
-        "WTW",
-        "HOLDMONST",
-        "TIMESTOP",
-      ].filter((k) => player[k] > 0),
+      effects: Object.keys(effectNames3D).filter((id) => player[id] > 0),
+      effectDetails: Object.entries(effectNames3D)
+        .filter(([id]) => player[id] > 0)
+        .map(([id, name]) => ({ id, name, turns: player[id] })),
       hasEye: !!isCarrying(OLARNEYE),
       hasCure: !!isCarrying(createObject(OPOTION, 21)),
       saveError: saveError3D,

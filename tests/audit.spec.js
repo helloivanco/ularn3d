@@ -275,20 +275,21 @@ test("clicking a building roof selects that building rather than the floor behin
   await page.locator("#camera-reset").click();
   const s = await snap(page);
   // Project the front roof into the viewport using the documented reset camera.
-  const offset = [8, 11, 13],
+  const offset = [2.8, 15.5, 8.5],
+    [ox, oy, oz] = offset,
     length = Math.hypot(...offset),
-    horizontal = Math.hypot(8, 13);
-  const relative = [tile.x - s.x - 8, 1.6 - 11, tile.y + 0.5 - s.y - 13];
+    horizontal = Math.hypot(ox, oz);
+  const relative = [tile.x - s.x - ox, 1.6 - oy, tile.y + 0.5 - s.y - oz];
   const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
   const depth = -dot(
     relative,
     offset.map((n) => n / length),
   );
-  const right = [13 / horizontal, 0, -8 / horizontal];
+  const right = [oz / horizontal, 0, -ox / horizontal];
   const up = [
-    (-8 * 11) / (horizontal * length),
+    (-ox * oy) / (horizontal * length),
     horizontal / length,
-    (-13 * 11) / (horizontal * length),
+    (-oz * oy) / (horizontal * length),
   ];
   const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
   const point = {

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ularn-3d.vercel.app/sitemap.xml

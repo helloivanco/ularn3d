@@ -493,7 +493,7 @@ const OVOLUP = new DungeonObject(56, `V`, `9`, `V`, `yellowgreen`, BOLD, `the ba
 const OSTAIRSUP = new DungeonObject(5, `&lt`, `&lt`, `%`, `yellowgreen`, BOLD, `a staircase going up`, NO_CARRY); // use &lt to prevent bugginess when dropping a ! or ? to the right
 const OSTAIRSDOWN = new DungeonObject(13, `&gt`, `&gt`, `%`, `sandybrown`, BOLD, `a staircase going down`, NO_CARRY);
 const OFOUNTAIN = new DungeonObject(7, `F`, `{`, `F`, `cornflowerblue`, BOLD, `a bubbling fountain`, NO_CARRY);
-const ODEADFOUNTAIN = new DungeonObject(17, `f`, `}`, `f`, `lightgray`, BOLD, `a dead fountain`, NO_CARRY);
+const ODEADFOUNTAIN = new DungeonObject(17, `f`, `}`, `f`, `lightgray`, BOLD, `a dry fountain`, NO_CARRY);
 const OSTATUE = new DungeonObject(8, `&`, `%`, `&`, `ivory`, BOLD, `a great marble statue`, NO_CARRY);
 const OMIRROR = new DungeonObject(11, `M`, `|`, `M`, `silver`, BOLD, `a mirror`, NO_CARRY);
 const OOPENDOOR = new DungeonObject(19, `O`, `'`, `O`, `lightgray`, BOLD, `an open door`, NO_CARRY);
@@ -719,6 +719,10 @@ function lookforobject(do_ident, do_pickup) {
     return;
   }
   else if (item.matches(OGOLDPILE)) {
+    if (!do_pickup) {
+      if (do_ident) updateLog(`There are ${Number(item.arg).toLocaleString()} gold pieces here.`, formatHint('t', 'to take'));
+      return;
+    }
     if (ULARN) {
       updateLog(`${youFound} ${Number(item.arg).toLocaleString()} gold pieces${period}`)
     }
@@ -763,7 +767,7 @@ function lookforobject(do_ident, do_pickup) {
   //
   else if (item.matches(ODEADFOUNTAIN)) {
     if (nearbymonst()) return;
-    if (do_ident) updateLog(`There is a dead fountain here${period}`);
+    if (do_ident) updateLog(`There is a dry fountain here. No water remains${period}`);
   }
   //
   else if (ULARN && item.matches(OOPENDOOR)) {
@@ -894,13 +898,13 @@ function lookforobject(do_ident, do_pickup) {
   //
   else if (item.matches(OSTAIRSUP)) {
     let stairMessage = `${youFound} ${item}`;
-    if (ULARN) stairMessage = `There is a circular staircase here${period}`;
+    if (ULARN) stairMessage = `There is a circular staircase going up here${period}`;
     if (do_ident) updateLog(stairMessage, formatHint('<', 'go up'));
   }
   //
   else if (item.matches(OSTAIRSDOWN)) {
     let stairMessage = `${youFound} ${item}`;
-    if (ULARN) stairMessage = `There is a circular staircase here${period}`;
+    if (ULARN) stairMessage = `There is a circular staircase going down here${period}`;
     if (do_ident) updateLog(stairMessage, formatHint('>', 'go down'));
   }
   //

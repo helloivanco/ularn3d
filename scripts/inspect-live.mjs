@@ -12,6 +12,13 @@ const engineResponse=await page.request.get(base+'/engine/game.js');
 expect(engineResponse.status()).toBe(200);
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 expect(hash(await engineResponse.body())).toBe(hash(readFileSync('dist/engine/game.js')));
+const expectedStyle=readFileSync('dist/index.html','utf8').match(/href="(\/assets\/[^"\s]+\.css)"/)[1];
+for(const asset of [expectedBundle,expectedStyle]){
+  const served=await page.request.get(base+asset);
+  expect(served.status()).toBe(200);
+  expect(hash(await served.body())).toBe(hash(readFileSync('dist'+asset)));
+}
+console.log('SHA-256 verified: application JavaScript, stylesheet, and engine.');
 await expect(page.locator('#loading')).toBeHidden({timeout:20000});
 await page.screenshot({path:'/tmp/ularn-final-title.png'});
 await page.locator('#begin').click();await expect(page.locator('#hud')).toHaveJSProperty('hidden',false);

@@ -8,6 +8,8 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, surface, noise } from "./materials.js";
+import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
+import { CombatEffects } from "./combat-effects.js";
 import {
   box,
   block,
@@ -25,6 +27,7 @@ import {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const FLOOR_LIMIT = 67 * 17;
+const GAME_CAMERA = new THREE.Vector3(2.8, 15.5, 8.5);
 function destroy(group) {
   group.traverse((o) => {
     if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
@@ -107,6 +110,7 @@ export class World {
     this.state = null;
     this.level = null;
     this.objects = new Map();
+    this.monsters = new Map();
     this.tick = 0;
     this.lastPlayer = null;
     this.pointers = new Map();
@@ -116,7 +120,12 @@ export class World {
     this.wallCells = [];
     this.lamps = [];
     this.lastTime = performance.now();
-    this.quality = innerWidth < 700 ? "balanced" : "cinematic";
+    this.activeUntil = this.lastTime + 1000;
+    this.renderedFrames = 0;
+    this.paused = false;
+    this.disposed = false;
+    this.events = new AbortController();
+    this.quality = "balanced";
     try {
       this.quality = localStorage.getItem("ularn3d.quality") || this.quality;
     } catch {}
@@ -132,7 +141,7 @@ export class World {
     this.camera.position.set(13, 17, 19);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: "high-performance",
+      powerPreference: "low-power",
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.info.autoReset = false;
@@ -181,7 +190,9 @@ export class World {
     this.scene.add(this.fill);
     this.terrain = new THREE.Group();
     this.props = new THREE.Group();
-    this.scene.add(this.terrain, this.props);
+    this.actors = new THREE.Group();
+    this.scene.add(this.terrain, this.props, this.actors);
+    this.effects = new CombatEffects(this.scene);
     const floorGeo = new THREE.BoxGeometry(0.993, 0.18, 0.993);
     this.floor = new THREE.InstancedMesh(
       floorGeo,
@@ -301,7 +312,9 @@ export class World {
     this.scratchPosition = new THREE.Vector3();
     this.identityQ = new THREE.Quaternion();
     const canvas = this.renderer.domElement;
-    canvas.addEventListener("pointerdown", (e) => {
+    const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
+    listen(canvas, "pointerdown", (e) => {
+      this.invalidate();
       this.pointers.set(e.pointerId, {
         x: e.clientX,
         y: e.clientY,
@@ -310,7 +323,8 @@ export class World {
       });
       if (this.pointers.size > 1) this.gesture = true;
     });
-    canvas.addEventListener("pointermove", (e) => {
+    listen(canvas, "pointermove", (e) => {
+      this.invalidate();
       const p = this.pointers.get(e.pointerId);
       if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.moved = true;
       const tile = this.pick(e);
@@ -318,7 +332,7 @@ export class World {
       if (tile) this.marker.position.set(tile.x, 0, tile.y);
       this.onHover(tile, e);
     });
-    canvas.addEventListener("pointerup", (e) => {
+    listen(canvas, "pointerup", (e) => {
       const p = this.pointers.get(e.pointerId);
       if (p && !p.moved && !this.gesture && performance.now() - p.time < 700) {
         const t = this.pick(e);
@@ -327,23 +341,25 @@ export class World {
       this.pointers.delete(e.pointerId);
       if (!this.pointers.size) this.gesture = false;
     });
-    canvas.addEventListener("pointercancel", (e) => {
+    listen(canvas, "pointercancel", (e) => {
       this.pointers.delete(e.pointerId);
       if (!this.pointers.size) this.gesture = false;
     });
-    canvas.addEventListener("pointerleave", () => {
+    listen(canvas, "pointerleave", () => {
       this.marker.visible = false;
       this.onHover(null);
+      this.invalidate();
     });
-    canvas.addEventListener("webglcontextlost", (e) => {
+    listen(canvas, "webglcontextlost", (e) => {
       e.preventDefault();
       this.lost = true;
+      this.stopFrames();
+      this.releaseLostResources();
       window.dispatchEvent(new Event("ularn:graphics-lost"));
     });
-    canvas.addEventListener("webglcontextrestored", () => {
+    listen(canvas, "webglcontextrestored", () => {
       const pmrem = new THREE.PMREMGenerator(this.renderer),
         environment = new RoomEnvironment();
-      this.environment.dispose();
       this.environment = pmrem.fromScene(environment, 0.04);
       this.scene.environment = this.environment.texture;
       environment.dispose();
@@ -351,12 +367,29 @@ export class World {
       this.renderer.shadowMap.needsUpdate = true;
       this.lost = false;
       this.resize();
+      this.invalidate();
       window.dispatchEvent(new Event("ularn:graphics-restored"));
     });
-    window.addEventListener("resize", () => this.resize());
+    listen(window, "resize", () => this.resize());
+    listen(document, "visibilitychange", () => {
+      if (document.hidden) this.stopFrames();
+      else { this.lastTime = performance.now(); this.effects.clear(); this.invalidate(); }
+    });
+    listen(window, "ularn:combat", (event) => {
+      const detail = event.detail;
+      if (!this.state || detail?.level !== this.level || document.hidden) return;
+      if (detail.kind === "weapon") { this.attackAge = 0; this.attackStartedAt = performance.now(); }
+      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
+      if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
+        (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y))
+        this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
+      this.invalidate();
+    });
+    this.controls.addEventListener("change", () => this.invalidate());
+    this.controls.addEventListener("start", () => this.invalidate());
     this.setQuality(this.quality, false);
     this.preview();
-    requestAnimationFrame(() => this.animate());
+    this.invalidate();
     // Read-only graphics metrics make regressions measurable without a gameplay backdoor.
     window.ularnGraphics = Object.freeze({
       metrics: () => ({
@@ -367,8 +400,93 @@ export class World {
         textures: this.renderer.info.memory.textures,
         contextLost: this.lost,
         frameMs: this.frameMs || 0,
+        renderedFrames: this.renderedFrames,
+        frameLimit: this.quality === "cinematic" ? 45 : 30,
+        idle: performance.now() > this.activeUntil,
+        suspended: document.hidden || this.paused || this.lost,
+        cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
+          Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z)) * 180 / Math.PI,
+        monsterActors: this.monsters.size,
+        ...monsterArtMetrics(),
+        ...this.effects.metrics(),
       }),
+      creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
+        uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
+        facing: { ...mesh.userData.facing }, art: mesh.userData.artPath,
+        mirrored: mesh.userData.artwork?.scale.x < 0,
+      })),
+      landmarks: () => [...this.objects.values()].flatMap(({ mesh }) => [mesh, ...mesh.children]
+        .filter((child) => child.userData.fountain || child.userData.stairDirection)
+        .map((child) => ({
+          tile: { ...mesh.userData.tile },
+          fountain: child.userData.fountain,
+          waterVisible: !!child.getObjectByName("fountain-water")?.visible,
+          stairDirection: child.userData.stairDirection,
+          stairBlocked: child.userData.stairBlocked,
+          label: mesh.userData.landmarkLabel,
+        }))),
     });
+  }
+  invalidate() {
+    if (this.disposed) return;
+    this.activeUntil = performance.now() + 1100;
+    this.scheduleFrame();
+  }
+  stopFrames() {
+    clearTimeout(this.frameTimer);
+    cancelAnimationFrame(this.frameRequest);
+    this.frameTimer = this.frameRequest = null;
+  }
+  scheduleFrame() {
+    if (this.disposed || document.hidden || this.lost || this.frameTimer != null || this.frameRequest != null) return;
+    const idle = performance.now() > this.activeUntil;
+    if (idle && !this.hasMotion && !this.effects.slots.some((slot) => slot.active) &&
+      (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
+    const fps = this.paused ? 4 : !this.state || idle ? 12 : this.quality === "cinematic" ? 45 : 30;
+    const delay = Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
+    this.frameTimer = setTimeout(() => {
+      this.frameTimer = null;
+      this.frameRequest = requestAnimationFrame(() => {
+        this.frameRequest = null;
+        this.animate();
+      });
+    }, delay);
+  }
+  setPaused(paused) {
+    this.paused = !!paused;
+    this.invalidate();
+  }
+  releaseLostResources(clearArtCache = false) {
+    // Remove disposal listeners tied to the lost GL context before restoration.
+    // Keep the CPU-side artwork: Three.js uploads it again on the next render.
+    // Otherwise later level/quality changes try to delete stale WebKit handles.
+    const geometries = new Set(),
+      materials = new Set(),
+      textures = new Set();
+    this.scene.traverse((object) => {
+      if (object.geometry) geometries.add(object.geometry);
+      if (object.material) {
+        for (const material of Array.isArray(object.material)
+          ? object.material
+          : [object.material])
+          materials.add(material);
+      }
+      if (object.isInstancedMesh) object.dispose();
+    });
+    for (const material of materials) {
+      for (const value of Object.values(material))
+        if (value?.isTexture) textures.add(value);
+      material.dispose();
+    }
+    geometries.forEach((geometry) => geometry.dispose());
+    textures.forEach((texture) => texture.dispose());
+    releaseMonsterArtResources(clearArtCache);
+    this.sun.shadow.dispose();
+    this.composer.passes.forEach((pass) => pass.dispose());
+    this.composer.dispose();
+    this.environment?.dispose();
+    this.environment = null;
+    this.scene.environment = null;
   }
   setQuality(value, persist = true) {
     this.quality = ["cinematic", "balanced"].includes(value)
@@ -391,6 +509,7 @@ export class World {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
+    this.invalidate();
   }
   mountains(width, height, offsetX = 0, offsetY = 0) {
     for (let i = 0; i < 18; i++) {
@@ -505,6 +624,9 @@ export class World {
       destroy(this.terrain);
       destroy(this.props);
       this.objects.clear();
+      destroy(this.actors);
+      this.monsters.clear();
+      this.effects.clear();
       this.lamps = [];
       this.level = state.level;
       this.lastPlayer = null;
@@ -586,7 +708,7 @@ export class World {
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
-      const sig = `${t.id}|${t.monster?.id || 0}`;
+      const sig = `${t.id}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       const color = new THREE.Color(
@@ -620,25 +742,58 @@ export class World {
       if (t.wall) {
         if (noise(t.x, t.y) > 0.87) torch(g, 0, 1.05, 0, 0.65);
       } else if (t.id !== 0) {
-        g.add(itemModel(t));
+        const model = itemModel({ ...t, draining: t.id === 17 && prev?.sig === "7" && !this.reduced });
+        g.add(model);
         if (t.store) {
+          // Batching replaces the model group with merged meshes. Keep its
+          // stair meaning on the tile group so the surface shaft stays legible.
+          if (model.userData.stairDirection) {
+            g.userData.stairDirection = model.userData.stairDirection;
+            g.userData.stairBlocked = model.userData.stairBlocked;
+          }
           g.position.set(0, 0, 0);
           batch(g);
           g.position.set(t.x, 0, t.y);
         }
         if (t.store) {
-          const text = label(LANDMARK_NAMES[t.id] || "LANDMARK");
-          text.position.y = [10, 16].includes(t.id) ? 3.5 : 2.7;
+          g.userData.landmarkLabel = t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
+          const text = label(g.userData.landmarkLabel);
+          text.position.y = t.id === 56 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
           g.add(text);
         }
       }
-      if (t.monster) {
-        const monster = monsterModel(t.monster);
-        g.add(monster);
-        g.userData.creature = monster;
-      }
       this.props.add(g);
       this.objects.set(key, { sig, mesh: g });
+    }
+    const creatures = new Set();
+    for (const tile of state.tiles) {
+      const monster = tile.monster;
+      if (!monster) continue;
+      const uid = monster.uid ?? `${tile.x},${tile.y}`;
+      creatures.add(uid);
+      let actor = this.monsters.get(uid);
+      if (actor && actor.species !== monster.id) {
+        actor.mesh.removeFromParent();
+        destroy(actor.mesh);
+        this.monsters.delete(uid);
+        actor = null;
+      }
+      if (!actor) {
+        const mesh = monsterSprite(monster, () => this.invalidate()) || monsterModel(monster);
+        mesh.position.set(tile.x, 0, tile.y);
+        actor = { mesh, species: monster.id, target: new THREE.Vector3(tile.x, 0, tile.y) };
+        this.monsters.set(uid, actor);
+        this.actors.add(mesh);
+      }
+      actor.target.set(tile.x, 0, tile.y);
+      actor.mesh.userData.uid = uid;
+      actor.mesh.userData.tile = { x: tile.x, y: tile.y };
+      faceMonster(actor.mesh, monster.facing, this.camera);
+    }
+    for (const [uid, actor] of this.monsters) if (!creatures.has(uid)) {
+      actor.mesh.removeFromParent();
+      destroy(actor.mesh);
+      this.monsters.delete(uid);
     }
     for (const [m, count] of [
       [this.floor, floorIndex],
@@ -664,15 +819,14 @@ export class World {
       this.camera.position
         .copy(target)
         .add(
-          state.level === 0
-            ? new THREE.Vector3(8, 11, 13)
-            : new THREE.Vector3(4.5, 7, 8),
+          GAME_CAMERA,
         );
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
       this.player.rotation.y =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
         Math.PI;
       this.walkAge = 0;
+      this.walkStartedAt = performance.now();
     }
     if (
       old &&
@@ -688,7 +842,7 @@ export class World {
             Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
         )
       )
-        this.attackAge = 0;
+        { this.attackAge = 0; this.attackStartedAt = performance.now(); }
     }
     if (
       old &&
@@ -696,6 +850,7 @@ export class World {
       (state.hp < old.hp || state.mana < old.mana)
     ) {
       this.burstAge = 0;
+      this.burstStartedAt = performance.now();
       this.burst.visible = !this.reduced;
       this.burst.position.copy(target);
       this.burst.children.forEach((p) => p.position.set(0, 0.5, 0));
@@ -718,6 +873,7 @@ export class World {
     this.wallView = null;
     this.updateWalls();
     this.renderer.shadowMap.needsUpdate = true;
+    this.invalidate();
   }
   updateWalls() {
     if (!this.state) return;
@@ -773,7 +929,7 @@ export class World {
     );
     this.ray.setFromCamera(this.mouse, this.camera);
     const hits = this.ray.intersectObjects(
-      [...this.props.children, this.walls, this.caps],
+      [...this.actors.children, ...this.props.children, this.walls, this.caps],
       true,
     );
     for (const hit of hits) {
@@ -812,24 +968,22 @@ export class World {
       this.camera.position
         .copy(this.controls.target)
         .add(
-          this.state.level === 0
-            ? new THREE.Vector3(8, 11, 13)
-            : new THREE.Vector3(4.5, 7, 8),
+          GAME_CAMERA,
         );
       this.controls.update();
       this.updateWalls();
     }
   }
   animate() {
-    requestAnimationFrame(() => this.animate());
     const now = performance.now(),
       elapsed = (now - this.lastTime) / 1000,
-      dt = Math.min(0.05, elapsed);
+      dt = Math.min(0.1, elapsed);
     this.lastTime = now;
     if (document.hidden || this.lost) return;
     this.frameMs =
       (this.frameMs || elapsed * 1000) * 0.94 + elapsed * 1000 * 0.06;
     this.tick += dt;
+    this.effects.update(dt);
     this.waterTime.value = this.reduced ? 0 : this.tick;
     if (this.playerTarget) {
       const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11),
@@ -845,8 +999,9 @@ export class World {
         .add(new THREE.Vector3(0, 1.4, 0.2));
       const body = this.player.getObjectByName("body");
       if (body && !this.reduced) {
-        this.walkAge = (this.walkAge ?? 1) + dt;
-        this.attackAge = (this.attackAge ?? 1) + dt;
+        this.walkAge = this.walkStartedAt === undefined ? 1 : (now - this.walkStartedAt) / 1000;
+        this.attackAge = this.attackStartedAt === undefined ? 1 : (now - this.attackStartedAt) / 1000;
+        this.castAge = this.castStartedAt === undefined ? 1 : (now - this.castStartedAt) / 1000;
         const walk = Math.max(0, 1 - this.walkAge / 0.28);
         body.position.y = Math.abs(Math.sin(this.walkAge * 26)) * 0.045 * walk;
         for (const name of ["left-leg", "right-leg"]) {
@@ -861,7 +1016,9 @@ export class World {
         const weapon = this.player.getObjectByName("weapon");
         if (weapon)
           weapon.rotation.x =
-            this.attackAge < 0.3
+            this.castAge < 0.65
+              ? -Math.sin(this.castAge / 0.65 * Math.PI) * 1.9
+              : this.attackAge < 0.3
               ? -Math.sin((this.attackAge / 0.3) * Math.PI) * 1.4
               : 0;
         const cape = this.player.getObjectByName("cape");
@@ -879,7 +1036,7 @@ export class World {
       });
     }
     if (this.burst.visible) {
-      this.burstAge += dt;
+      this.burstAge = (now - this.burstStartedAt) / 1000;
       for (const p of this.burst.children) {
         p.position.addScaledVector(p.userData.velocity, dt);
         p.position.y -= this.burstAge * dt * 2;
@@ -897,8 +1054,40 @@ export class World {
     }
     this.renderer.info.reset();
     this.controls.update();
+    this.camera.updateMatrixWorld();
+    this.hasMotion = !!this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
+    for (const { mesh, target } of this.monsters.values()) {
+      mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
+      if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
+      faceMonster(mesh, null, this.camera);
+    }
+    for (const { mesh } of this.objects.values()) {
+      const fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
+      if (!fountain) continue;
+      fountain.userData.drainAge = (now - fountain.userData.drainStartedAt) / 1000;
+      const water = fountain.getObjectByName("fountain-water");
+      if (water) {
+        water.scale.y = Math.max(0, 1 - fountain.userData.drainAge / 0.7);
+        water.visible = fountain.userData.drainAge < 0.7;
+        if (water.visible) this.hasMotion = true;
+      }
+    }
     if (this.wallCells.length) this.updateWalls();
     if (this.quality === "cinematic") this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
+    this.renderedFrames++;
+    this.scheduleFrame();
+  }
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopFrames();
+    this.events.abort();
+    this.controls.dispose();
+    this.effects.dispose();
+    this.releaseLostResources(true);
+    destroy(this.scene);
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
   }
 }

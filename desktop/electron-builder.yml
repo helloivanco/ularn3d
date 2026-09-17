@@ -1,0 +1,46 @@
+appId: games.ularn.cavesbelow
+productName: Ularn
+copyright: Original Ularn and Larn authors; see bundled engine license.
+directories:
+  output: release
+files:
+  - dist/**/*
+  # Website downloads must never be recursively embedded in the desktop app.
+  - '!dist/downloads/**/*'
+  - desktop/main.cjs
+  - desktop/protocol.cjs
+  - package.json
+  - '!node_modules/**/*'
+asar: true
+npmRebuild: false
+# The modern bundle includes a native Apple Silicon makensis. The default
+# legacy compiler is Intel-only and cannot cross-build here without Rosetta.
+toolsets:
+  nsis: "1.2.1"
+win:
+  artifactName: Ularn-${version}-windows-${arch}.${ext}
+  target:
+    - target: portable
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+  executableName: Ularn
+  icon: desktop/icon.ico
+  # No signing certificate is supplied. Pure JS resource editing still applies
+  # the game's icon and metadata without requiring Wine on macOS.
+  signExecutable: false
+portable:
+  artifactName: Ularn.windows.exe
+  requestExecutionLevel: user
+nsis:
+  artifactName: Ularn-${version}-windows-${arch}-setup.exe
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+mac:
+  target: dir
+  category: public.app-category.role-playing-games
+  identity: null

@@ -885,7 +885,7 @@ function contextButtons() {
   if (item.matches(OFOUNTAIN)) {
     setButton(CONTEXT, `BUTTON_FOUNTAIN_DRINK`, VARIABLE, `D`, `drink`);
     newButtonRow(CONTEXT);
-    setButton(CONTEXT, `BUTTON_FOUNTAIN_TIDY`, VARIABLE, `f`, `tidy up`);
+    setButton(CONTEXT, `BUTTON_FOUNTAIN_TIDY`, VARIABLE, `f`, `wash`);
     newButtonRow(CONTEXT);
   } else if (item.matches(OTHRONE)) {
     setButton(CONTEXT, `BUTTON_THRONE_PRY`, VARIABLE, `R`, `pry gems`);

@@ -3,5 +3,9 @@ dist/
 .vercel/
 test-results/
 playwright-report/
+release/
 public/engine/game.js
 .vercel
+
+# Locally staged desktop download; do not commit binaries.
+public/downloads/*.exe

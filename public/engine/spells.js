@@ -156,6 +156,9 @@ function speldamage(x) {
 
   nomove = MOVED;
 
+  // Optional presentation hook: no rule state is modified by the 3D adapter.
+  if (typeof spellAccepted3D === 'function') spellAccepted3D(x);
+
   switch (x) {
     /* ----- LEVEL 1 SPELLS ----- */
 

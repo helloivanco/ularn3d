@@ -1,12 +1,22 @@
 import "./style.css";
+import "./hud.css";
+import { GameAudio } from "./audio.js";
 import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 mountIcons();
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
 const classes = [
-  ["Adventurer", "swords", "A balanced traveler. Capable with steel and spells."],
-  ["Wizard", "wand", "A brilliant spellcaster. Powerful magic, fragile defenses."],
+  [
+    "Adventurer",
+    "swords",
+    "A balanced traveler. Capable with steel and spells.",
+  ],
+  [
+    "Wizard",
+    "wand",
+    "A brilliant spellcaster. Powerful magic, fragile defenses.",
+  ],
   ["Rogue", "dagger", "Nimble and clever. Dexterity is your greatest weapon."],
   ["Elf", "leaf", "A versatile spellcaster with a light touch in combat."],
   ["Dwarf", "axe", "Sturdy and strong. Built to endure the depths."],
@@ -19,7 +29,7 @@ let character = "Adventurer",
   world,
   walking = null,
   soundOn = false,
-  audio,
+  audio = new GameAudio(),
   toastTimer,
   lastHP = null,
   graphicsLost = false;
@@ -30,34 +40,81 @@ function toast(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ($("toast").hidden = true), 3200);
 }
-function sound(kind = "step") {
-  if (!soundOn) return;
-  try {
-    audio ??= new AudioContext();
-    if (audio.state === "suspended") audio.resume();
-    const o = audio.createOscillator(),
-      g = audio.createGain();
-    o.connect(g);
-    g.connect(audio.destination);
-    const t = audio.currentTime;
-    const freq =
-      kind === "hurt"
-        ? 85
-        : kind === "spell"
-          ? 640
-          : kind === "open"
-            ? 320
-            : 165;
-    o.type = kind === "hurt" ? "sawtooth" : "sine";
-    o.frequency.setValueAtTime(freq, t);
-    o.frequency.exponentialRampToValueAtTime(freq * 0.6, t + 0.12);
-    g.gain.setValueAtTime(kind === "hurt" ? 0.045 : 0.028, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-    o.start(t);
-    o.stop(t + 0.16);
-  } catch {
-    /* Sound is optional. */
+function sound(kind = "step", detail) {
+  if (soundOn) audio.play(kind, detail);
+}
+window.addEventListener("ularn:combat", ({ detail }) => {
+  if (detail.kind === "weapon") sound("weapon", detail);
+  else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
+    sound("spell", detail);
+});
+let inventoryPinned = innerWidth > 700;
+try {
+  const saved = localStorage.getItem("ularn3d.inventoryPinned");
+  if (saved !== null) inventoryPinned = saved === "true";
+} catch {}
+let inventorySignature = "", effectsSignature = "";
+function syncInventoryPin() {
+  $("inventory-panel").hidden = !inventoryPinned;
+  $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
+}
+function toggleInventoryPin() {
+  inventoryPinned = !inventoryPinned;
+  try { localStorage.setItem("ularn3d.inventoryPinned", String(inventoryPinned)); } catch {}
+  syncInventoryPin();
+}
+function toggleAutoLoot() {
+  if (!state) return;
+  engine.setAutoLoot(!state.autoLoot);
+  toast(`Auto-loot ${state.autoLoot ? "enabled" : "disabled"}.`);
+}
+$("inventory-pin").addEventListener("click", toggleInventoryPin);
+$("auto-loot").addEventListener("click", toggleAutoLoot);
+syncInventoryPin();
+function updateInventoryAndEffects() {
+  const items = state.inventory.filter(Boolean);
+  const signature = JSON.stringify(items);
+  if (signature !== inventorySignature) {
+    inventorySignature = signature;
+    $("inventory-count").textContent = `${items.length} / 26`;
+    $("inventory-list").replaceChildren(...items.map((item) => {
+      const row = document.createElement("div");
+      row.className = "inventory-item";
+      const key = document.createElement("kbd");
+      key.textContent = item.key;
+      const name = document.createElement("span");
+      name.textContent = item.name;
+      row.append(key, name);
+      if (item.equipped?.length) {
+        row.classList.add("equipped");
+        const tag = document.createElement("small");
+        tag.textContent = item.equipped.includes("WIELD") ? "wielded" : "worn";
+        row.append(tag);
+      }
+      return row;
+    }));
+    if (!items.length) $("inventory-list").textContent = "Your pack is empty.";
   }
+  const effects = state.effectDetails || state.effects.map((id) => ({ id, name: id, turns: "" }));
+  const effectsKey = JSON.stringify(effects);
+  if (effectsKey !== effectsSignature) {
+    effectsSignature = effectsKey;
+    $("effects-panel").hidden = effects.length === 0;
+    $("effects").replaceChildren(...effects.map((effect) => {
+      const row = document.createElement("div");
+      row.className = "effect-badge";
+      row.classList.toggle("harmful", ["BLINDCOUNT", "CONFUSE", "POISON", "ITCHING", "CLUMSINESS", "HALFDAM", "AGGRAVATE", "HASTEMONST"].includes(effect.id));
+      row.title = `${effect.name}: ${effect.turns} turns remaining`;
+      const name = document.createElement("span");
+      name.textContent = effect.name;
+      const turns = document.createElement("b");
+      turns.textContent = effect.turns;
+      row.append(name, turns);
+      return row;
+    }));
+  }
+  $("auto-loot").setAttribute("aria-pressed", String(state.autoLoot));
+  $("auto-loot").querySelector(".button-label").textContent = `Auto-loot ${state.autoLoot ? "on" : "off"}`;
 }
 for (const [name, icon, description] of classes) {
   const button = document.createElement("button");
@@ -137,7 +194,10 @@ function update() {
   world?.update(state);
   $("player-name").textContent = state.name;
   $("player-class").textContent = state.character;
-  setIcon(document.querySelector(".hero-seal"), classes.find(([name]) => name === state.character)?.[1] || "swords");
+  setIcon(
+    document.querySelector(".hero-seal"),
+    classes.find(([name]) => name === state.character)?.[1] || "swords",
+  );
   $("player-rank").textContent = `LV ${state.rank}`;
   $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
   $("health-bar").style.width =
@@ -151,21 +211,7 @@ function update() {
   $("attributes").innerHTML = Object.entries(state.stats)
     .map(([k, v]) => `<span>${k}<b>${v}</b></span>`)
     .join("");
-  $("effects").textContent = state.effects
-    .map(
-      (e) =>
-        ({
-          BLINDCOUNT: "Blinded",
-          CONFUSE: "Confused",
-          INVISIBILITY: "Invisible",
-          HASTESELF: "Hasted",
-          FIRERESISTANCE: "Fire resistance",
-          WTW: "Walk through walls",
-          HOLDMONST: "Hold monster",
-          TIMESTOP: "Time stop",
-        })[e] || e,
-    )
-    .join(" · ");
+  updateInventoryAndEffects();
   const location =
     state.level === 0
       ? "THE TOWN OF ULARN"
@@ -179,25 +225,15 @@ function update() {
       : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
   $("turn-count").textContent = `TURN ${state.moves}`;
   $("time-left").textContent = Math.ceil(state.timeLeft);
-  $("quest-title").textContent = state.hasCure
-    ? "Bring the cure home"
-    : state.hasEye
-      ? "Into the volcano"
-      : "A cure for your child";
-  $("quest-text").textContent = state.hasCure
-    ? "You have the cure. Return to your home on the surface before time runs out."
-    : state.hasEye
-      ? "The Eye reveals the demons. Find the cure on the fifth volcanic floor."
-      : "Seek the Eye of Larn in the deepest dungeon. Then brave the volcano for the cure.";
-  const log = state.log.filter((line) => line.trim());
+  const log = state.log.filter((line) => line.trim()).slice(-60);
   $("journal-lines").innerHTML = log
     .map((line) => `<div>${line}</div>`)
     .join("");
   $("journal-lines").scrollTop = $("journal-lines").scrollHeight;
   $("engine-modal").hidden = state.maze && !state.over;
   $("engine-title").textContent = state.over
-    ? "THE END OF AN EXPEDITION"
-    : "ULARN · YOUR EXPEDITION";
+    ? "EXPEDITION ENDED"
+    : "ULARN";
   $("new-after-death").hidden = !state.over;
   const hasActions =
     $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
@@ -242,23 +278,26 @@ function drawMap() {
     sy = canvas.height / state.height;
   ctx.fillStyle = "#0a171c";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = `${Math.floor(Math.min(sx, sy) * 0.88)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   for (const t of state.tiles) {
-    ctx.fillStyle = t.wall
-      ? "#50655d"
-      : t.monster
-        ? "#d9856b"
-        : t.id > 0
-          ? "#b4b486"
-          : "#263f3c";
-    ctx.fillRect(
-      t.x * sx,
-      t.y * sy,
-      Math.max(1, sx - 0.8),
-      Math.max(1, sy - 0.8),
-    );
+    const cx = (t.x + 0.5) * sx, cy = (t.y + 0.5) * sy;
+    ctx.fillStyle = t.wall ? "#344746" : "#13292b";
+    ctx.fillRect(t.x * sx, t.y * sy, sx, sy);
+    ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#ddc69a";
+    const symbol = t.monster?.symbol || ({ 5: "<", 13: ">" })[t.id] || t.symbol || (t.wall ? "#" : t.id ? "?" : ".");
+    if (!t.wall && (t.monster || t.id > 0) && symbol !== "." && symbol !== " ") ctx.fillText(symbol, cx, cy);
+    else if (!t.wall) {
+      ctx.fillStyle = "#425d57";
+      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    }
   }
-  ctx.fillStyle = "#f6db98";
-  ctx.fillRect(state.x * sx - 1, state.y * sy - 1, sx + 2, sy + 2);
+  ctx.fillStyle = "#f8dea0";
+  ctx.fillRect(state.x * sx, state.y * sy, sx, sy);
+  ctx.fillStyle = "#132325";
+  ctx.fillText("@", (state.x + 0.5) * sx, (state.y + 0.5) * sy);
+
 }
 function stopTravel() {
   engine.interruptTravel();
@@ -270,8 +309,9 @@ function stopTravel() {
 function command(key, shift = false) {
   stopTravel();
   if (!state || graphicsLost) return;
+  const before = `${state.level}:${state.x},${state.y}`;
   engine.key(key, shift);
-  sound(key === "c" ? "spell" : "step");
+  if (before !== `${state.level}:${state.x},${state.y}`) sound("step");
 }
 document
   .querySelectorAll("[data-key]")
@@ -298,11 +338,22 @@ window.addEventListener("keydown", (event) => {
     event.ctrlKey ||
     event.metaKey ||
     event.altKey ||
+    event.defaultPrevented ||
     event.key === "Tab" ||
     event.target.matches("input:not([type=button]),select,textarea") ||
     document.querySelector("dialog[open]")
   )
     return;
+  if (
+    (event.key === "Enter" || event.key === " ") &&
+    event.target.closest("button, a[href], input[type=button]")
+  )
+    return; // Keep native keyboard activation of focused interface controls.
+  if (event.key === "F2" || event.key === "F3") {
+    event.preventDefault();
+    if (!event.repeat) event.key === "F2" ? toggleAutoLoot() : toggleInventoryPin();
+    return;
+  }
   if (event.key === "Escape" && state.maze && !state.prompt && !state.over) {
     event.preventDefault();
     stopTravel();
@@ -340,7 +391,7 @@ function travel(tile) {
     return;
   }
   if (tile.x === state.x && tile.y === state.y) {
-    command("return");
+    command(tile.id === 5 ? "<" : tile.id === 13 ? ">" : "return");
     return;
   }
   const dx = tile.x - state.x,
@@ -348,8 +399,8 @@ function travel(tile) {
   if (Math.max(Math.abs(dx), Math.abs(dy)) === 1) {
     const dir = dirs.find((d) => d[0] === dx && d[1] === dy);
     if (tile.closed) {
-      command("o");
-      setTimeout(() => engine.key(dir[2]), 30);
+      engine.openToward(dir[2]);
+      sound("open");
     } else command(dir[2]);
     return;
   }
@@ -455,11 +506,15 @@ $("sound").addEventListener("click", () => {
   );
   $("sound").title = soundOn ? "Disable sound" : "Enable sound";
   $("sound").setAttribute("aria-pressed", String(soundOn));
-  setIcon($("sound").querySelector("[data-icon]"), soundOn ? "soundOn" : "soundOff");
+  setIcon(
+    $("sound").querySelector("[data-icon]"),
+    soundOn ? "soundOn" : "soundOff",
+  );
   $("sound").querySelector(".button-label").textContent = soundOn
     ? "Sound on"
     : "Sound off";
-  sound("open");
+  if (soundOn) sound("open");
+  else audio.suspend();
 });
 $("guide").addEventListener("click", () => {
   stopTravel();
@@ -501,6 +556,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopTravel();
     engine.save();
+    audio.suspend();
   }
 });
 
@@ -529,3 +585,18 @@ window.addEventListener("ularn:graphics-restored", () => {
   update();
   toast("Graphics restored. Your expedition is ready.");
 });
+
+// Menus and background tabs need no continuous scene rendering.
+function syncRenderPause() {
+  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]"));
+}
+const dialogObserver = new MutationObserver(syncRenderPause);
+for (const dialog of document.querySelectorAll("dialog"))
+  dialogObserver.observe(dialog, { attributes: true, attributeFilter: ["open"] });
+document.addEventListener("visibilitychange", syncRenderPause);
+
+const mapObserver = new ResizeObserver(() => {
+  const bounds = document.querySelector(".map-panel").getBoundingClientRect();
+  document.body.style.setProperty("--map-bottom", `${Math.ceil(bounds.bottom)}px`);
+});
+mapObserver.observe(document.querySelector(".map-panel"));

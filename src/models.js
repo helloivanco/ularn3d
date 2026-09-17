@@ -418,7 +418,7 @@ export function itemModel(tile) {
   const g = new THREE.Group(),
     id = tile.id,
     n = tile.name.toLowerCase();
-  if (tile.store) return building(id);
+  if (tile.store && id !== 56) return building(id);
   if (tile.wall) {
     box(g, 0x52605c, 0, 0.52, 0, 0.98, 1.04, 0.98);
     box(g, 0x67716a, 0, 1.08, 0, 1.015, 0.09, 1.015);
@@ -427,10 +427,42 @@ export function itemModel(tile) {
     return g;
   }
   if ([5, 13, 56, 93].includes(id)) {
-    box(g, 0x263434, 0, -0.02, 0, 0.9, 0.08, 0.9);
-    for (let i = 0; i < 5; i++)
-      box(g, 0x899188, 0, 0.035 + i * 0.08, 0.35 - i * 0.14, 0.8, 0.09, 0.15);
-    ring(g, id === 5 || id === 93 ? 0x9ab9a1 : 0xb49d6b, 0.46);
+    const up = id !== 13;
+    const blocked = !!tile.stair?.blocked;
+    g.userData.stairDirection = up ? "up" : "down";
+    g.userData.stairBlocked = blocked;
+    box(g, up ? 0x56645b : 0x081116, 0, 0.01, 0, 0.94, 0.04, 0.94);
+    for (let i = 0; i < 5; i++) {
+      const step = box(g, up ? 0xc1cdb1 : 0x9b8e72, 0,
+        up ? 0.09 + i * 0.115 : 0.29 - i * 0.057,
+        0.35 - i * 0.15, 0.72, 0.09, 0.16);
+      step.name = `step-${i}`;
+    }
+    // Raised handrails lead to the upper landing; a dark well frames the descent.
+    for (const x of [-0.43, 0.43]) {
+      if (up) beam(g, 0xa6b898, [x, 0.3, 0.42], [x, 0.87, -0.4], 0.035);
+      else box(g, 0x5c5748, x, 0.14, 0, 0.075, 0.27, 0.92);
+    }
+    if (blocked) {
+      const landing = new THREE.Group();
+      landing.name = "stair-blockage";
+      const y = up ? 0.66 : 0.25;
+      box(landing, 0x756e60, 0, y, -0.3, 0.8, 0.42, 0.28);
+      for (let i = 0; i < 4; i++) {
+        const rubble = orb(landing, 0x89816d, (i - 1.5) * 0.18,
+          y - 0.16, -0.05 + (i % 2) * 0.1, 0.14 + (i % 2) * 0.025);
+        rubble.scale.y = 0.65;
+      }
+      // A cross over the blocked landing stays legible from the overhead view.
+      beam(landing, 0xd39a71, [-0.28, y + 0.23, -0.45], [0.28, y + 0.23, -0.15], 0.055);
+      beam(landing, 0xd39a71, [-0.28, y + 0.23, -0.15], [0.28, y + 0.23, -0.45], 0.055);
+      g.add(landing);
+    } else {
+      const arrow = cone(g, up ? 0xb2e3b9 : 0xefbb7d, 0.0, up ? 0.86 : 0.56, -0.3, 0.16, 0.2, 3);
+      arrow.rotation.z = up ? 0 : Math.PI;
+      arrow.name = up ? "up-arrow" : "down-arrow";
+    }
+    ring(g, up ? 0x9ac8a1 : 0xb49d6b, 0.46);
     return g;
   }
   if (id === 19 || id === 20) {
@@ -446,13 +478,38 @@ export function itemModel(tile) {
     return g;
   }
   if (id === 7 || id === 17) {
-    cylinder(g, 0x81958e, 0, 0.18, 0, 0.44, 0.36, 10);
-    cylinder(g, 0x468d92, 0, 0.37, 0, 0.34, 0.02, 10);
+    const wet = id === 7;
+    g.userData.fountain = wet ? "flowing" : "dry";
+    cylinder(g, 0x81958e, 0, 0.09, 0, 0.44, 0.18, 10);
+    const rim = new THREE.Mesh(geometry("fountain-rim", () => new THREE.TorusGeometry(0.36, 0.08, 6, 10)), mat(0x81958e));
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.29;
+    g.add(rim);
+    cylinder(g, 0x625e4d, 0, 0.19, 0, 0.33, 0.02, 10);
     cylinder(g, 0x93a499, 0, 0.57, 0, 0.08, 0.65);
-    orb(g, 0x9ec8ba, 0, 0.9, 0, 0.11, {
-      emissive: 0x73c1c1,
-      emissiveIntensity: 0.4,
-    });
+    orb(g, wet ? 0x9ec8ba : 0x7a8274, 0, 0.9, 0, 0.11);
+    if (wet || tile.draining) {
+      const water = new THREE.Group();
+      water.name = "fountain-water";
+      water.position.y = 0.19;
+      cylinder(water, 0x51a8ae, 0, 0.075, 0, 0.32, 0.025, 10);
+      for (const x of [-0.15, 0.15]) {
+        const stream = cylinder(water, 0x83d4db, x, 0.32, 0, 0.023, 0.49, 6);
+        stream.rotation.z = x > 0 ? -0.2 : 0.2;
+      }
+      g.add(water);
+      if (!wet) {
+        g.userData.drainAge = 0;
+        g.userData.drainStartedAt = performance.now();
+      }
+    }
+    if (!wet) {
+      // Exposed sediment and cracks remain after the water recedes.
+      for (const x of [-0.19, 0.18]) {
+        const crack = box(g, 0x363b31, x, 0.204, 0.05, 0.017, 0.008, 0.27);
+        crack.rotation.y = x * 3;
+      }
+    }
     return g;
   }
   if (id === 1) {

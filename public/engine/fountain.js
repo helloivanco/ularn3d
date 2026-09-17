@@ -55,7 +55,7 @@ function act_drink_fountain() {
   }
 
   if (rnd(12) < 3) {
-    updateLog(`  The fountains bubbling slowly quiets${period}`);
+    updateLog(`  The fountain runs dry. No water remains${period}`);
     setItem(player.x, player.y, ODEADFOUNTAIN); /* dead fountain */
     setKnow(player.x, player.y, KNOWNOT);
   }
@@ -107,7 +107,7 @@ function act_wash_fountain() {
      since getting the dirt off is a good bonus, need to limit it somehow
   */
   if (rnd(12) < 3) {
-    updateLog(`  The fountains bubbling slowly quiets${period}`);
+    updateLog(`  The fountain runs dry. No water remains${period}`);
     setItem(player.x, player.y, ODEADFOUNTAIN); /* dead fountain */
     setKnow(player.x, player.y, KNOWNOT);
   }
