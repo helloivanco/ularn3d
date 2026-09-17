@@ -651,13 +651,26 @@ function fillroom(what, arg) {
   var safe = 100;
   var x = rnd(MAXX - 2);
   var y = rnd(MAXY - 2);
+  if (level == 0) {
+    const b = townBounds();
+    x = b.x0 + rund(TOWN_SIZE);
+    y = b.y0 + rund(TOWN_SIZE);
+  }
   while (!itemAt(x, y).matches(OEMPTY)) {
     x += rnd(3) - 2;
     y += rnd(3) - 2;
-    if (x > MAXX - 2) x = 1;
-    if (x < 1) x = MAXX - 2;
-    if (y > MAXY - 2) y = 1;
-    if (y < 1) y = MAXY - 2;
+    if (level == 0) {
+      const b = townBounds();
+      if (x > b.x1) x = b.x0;
+      if (x < b.x0) x = b.x1;
+      if (y > b.y1) y = b.y0;
+      if (y < b.y0) y = b.y1;
+    } else {
+      if (x > MAXX - 2) x = 1;
+      if (x < 1) x = MAXX - 2;
+      if (y > MAXY - 2) y = 1;
+      if (y < 1) y = MAXY - 2;
+    }
     if (safe-- == 0) {
       debug(`fillroom: SAFETY!`);
       break;
