@@ -13,6 +13,38 @@ const geometry = (key, create) => {
 };
 const boxGeo = geometry("box", () => new RoundedBoxGeometry(1, 1, 1, 1, 0.055));
 const sphereGeo = geometry("orb", () => new THREE.IcosahedronGeometry(1, 2));
+const letterMaps = new Map();
+function letterTexture(letter, ink, paper) {
+  const key = `${letter}:${ink}:${paper}`;
+  if (letterMaps.has(key)) return letterMaps.get(key);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = paper;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = ink;
+  ctx.font = "bold 92px ui-monospace, SFMono-Regular, Consolas, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(letter, 64, 70);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.userData.shared = true;
+  letterMaps.set(key, map);
+  return map;
+}
+function letterPlate(group, letter, ink, paper, x, y, z, w, h, rx = -Math.PI / 2) {
+  const plate = new THREE.Mesh(
+    geometry("letter-plate", () => new THREE.PlaneGeometry(1, 1)),
+    mat(0xffffff, { map: letterTexture(letter, ink, paper) }),
+  );
+  plate.position.set(x, y, z);
+  plate.scale.set(w, h, 1);
+  plate.rotation.x = rx;
+  plate.castShadow = true;
+  group.add(plate);
+  return plate;
+}
 function mesh(group, geo, material, x, y, z, sx = 1, sy = 1, sz = 1) {
   const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z);
@@ -540,8 +572,17 @@ export function itemModel(tile) {
     return g;
   }
   if (id === 41 || id === 43) {
-    box(g, 0xbfae80, 0, 0.08, 0, 0.38, 0.1, 0.48);
-    box(g, id === 43 ? 0x7c5750 : 0xddc998, 0, 0.145, 0, 0.41, 0.045, 0.5);
+    const book = id === 43;
+    if (book) {
+      box(g, 0x7c5750, 0, 0.09, 0, 0.42, 0.16, 0.52);
+      box(g, 0xf0e2bf, 0.02, 0.12, 0, 0.36, 0.1, 0.46);
+      letterPlate(g, "B", "#3b2416", "#f3e6c4", 0.02, 0.185, 0, 0.22, 0.28);
+    } else {
+      box(g, 0xddc998, 0, 0.08, 0, 0.4, 0.05, 0.5);
+      cylinder(g, 0xc4ae78, 0, 0.09, -0.26, 0.055, 0.4, 8);
+      cylinder(g, 0xc4ae78, 0, 0.09, 0.26, 0.055, 0.4, 8);
+      letterPlate(g, "S", "#4a2f14", "#f7edd2", 0, 0.12, 0, 0.2, 0.26);
+    }
     return g;
   }
   if (id === 18) {

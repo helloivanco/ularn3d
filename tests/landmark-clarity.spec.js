@@ -28,9 +28,10 @@ async function arena(page, depth = 2) {
 
 async function mapClick(page, x, y) {
   const box = await page.locator("#minimap").boundingBox();
+  const size = await page.evaluate(() => ({ w: MAXX, h: MAXY }));
   await page.mouse.click(
-    box.x + ((x + 0.5) / 67) * box.width,
-    box.y + ((y + 0.5) / 17) * box.height,
+    box.x + ((x + 0.5) / size.w) * box.width,
+    box.y + ((y + 0.5) / size.h) * box.height,
   );
 }
 

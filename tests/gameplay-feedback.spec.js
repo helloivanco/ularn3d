@@ -26,7 +26,7 @@ async function emptyArena(page) {
   });
 }
 
-test("auto-loot toggles without a turn, controls pickup, and survives save/resume", async ({ page }) => {
+test("auto-loot toggles without a turn, gold always loots, and the toggle survives save/resume", async ({ page }) => {
   await start(page);
   await emptyArena(page);
   const initial = await page.evaluate(() => {
@@ -35,22 +35,21 @@ test("auto-loot toggles without a turn, controls pickup, and survives save/resum
     setItem(11, 8, createGold(35));
     const toggled = ularn.snapshot();
     ularn.key("l");
-    return { before, toggled, after: ularn.snapshot(), item: itemAt(11, 8).id, goldID: OGOLDPILE.id };
+    return { before, toggled, after: ularn.snapshot(), item: itemAt(11, 8).id, emptyID: OEMPTY.id };
   });
   expect(initial.before.autoLoot).toBe(true);
   expect(initial.toggled.autoLoot).toBe(false);
   expect(initial.toggled.moves).toBe(initial.before.moves);
-  expect(initial.item).toBe(initial.goldID);
-  expect(initial.after.gold).toBe(initial.before.gold);
-  const picked = await page.evaluate(() => {
-    ularn.setAutoLoot(true);
+  expect(initial.item).toBe(initial.emptyID);
+  expect(initial.after.gold).toBe(initial.before.gold + 35);
+  const potionLeft = await page.evaluate(() => {
+    setItem(9, 8, createObject(OPOTION, 0));
     ularn.key("h");
-    ularn.key("l");
-    ularn.setAutoLoot(false);
-    ularn.save();
-    return ularn.snapshot();
+    return { id: itemAt(9, 8).id, potionID: OPOTION.id, autoLoot: ularn.snapshot().autoLoot };
   });
-  expect(picked.gold).toBe(initial.before.gold + 35);
+  expect(potionLeft.autoLoot).toBe(false);
+  expect(potionLeft.id).toBe(potionLeft.potionID);
+  await page.evaluate(() => ularn.save());
   await page.reload();
   await page.locator("#continue").click();
   await expect.poll(() => page.evaluate(() => ularn.snapshot()?.autoLoot)).toBe(false);

@@ -47,6 +47,7 @@ function newcavelevel(depth) {
   updateWalls();
 
   makeobject(depth);
+  ensureSpecialLevelArtifacts(depth);
   sethp(true);
   positionplayer(player.x, player.y, true);
 
@@ -58,10 +59,13 @@ function newcavelevel(depth) {
 
   checkgen(); /* wipe out any genocided monsters */
 
-  if (wizard || level == 0)
+  if (wizard) {
     for (var j = 0; j < MAXY; j++)
       for (var i = 0; i < MAXX; i++)
         setKnow(i, j, KNOWALL);
+  } else if (level == 0) {
+    revealTown();
+  }
 
   /*
   save a checkpoint file to prevent a different random level from being created
@@ -103,9 +107,70 @@ function loadcanned() {
 
 
 
+function cannedMazeFits(canned) {
+  return canned && canned.length === MAXX * MAXY;
+}
+
+function townBounds() {
+  const x0 = Math.floor((MAXX - TOWN_SIZE) / 2);
+  const y0 = Math.floor((MAXY - TOWN_SIZE) / 2);
+  return { x0, y0, x1: x0 + TOWN_SIZE - 1, y1: y0 + TOWN_SIZE - 1 };
+}
+
+function inTown(x, y) {
+  const b = townBounds();
+  return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+}
+
+function revealTown() {
+  const b = townBounds();
+  for (let y = b.y0 - 1; y <= b.y1 + 1; y++) {
+    for (let x = b.x0 - 1; x <= b.x1 + 1; x++) {
+      if (x >= 0 && y >= 0 && x < MAXX && y < MAXY) setKnow(x, y, KNOWALL);
+    }
+  }
+}
+
+function layoutTown() {
+  const b = townBounds();
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      setItem(x, y, inTown(x, y) ? OEMPTY : OWALL);
+    }
+  }
+  if (player) {
+    player.x = Math.floor((b.x0 + b.x1) / 2);
+    player.y = Math.floor((b.y0 + b.y1) / 2);
+  }
+}
+
+function findItemXY(what, arg) {
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const item = itemAt(x, y);
+      if (item.matches(what) && (arg == null || item.arg === arg)) return { x, y };
+    }
+  }
+  return null;
+}
+
+function ensureSpecialLevelArtifacts(depth) {
+  if (depth == DBOTTOM && !findItemXY(OLARNEYE)) {
+    fillroom(OLARNEYE, 0);
+    const at = findItemXY(OLARNEYE);
+    if (at) setMonster(at.x, at.y, createMonster(DEMONPRINCE));
+  }
+  if (depth == VBOTTOM && !findItemXY(OPOTION, 21)) {
+    fillroom(OPOTION, 21);
+    const at = findItemXY(OPOTION, 21);
+    if (at) setMonster(at.x, at.y, createMonster(LUCIFER));
+  }
+}
+
 function cannedlevel(depth) {
 
   var canned = loadcanned();
+  if (!cannedMazeFits(canned)) return false;
 
   var pt = 0;
   for (var y = 0; y < MAXY; y++) {
@@ -138,6 +203,7 @@ function cannedlevel(depth) {
       } // switch
     } // for
   } // for
+  return true;
 }
 
 
@@ -157,43 +223,39 @@ function makemaze(k) {
     }
   }
 
-  if (useCanned) {
-    /* read maze from data file */
-    cannedlevel(k);
+  if (useCanned && COMMON_MAZES[0]?.length === MAXX * MAXY && cannedlevel(k)) return;
+
+  if (k == 0) {
+    layoutTown();
     return;
   }
 
   for (let i = 0; i < MAXY; i++) {
     for (let j = 0; j < MAXX; j++) {
-      if (k == 0)
-        setItem(j, i, OEMPTY);
-      else
-        setItem(j, i, OWALL);
+      setItem(j, i, OWALL);
     }
   }
 
-  if (k == 0) return;
-
   eat(1, 1);
 
-  if (k == 1) setItem(33, MAXY - 1, OHOMEENTRANCE);
+  if (k == 1) setItem(Math.floor(MAXX / 2), MAXY - 1, OHOMEENTRANCE);
 
   /*  now for open spaces */
   let tmp2 = rnd(3) + 3;
   let mx, mxl, mxh, my, myl, myh;
   let mon = null;
   for (let tmp = 0; tmp < tmp2; tmp++) {
-    my = rnd(11) + 2;
+    my = rnd(MAXY - 6) + 2;
     myl = my - rnd(2);
     myh = my + rnd(2);
 
     if (k < MAXLEVEL) {
-      mx = rnd(44) + 5;
+      mx = rnd(Math.max(8, MAXX - 23)) + 5;
       mxl = mx - rnd(4);
-      mxh = mx + rnd(12) + 3;
+      mxh = mx + rnd(Math.min(12, MAXX - 8)) + 3;
       mon = null;
     } else {
-      mx = rnd(60) + 3;
+      mx = rnd(Math.max(6, MAXX - 6)) + 3;
       mxl = mx - rnd(2);
       mxh = mx + rnd(2);
       mon = makemonst(k);

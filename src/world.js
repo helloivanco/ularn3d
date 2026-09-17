@@ -26,7 +26,7 @@ import {
 } from "./models.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
-const FLOOR_LIMIT = 67 * 17;
+const FLOOR_LIMIT = 40 * 32;
 const GAME_CAMERA = new THREE.Vector3(2.8, 15.5, 8.5);
 function destroy(group) {
   group.traverse((o) => {
@@ -173,7 +173,7 @@ export class World {
     this.sun = new THREE.DirectionalLight(0xffd499, 3.9);
     this.sun.position.set(-12, 24, 8);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(this.quality === "cinematic" ? 2048 : 1024, this.quality === "cinematic" ? 2048 : 1024);
     Object.assign(this.sun.shadow.camera, {
       left: -20,
       right: 20,
@@ -254,7 +254,7 @@ export class World {
       );
     };
     this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(250, 250, 90, 90),
+      new THREE.PlaneGeometry(250, 250, 16, 16),
       this.waterMaterial,
     );
     this.water.rotation.x = -Math.PI / 2;
@@ -310,7 +310,10 @@ export class World {
     this.scratchMatrix = new THREE.Matrix4();
     this.scratchScale = new THREE.Vector3();
     this.scratchPosition = new THREE.Vector3();
+    this.scratchColor = new THREE.Color();
+    this.scratchOffset = new THREE.Vector3();
     this.identityQ = new THREE.Quaternion();
+    this.heldCameraOffset = null;
     const canvas = this.renderer.domElement;
     const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
     listen(canvas, "pointerdown", (e) => {
@@ -406,6 +409,11 @@ export class World {
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
           Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z)) * 180 / Math.PI,
+        cameraOffset: [
+          this.camera.position.x - this.controls.target.x,
+          this.camera.position.y - this.controls.target.y,
+          this.camera.position.z - this.controls.target.z,
+        ],
         monsterActors: this.monsters.size,
         ...monsterArtMetrics(),
         ...this.effects.metrics(),
@@ -493,9 +501,8 @@ export class World {
       ? value
       : "balanced";
     const cinematic = this.quality === "cinematic";
-    this.renderer.setPixelRatio(
-      Math.min(devicePixelRatio, cinematic ? 1.75 : 1.25),
-    );
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 1));
+    this.sun.shadow.mapSize.set(cinematic ? 2048 : 1024, cinematic ? 2048 : 1024);
     this.bloom.enabled = cinematic;
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     if (persist)
@@ -621,6 +628,9 @@ export class World {
     this.controls.autoRotate = false;
     const isNew = this.level !== state.level;
     if (isNew) {
+      if (old) {
+        this.heldCameraOffset = this.camera.position.clone().sub(this.controls.target);
+      }
       destroy(this.terrain);
       destroy(this.props);
       this.objects.clear();
@@ -667,7 +677,7 @@ export class World {
           0.65,
           state.height,
         );
-        for (let i = 0; i < 180; i++) {
+        for (let i = 0; i < 48; i++) {
           const x = noise(i, 63) * (state.width + 6) - 3,
             z =
               i % 2
@@ -677,7 +687,7 @@ export class World {
           t.position.set(x, -0.1, z);
           this.terrain.add(t);
         }
-        for (let i = 0; i < 90; i++) {
+        for (let i = 0; i < 24; i++) {
           const rock = orb(
             this.terrain,
             0x6d7f70,
@@ -711,15 +721,17 @@ export class World {
       const sig = `${t.id}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
-      const color = new THREE.Color(
-        grass
-          ? 0xa0af80
-          : state.level === 0
-            ? 0xb6b49c
-            : state.level > 15
-              ? 0xc29b81
-              : 0xb1c0ba,
-      ).multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
+      const color = this.scratchColor
+        .set(
+          grass
+            ? 0xa0af80
+            : state.level === 0
+              ? 0xb6b49c
+              : state.level > 15
+                ? 0xc29b81
+                : 0xb1c0ba,
+        )
+        .multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
       matrix.makeTranslation(t.x, -0.105, t.y);
       const floor = grass ? this.grassFloor : this.floor,
         index = grass ? grassIndex++ : floorIndex++;
@@ -816,11 +828,11 @@ export class World {
     if (!this.lastPlayer) {
       this.player.position.copy(target);
       this.controls.target.copy(target);
-      this.camera.position
-        .copy(target)
-        .add(
-          GAME_CAMERA,
-        );
+      const offset =
+        this.heldCameraOffset && this.heldCameraOffset.lengthSq() > 1
+          ? this.heldCameraOffset
+          : GAME_CAMERA;
+      this.camera.position.copy(target).add(offset);
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
       this.player.rotation.y =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
@@ -872,7 +884,7 @@ export class World {
     }
     this.wallView = null;
     this.updateWalls();
-    this.renderer.shadowMap.needsUpdate = true;
+    if (isNew) this.renderer.shadowMap.needsUpdate = true;
     this.invalidate();
   }
   updateWalls() {
@@ -996,7 +1008,7 @@ export class World {
       this.player.position.lerp(this.playerTarget, alpha);
       this.playerLight.position
         .copy(this.player.position)
-        .add(new THREE.Vector3(0, 1.4, 0.2));
+        .add(this.scratchOffset.set(0, 1.4, 0.2));
       const body = this.player.getObjectByName("body");
       if (body && !this.reduced) {
         this.walkAge = this.walkStartedAt === undefined ? 1 : (now - this.walkStartedAt) / 1000;

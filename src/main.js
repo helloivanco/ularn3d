@@ -274,11 +274,19 @@ window.addEventListener("ularn:update", update);
 function drawMap() {
   const canvas = $("minimap"),
     ctx = canvas.getContext("2d");
+  const cell = 20;
+  const nextWidth = Math.max(1, state.width) * cell;
+  const nextHeight = Math.max(1, state.height) * cell;
+  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+  }
   const sx = canvas.width / state.width,
     sy = canvas.height / state.height;
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#0a171c";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `${Math.floor(Math.min(sx, sy) * 0.88)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
+  ctx.font = `bold ${Math.floor(Math.min(sx, sy) * 0.78)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const t of state.tiles) {
