@@ -388,7 +388,9 @@ export class World {
         this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
       this.invalidate();
     });
-    this.controls.addEventListener("change", () => this.invalidate());
+    this.controls.addEventListener("change", () => {
+      if (!this.animating) this.invalidate();
+    });
     this.controls.addEventListener("start", () => this.invalidate());
     this.setQuality(this.quality, false);
     this.preview();
@@ -833,6 +835,7 @@ export class World {
           ? this.heldCameraOffset
           : GAME_CAMERA;
       this.camera.position.copy(target).add(offset);
+      this.controls.update();
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
       this.player.rotation.y =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
@@ -991,21 +994,33 @@ export class World {
       elapsed = (now - this.lastTime) / 1000,
       dt = Math.min(0.1, elapsed);
     this.lastTime = now;
-    if (document.hidden || this.lost) return;
+    if (document.hidden || this.lost) {
+      this.animating = false;
+      return;
+    }
     this.frameMs =
       (this.frameMs || elapsed * 1000) * 0.94 + elapsed * 1000 * 0.06;
     this.tick += dt;
     this.effects.update(dt);
     this.waterTime.value = this.reduced ? 0 : this.tick;
+    this.animating = true;
     if (this.playerTarget) {
-      const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11),
-        d = this.playerTarget
-          .clone()
-          .sub(this.controls.target)
-          .multiplyScalar(alpha);
-      this.controls.target.add(d);
-      this.camera.position.add(d);
-      this.player.position.lerp(this.playerTarget, alpha);
+      const remain = this.playerTarget.distanceToSquared(this.controls.target);
+      if (remain < 0.0004) {
+        this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
+        this.controls.target.copy(this.playerTarget);
+        this.camera.position.copy(this.playerTarget).add(this.scratchOffset);
+        this.player.position.copy(this.playerTarget);
+      } else {
+        const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11),
+          d = this.playerTarget
+            .clone()
+            .sub(this.controls.target)
+            .multiplyScalar(alpha);
+        this.controls.target.add(d);
+        this.camera.position.add(d);
+        this.player.position.lerp(this.playerTarget, alpha);
+      }
       this.playerLight.position
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
@@ -1069,7 +1084,8 @@ export class World {
     this.camera.updateMatrixWorld();
     this.hasMotion = !!this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
     for (const { mesh, target } of this.monsters.values()) {
-      mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
+      if (mesh.position.distanceToSquared(target) < 0.0004) mesh.position.copy(target);
+      else mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
       if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
       faceMonster(mesh, null, this.camera);
     }
@@ -1088,6 +1104,7 @@ export class World {
     if (this.quality === "cinematic") this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     this.renderedFrames++;
+    this.animating = false;
     this.scheduleFrame();
   }
   dispose() {
