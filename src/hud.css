@@ -71,9 +71,9 @@
   .playing .dpad { grid-template-columns: repeat(3,32px); }
 }
 @media (max-width: 700px) {
-  .playing { --dock-height: 268px; --map-width: min(calc(100vw - 24px), calc((100dvh - 268px - 150px) * 38 / 30)); }
+  .playing { --dock-height: 268px; --map-width: min(180px, calc(100vw - 24px), calc((100dvh - 268px - 220px) * 38 / 30)); }
   .playing .topbar { padding: 0 12px; }
-  .playing .map-panel { left: 12px; top: 60px; padding: 8px; }
+  .playing .map-panel { left: 12px; top: 60px; padding: 8px; z-index: 4; }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 62px 36px 36px 88px; gap: 8px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; border: none; padding: 0; }
   .playing .hero-heading { margin-bottom: 7px; }
@@ -99,7 +99,7 @@
   .playing .run-clock strong { font-size: 9px; }
   .playing .camera-tools { top: calc(var(--map-bottom, 200px) + 12px); right: 12px; }
   .playing .camera-tools button { width: 26px; height: 28px; }
-  #inventory-panel { left: 12px; top: calc(var(--map-bottom, 200px) + 12px); bottom: calc(var(--dock-height) + 22px); width: calc(100vw - 170px); min-width: 165px; padding: 9px; z-index: 2; }
+  #inventory-panel { left: 12px; top: calc(var(--map-bottom, 200px) + 20px); bottom: calc(var(--dock-height) + 22px); width: calc(100vw - 170px); min-width: 165px; padding: 9px; z-index: 1; }
   #inventory-list { font-size: 10px; }
   .inventory-item { padding: 6px 0; }
   .inventory-help { display: none; }
@@ -155,13 +155,13 @@
   .playing .camera-tools { top: calc(var(--map-bottom, 200px) + 12px); }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --map-width: min(360px, 42vw, calc((100dvh - var(--dock-height) - 70px) * 38 / 30)); }
-  .playing .map-panel { top: 48px; padding: 4px; }
+  .playing { --map-width: min(200px, 26vw, calc((100dvh - var(--dock-height) - 108px) * 38 / 30)); }
+  .playing .map-panel { top: 48px; padding: 4px; z-index: 4; }
   .playing #minimap { margin-top: 3px; }
   .playing #town-travel { margin-top: 3px; }
   .playing #destination { font-size: 8px; padding: 2px; }
   .playing .camera-tools { top: 50px; }
-  .playing #inventory-panel { top: 91px; left: auto; right: 12px; width: calc(100vw - var(--map-width) - 40px); max-height: calc(100dvh - var(--dock-height) - 119px); padding: 7px; }
+  .playing #inventory-panel { top: 91px; left: auto; right: 12px; width: calc(100vw - var(--map-width) - 40px); max-height: calc(100dvh - var(--dock-height) - 119px); padding: 7px; z-index: 1; }
   .playing .inventory-help { display: none; }
   .playing #effects-panel { top: 90px; }
 }
