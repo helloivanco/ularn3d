@@ -213,10 +213,9 @@ function update() {
   $("gold").textContent = state.gold.toLocaleString();
   $("armor").textContent = state.ac;
   $("weapon").textContent = state.wc;
-  const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
   $("attributes").innerHTML = HUD_STATS.map(
     (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
-  ).join("");
+  ).join(" ");
   updateInventoryAndEffects();
   const location =
     state.level === 0
