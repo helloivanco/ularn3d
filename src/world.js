@@ -9,6 +9,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, surface, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
+import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
 import {
   box,
@@ -418,6 +419,7 @@ export class World {
         ],
         monsterActors: this.monsters.size,
         ...monsterArtMetrics(),
+        ...itemArtMetrics(),
         ...this.effects.metrics(),
       }),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
@@ -425,6 +427,17 @@ export class World {
         facing: { ...mesh.userData.facing }, art: mesh.userData.artPath,
         mirrored: mesh.userData.artwork?.scale.x < 0,
       })),
+      props: () => [...this.objects.values()].flatMap(({ mesh }) => {
+        const art = mesh.children.find((child) => child.userData.itemArt);
+        if (!art) return [];
+        return [{
+          tile: { ...mesh.userData.tile },
+          id: mesh.userData.itemId,
+          arg: mesh.userData.itemArg ?? 0,
+          art: art.userData.artPath,
+          mirrored: art.userData.artwork?.scale.x < 0,
+        }];
+      }),
       landmarks: () => [...this.objects.values()].flatMap(({ mesh }) => [mesh, ...mesh.children]
         .filter((child) => child.userData.fountain || child.userData.stairDirection)
         .map((child) => ({
@@ -491,6 +504,7 @@ export class World {
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
     releaseMonsterArtResources(clearArtCache);
+    releaseItemArtResources(clearArtCache);
     this.sun.shadow.dispose();
     this.composer.passes.forEach((pass) => pass.dispose());
     this.composer.dispose();
@@ -720,7 +734,7 @@ export class World {
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
-      const sig = `${t.id}${t.stair?.blocked ? ":blocked" : ""}`;
+      const sig = `${t.id}:${t.arg ?? 0}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       const color = this.scratchColor
@@ -756,8 +770,14 @@ export class World {
       if (t.wall) {
         if (noise(t.x, t.y) > 0.87) torch(g, 0, 1.05, 0, 0.65);
       } else if (t.id !== 0) {
-        const model = itemModel({ ...t, draining: t.id === 17 && prev?.sig === "7" && !this.reduced });
+        const art = itemSprite(t, () => this.invalidate());
+        const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
         g.add(model);
+        if (art) {
+          g.userData.itemId = t.id;
+          g.userData.itemArg = t.arg ?? 0;
+          faceItem(art, this.camera);
+        }
         if (t.store) {
           // Batching replaces the model group with merged meshes. Keep its
           // stair meaning on the tile group so the surface shaft stays legible.
@@ -970,12 +990,14 @@ export class World {
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
     this.updateWalls();
+    this.invalidate();
   }
   zoom(factor) {
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.multiplyScalar(factor).clampLength(5, 46);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
+    this.invalidate();
   }
   reset() {
     if (this.state) {
@@ -987,6 +1009,7 @@ export class World {
         );
       this.controls.update();
       this.updateWalls();
+      this.invalidate();
     }
   }
   animate() {
@@ -1090,6 +1113,8 @@ export class World {
       faceMonster(mesh, null, this.camera);
     }
     for (const { mesh } of this.objects.values()) {
+      const art = mesh.children.find((child) => child.userData.itemArt);
+      if (art) faceItem(art, this.camera);
       const fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
       if (!fountain) continue;
       fountain.userData.drainAge = (now - fountain.userData.drainStartedAt) / 1000;
