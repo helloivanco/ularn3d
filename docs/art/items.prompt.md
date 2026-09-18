@@ -1,57 +1,94 @@
-# Artifact item artwork
+# Item artwork catalog
 
 Generated with the built-in image generation tool on September 18, 2026.
 
-Assets live in `public/art/items/*.png` (transparent PNGs). Presentation-only
-replacements for fifteen notable floor items in the 3D game. Original engine
-item identities, attributes, behavior, spawn rules, and classic
-`public/engine/img/o{id}.png` sprites remain unchanged. Each texture is loaded
-once and shared. Camera-facing planes mirror left/right as the overhead camera
-orbits, matching the monster art convention (single view, not eight-direction sheets).
+Assets live in `public/art/items/*.png` (transparent PNGs, 256×256). Presentation-only
+floor replacements for weapons, armor, rings, consumables, artifacts, and gems in the
+3D game. Original engine item identities, attributes, behavior, spawn rules, and classic
+`public/engine/img/o{id}.png` sprites remain unchanged. Each texture is loaded once and
+shared. Camera-facing planes mirror left/right as the overhead camera orbits, matching
+the monster art convention (single view, not eight-direction sheets).
 
-| Item | ID | Asset |
-|------|----|-------|
-| Orb of Enlightenment | 3 | `orb-of-enlightenment.png` |
-| Sword of Slashing | 26 | `sword-of-slashing.png` |
-| Bessman's Flailing Hammer | 27 | `bessmans-flailing-hammer.png` |
-| Amulet of Invisibility | 45 | `amulet-of-invisibility.png` |
-| Orb of Dragon Slaying | 46 | `orb-of-dragon-slaying.png` |
-| Scarab of Negate Spirit | 47 | `scarab-of-negate-spirit.png` |
-| Cube of Undead Control | 48 | `cube-of-undead-control.png` |
-| Device of Theft Prevention | 49 | `device-of-theft-prevention.png` |
-| Brass Lamp | 85 | `brass-lamp.png` |
-| Hand of Fear | 86 | `hand-of-fear.png` |
-| Talisman of the Sphere | 87 | `talisman-of-the-sphere.png` |
-| Wand of Wonder | 88 | `wand-of-wonder.png` |
-| Staff of Power | 89 | `staff-of-power.png` |
-| Slayer | 91 | `slayer.png` |
-| Elven Chain | 92 | `elven-chain.png` |
+Potions (`id` 42) and scrolls (`id` 41) select art by `arg` (the full potion/scroll tables).
 
 ## Shared generation prompt pattern
 
-Use case: stylized-concept. Asset type: one transparent 2D item sprite for a
-small overhead fantasy dungeon game. Three-quarter view facing RIGHT, slightly
-seen from above. Dark pixel outline, restrained pixel-art shading that reads
-clearly when displayed about 40 pixels wide. Single object centered and fully
-visible on a truly transparent alpha background, no ground plane or shadow, no
-scene, no text, no border, no hand or wearer. Occupy roughly 80% of the frame
-with transparent breathing room. Deliver a square transparent PNG game asset;
-use crisp pixel-art shapes, not a photographic image.
+Use case: stylized-concept. Asset type: one transparent 2D item sprite for a small
+overhead fantasy dungeon game. Three-quarter view facing RIGHT (or slightly from above
+for armor/rings/bottles), slightly seen from above. Dark pixel outline, restrained
+pixel-art shading that reads clearly when displayed about 40 pixels wide. Single object
+centered and fully visible on a truly transparent alpha background, no ground plane or
+shadow, no scene, no text, no border, no hand or wearer. Occupy roughly 80% of the frame.
+Deliver a square transparent PNG game asset; use crisp pixel-art shapes, not photographic.
 
-## Per-item subject lines
+## Coverage
 
-- **Sword of Slashing** — ornate longsword, blue-steel blade with cornflower-blue glow edge, silver crossguard, leather-wrapped grip, round pommel; blade angled diagonally.
-- **Bessman's Flailing Hammer** — flailing war hammer with three spiked metal balls on short chains attached to a dark-goldenrod wooden haft with brass bands.
-- **Orb of Enlightenment** — crystal orb of plum and violet glass with an inner soft white light and tiny floating runes; small ornate silver pedestal cup.
-- **Orb of Dragon Slaying** — sky-blue crystal orb with a tiny stylized dragon silhouette coiled inside glowing ember-red; brass claw pedestal.
-- **Scarab of Negate Spirit** — Egyptian-style scarab beetle amulet in dark orange and amber enamel with turquoise wing markings and a gold rim; tiny spirit-ward glyph on the shell.
-- **Amulet of Invisibility** — circular gold medallion with a translucent pale gem that looks faintly see-through; thin gold chain looped above.
-- **Cube of Undead Control** — solid plum-colored cube with glowing violet runes on each visible face and a faint skull motif etched into the top; isometric three faces.
-- **Device of Theft Prevention** — small mechanical lock-ward gadget with a blue crystal core, brass gears, and a protective ward ring; cornflower-blue metal.
-- **Brass Lamp** — classic brass oil lamp with a curved spout, rounded body, small handle, and a soft warm flame tip.
-- **Hand of Fear** — crimson and pale flesh severed-hand relic with dark nails, fingers slightly curled in a warding gesture, faint red aura; stylized fantasy relic, not gory.
-- **Talisman of the Sphere** — sky-blue circular disc pendant with a floating miniature glowing sphere held in concentric metal rings like an orrery; thin chain loop.
-- **Wand of Wonder** — slender twisted wooden wand tipped with a swirling prismatic green gem that sparks tiny multicolored motes; medium sea green and wood.
-- **Staff of Power** — tall dark-orange wooden staff topped with a glowing amber crystal orb in bronze claws; carved spiral runes on the shaft.
-- **Slayer** — crimson-edged black steel longsword with a blood-red fuller, dark iron fang crossguard, black grip, crimson gem pommel.
-- **Elven Chain** — light cornflower-blue and silver fine-link chain mail shirt with leaf-shaped shoulder accents and a subtle green leaf clasp; no mannequin.
+| Category | Count | Notes |
+|----------|------:|-------|
+| Weapons | 12 | Including legendary blades and Bessman's hammer |
+| Armor | 10 | Plate mail, plate armor, stainless plate, Elven Chain, shield |
+| Rings / belt | 9 | Eight rings + belt of striking |
+| Artifacts / special | 11 | Orbs, scarab, cube, lamp, hand, talisman, wand, staff, amulet |
+| Gems / gold | 5 | Diamond, ruby, emerald, sapphire, gold pile |
+| Book / cookie | 2 | |
+| Potions | 24 | Full `POTION_NAMES` table |
+| Scrolls | 24 | Full `SCROLL_NAMES` table |
+| **Total** | **97** | |
+
+## Potion args (id 42)
+
+| Arg | Name | Asset |
+|----:|------|-------|
+| 0 | sleep | `potion-sleep.png` |
+| 1 | healing | `potion-healing.png` |
+| 2 | raise level | `potion-raise-level.png` |
+| 3 | increase ability | `potion-increase-ability.png` |
+| 4 | wisdom | `potion-wisdom.png` |
+| 5 | strength | `potion-strength.png` |
+| 6 | raise charisma | `potion-raise-charisma.png` |
+| 7 | dizziness | `potion-dizziness.png` |
+| 8 | learning | `potion-learning.png` |
+| 9 | object detection | `potion-object-detection.png` |
+| 10 | monster detection | `potion-monster-detection.png` |
+| 11 | forgetfulness | `potion-forgetfulness.png` |
+| 12 | water | `potion-water.png` |
+| 13 | blindness | `potion-blindness.png` |
+| 14 | confusion | `potion-confusion.png` |
+| 15 | heroism | `potion-heroism.png` |
+| 16 | sturdiness | `potion-sturdiness.png` |
+| 17 | giant strength | `potion-giant-strength.png` |
+| 18 | fire resistance | `potion-fire-resistance.png` |
+| 19 | treasure finding | `potion-treasure-finding.png` |
+| 20 | instant healing | `potion-instant-healing.png` |
+| 21 | cure dianthroritis | `potion-cure-dianthroritis.png` |
+| 22 | poison | `potion-poison.png` |
+| 23 | see invisible | `potion-see-invisible.png` |
+
+## Scroll args (id 41)
+
+| Arg | Name | Asset |
+|----:|------|-------|
+| 0 | enchant armor | `scroll-enchant-armor.png` |
+| 1 | enchant weapon | `scroll-enchant-weapon.png` |
+| 2 | enlightenment | `scroll-enlightenment.png` |
+| 3 | blank paper | `scroll-blank-paper.png` |
+| 4 | create monster | `scroll-create-monster.png` |
+| 5 | create artifact | `scroll-create-artifact.png` |
+| 6 | aggravate monsters | `scroll-aggravate-monsters.png` |
+| 7 | time warp | `scroll-time-warp.png` |
+| 8 | teleportation | `scroll-teleportation.png` |
+| 9 | expanded awareness | `scroll-expanded-awareness.png` |
+| 10 | haste monsters | `scroll-haste-monsters.png` |
+| 11 | monster healing | `scroll-monster-healing.png` |
+| 12 | spirit protection | `scroll-spirit-protection.png` |
+| 13 | undead protection | `scroll-undead-protection.png` |
+| 14 | stealth | `scroll-stealth.png` |
+| 15 | magic mapping | `scroll-magic-mapping.png` |
+| 16 | hold monsters | `scroll-hold-monsters.png` |
+| 17 | gem perfection | `scroll-gem-perfection.png` |
+| 18 | spell extension | `scroll-spell-extension.png` |
+| 19 | identify | `scroll-identify.png` |
+| 20 | remove curse | `scroll-remove-curse.png` |
+| 21 | annihilation | `scroll-annihilation.png` |
+| 22 | pulverization | `scroll-pulverization.png` |
+| 23 | life protection | `scroll-life-protection.png` |

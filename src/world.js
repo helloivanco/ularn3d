@@ -433,6 +433,7 @@ export class World {
         return [{
           tile: { ...mesh.userData.tile },
           id: mesh.userData.itemId,
+          arg: mesh.userData.itemArg ?? 0,
           art: art.userData.artPath,
           mirrored: art.userData.artwork?.scale.x < 0,
         }];
@@ -733,7 +734,7 @@ export class World {
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
-      const sig = `${t.id}${t.stair?.blocked ? ":blocked" : ""}`;
+      const sig = `${t.id}:${t.arg ?? 0}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       const color = this.scratchColor
@@ -770,10 +771,11 @@ export class World {
         if (noise(t.x, t.y) > 0.87) torch(g, 0, 1.05, 0, 0.65);
       } else if (t.id !== 0) {
         const art = itemSprite(t, () => this.invalidate());
-        const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig === "7" && !this.reduced });
+        const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
         g.add(model);
         if (art) {
           g.userData.itemId = t.id;
+          g.userData.itemArg = t.arg ?? 0;
           faceItem(art, this.camera);
         }
         if (t.store) {

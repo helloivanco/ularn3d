@@ -137,6 +137,60 @@ test("notable artifacts use unique camera-facing art that mirrors with orbit", a
   await page.screenshot({ path: "test-results/item-art.png" });
 });
 
+test("weapons armor rings gems and consumable tables use unique art", async ({ page }) => {
+  await room(page);
+  const result = await page.evaluate(() => {
+    const placements = [
+      [5, 5, OSWORD], [6, 5, O2SWORD], [7, 5, OSPEAR], [8, 5, ODAGGER],
+      [9, 5, OBATTLEAXE], [10, 5, OLONGSWORD], [11, 5, OFLAIL], [12, 5, OLANCE],
+      [13, 5, OVORPAL], [14, 5, OLEATHER], [15, 5, OCHAIN],
+      [5, 6, OPLATE], [6, 6, OPLATEARMOR], [7, 6, OSSPLATE], [8, 6, OSTUDLEATHER],
+      [9, 6, ORING], [10, 6, OSPLINT], [11, 6, OSHIELD],
+      [5, 7, ORINGOFEXTRA], [6, 7, OREGENRING], [7, 7, OPROTRING], [8, 7, OENERGYRING],
+      [9, 7, ODEXRING], [10, 7, OSTRRING], [11, 7, OCLEVERRING], [12, 7, ODAMRING],
+      [13, 7, OBELT],
+      [5, 8, ODIAMOND], [6, 8, ORUBY], [7, 8, OEMERALD], [8, 8, OSAPPHIRE],
+      [9, 8, createObject(OGOLDPILE, 50)], [10, 8, OBOOK], [11, 8, OCOOKIE],
+      [5, 9, createObject(OPOTION, 0)], [6, 9, createObject(OPOTION, 1)],
+      [7, 9, createObject(OPOTION, 21)], [8, 9, createObject(OSCROLL, 0)],
+      [9, 9, createObject(OSCROLL, 19)], [10, 9, createObject(OSCROLL, 21)],
+    ];
+    for (const [x, y, item] of placements) setItem(x, y, item);
+    paint();
+    return ularnGraphics.props().map((p) => ({ id: p.id, arg: p.arg, art: p.art }));
+  });
+  await expect.poll(() => page.evaluate(() => ularnGraphics.props().length)).toBe(40);
+  const byKey = Object.fromEntries(result.map((p) => [`${p.id}:${p.arg}`, p.art]));
+  expect(byKey["28:0"]).toBe("/art/items/sunsword.png");
+  expect(byKey["29:0"]).toBe("/art/items/two-handed-sword.png");
+  expect(byKey["30:0"]).toBe("/art/items/spear.png");
+  expect(byKey["31:0"]).toBe("/art/items/dagger.png");
+  expect(byKey["57:0"]).toBe("/art/items/battle-axe.png");
+  expect(byKey["58:0"]).toBe("/art/items/long-sword.png");
+  expect(byKey["59:0"]).toBe("/art/items/flail.png");
+  expect(byKey["65:0"]).toBe("/art/items/lance-of-death.png");
+  expect(byKey["90:0"]).toBe("/art/items/vorpal-blade.png");
+  expect(byKey["25:0"]).toBe("/art/items/leather-armor.png");
+  expect(byKey["24:0"]).toBe("/art/items/chain-mail.png");
+  expect(byKey["23:0"]).toBe("/art/items/plate-mail.png");
+  expect(byKey["63:0"]).toBe("/art/items/plate-armor.png");
+  expect(byKey["64:0"]).toBe("/art/items/stainless-plate-armor.png");
+  expect(byKey["68:0"]).toBe("/art/items/shield.png");
+  expect(byKey["32:0"]).toBe("/art/items/ring-extra-regeneration.png");
+  expect(byKey["40:0"]).toBe("/art/items/belt-of-striking.png");
+  expect(byKey["50:0"]).toBe("/art/items/diamond.png");
+  expect(byKey["18:50"] || byKey["18:0"]).toMatch(/\/art\/items\/gold-pile\.png/);
+  expect(byKey["43:0"]).toBe("/art/items/book.png");
+  expect(byKey["83:0"]).toBe("/art/items/cookie.png");
+  expect(byKey["42:0"]).toBe("/art/items/potion-sleep.png");
+  expect(byKey["42:1"]).toBe("/art/items/potion-healing.png");
+  expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.png");
+  expect(byKey["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
+  expect(byKey["41:19"]).toBe("/art/items/scroll-identify.png");
+  expect(byKey["41:21"]).toBe("/art/items/scroll-annihilation.png");
+  await page.screenshot({ path: "test-results/item-art-catalog.png" });
+});
+
 test("idle and hidden rendering stops and gameplay wakes it without accumulating resources", async ({ page }) => {
   await room(page);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);

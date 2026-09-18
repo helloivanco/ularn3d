@@ -521,6 +521,7 @@ window.ularn = {
           x,
           y,
           id: masked ? 0 : item.id,
+          arg: masked ? 0 : item.arg ?? 0,
           name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
           stair,
           symbol: plainText3D(itemlist[masked ? 0 : item.id].ularnchar),
