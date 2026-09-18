@@ -79,6 +79,64 @@ test("overhead view, species art and facing survive monster movement", async ({ 
   await page.screenshot({ path: "test-results/fountain-drained.png" });
 });
 
+test("notable artifacts use unique camera-facing art that mirrors with orbit", async ({ page }) => {
+  await room(page);
+  const expected = await page.evaluate(() => {
+    const placements = [
+      [6, 6, OORB],
+      [7, 6, OSWORDofSLASHING],
+      [8, 6, OHAMMER],
+      [9, 6, OAMULET],
+      [10, 6, OORBOFDRAGON],
+      [11, 6, OSPIRITSCARAB],
+      [12, 6, OCUBEofUNDEAD],
+      [13, 6, ONOTHEFT],
+      [6, 8, OBRASSLAMP],
+      [7, 8, OHANDofFEAR],
+      [8, 8, OSPHTALISMAN],
+      [9, 8, OWWAND],
+      [10, 8, OPSTAFF],
+      [11, 8, OSLAYER],
+      [12, 8, OELVENCHAIN],
+    ];
+    for (const [x, y, item] of placements) setItem(x, y, item);
+    paint();
+    return placements.map(([x, y, item]) => ({ x, y, id: item.id }));
+  });
+  await expect.poll(() => page.evaluate(() => ularnGraphics.props().length)).toBe(15);
+  const props = await page.evaluate(() => ularnGraphics.props());
+  const byId = Object.fromEntries(props.map((p) => [p.id, p]));
+  const paths = {
+    3: "/art/items/orb-of-enlightenment.png",
+    26: "/art/items/sword-of-slashing.png",
+    27: "/art/items/bessmans-flailing-hammer.png",
+    45: "/art/items/amulet-of-invisibility.png",
+    46: "/art/items/orb-of-dragon-slaying.png",
+    47: "/art/items/scarab-of-negate-spirit.png",
+    48: "/art/items/cube-of-undead-control.png",
+    49: "/art/items/device-of-theft-prevention.png",
+    85: "/art/items/brass-lamp.png",
+    86: "/art/items/hand-of-fear.png",
+    87: "/art/items/talisman-of-the-sphere.png",
+    88: "/art/items/wand-of-wonder.png",
+    89: "/art/items/staff-of-power.png",
+    91: "/art/items/slayer.png",
+    92: "/art/items/elven-chain.png",
+  };
+  for (const { id } of expected) {
+    expect(byId[id].art).toBe(paths[id]);
+  }
+  const metrics = await page.evaluate(() => ularnGraphics.metrics());
+  expect(metrics.itemTextures).toBe(15);
+  const before = await page.evaluate(() => ularnGraphics.props().find((p) => p.id === 26).mirrored);
+  await page.locator("#rotate-left").click();
+  await page.locator("#rotate-left").click();
+  await page.locator("#rotate-left").click();
+  await page.locator("#rotate-left").click();
+  await expect.poll(() => page.evaluate(() => ularnGraphics.props().find((p) => p.id === 26).mirrored)).not.toBe(before);
+  await page.screenshot({ path: "test-results/item-art.png" });
+});
+
 test("idle and hidden rendering stops and gameplay wakes it without accumulating resources", async ({ page }) => {
   await room(page);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);
