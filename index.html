@@ -164,9 +164,9 @@
           </div>
           <canvas
             id="minimap"
-            width="760"
-            height="600"
-            aria-label="Symbol map of explored tiles; @ marks your position"
+            width="336"
+            height="336"
+            aria-label="Symbol map of nearby explored tiles; @ marks your position"
           ></canvas>
           <div id="town-travel">
             <select id="destination" aria-label="Travel to town landmark">
@@ -233,6 +233,7 @@
             <div><span>WEAPON</span><strong id="weapon"></strong></div>
           </div>
         </aside>
+        <div id="attributes" aria-label="Character attributes"></div>
         <section class="journal">
           <div class="panel-heading">
             <span>JOURNAL</span><span id="turn-count">TURN 0</span>
@@ -240,7 +241,6 @@
           <div id="journal-lines" role="log" aria-live="polite"></div>
           <div id="CONTEXT" class="native-buttons"></div>
         </section>
-        <div id="attributes" aria-label="Character attributes"></div>
         <div class="actionbar">
           <button data-key="i">
             <span data-icon="backpack"></span>Inventory<kbd>i</kbd></button
@@ -256,7 +256,7 @@
             <span data-icon="take"></span>Take<kbd>t</kbd></button
           ><button data-key=".">
             <span data-icon="hourglass"></span>Wait<kbd>·</kbd></button
-          ><button id="auto-loot" aria-pressed="true" title="Toggle auto-loot (F2)"><span data-icon="take"></span><span class="button-label">Auto-loot on</span><kbd>F2</kbd></button
+          ><button id="auto-loot" aria-pressed="true" title="Toggle auto-loot (F2). Gold is always collected."><span data-icon="take"></span><span class="button-label">Auto-loot on</span><kbd>F2</kbd></button
           ><button id="inventory-pin" aria-pressed="true" title="Toggle pinned inventory (F3)"><span data-icon="backpack"></span><span class="button-label">Pin inventory</span><kbd>F3</kbd></button
           ><button id="save"><span data-icon="save"></span>Save</button>
         </div>
@@ -359,7 +359,8 @@
             <p>
               <kbd>i</kbd> inventory · <kbd>w</kbd> wield · <kbd>W</kbd> wear ·
               <kbd>q</kbd> drink · <kbd>r</kbd> read · <kbd>d</kbd> drop ·
-              <kbd>c</kbd> cast. <kbd>F2</kbd> toggles auto-loot; <kbd>F3</kbd>
+              <kbd>c</kbd> cast. <kbd>F2</kbd> toggles auto-loot for items
+              (gold is always collected); <kbd>F3</kbd>
               pins your inventory. The town’s stores, bank, and college can help.
             </p>
           </section>

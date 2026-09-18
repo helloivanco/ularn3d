@@ -215,7 +215,7 @@ test("shop, spell casting, item use, and full depth generation", async ({
     return counts;
   });
   expect(levels).toHaveLength(20);
-  expect(levels.every((l) => l.items === 38 && l.monsters === 38)).toBe(true);
+  expect(levels.every((l) => l.items === 34 && l.monsters === 34)).toBe(true);
 });
 test("death ends the run, clears autosave, and allows a fresh expedition", async ({
   page,

@@ -14,7 +14,8 @@ test.afterEach(() => expect(errors).toEqual([]));
 test("bottom HUD, symbol map, pinned inventory, and loot shortcut stay in sync", async ({ page }) => {
   await expect(page.locator(".quest-panel, .map-legend")).toHaveCount(0);
   const map = await page.locator("#minimap").boundingBox();
-  expect(map.width).toBeGreaterThan(650);
+  expect(map.width).toBeGreaterThan(240);
+  expect(map.width).toBeLessThan(400);
   const hero = await page.locator(".hero-panel").boundingBox();
   expect(hero.y).toBeGreaterThan(750);
   await expect(page.locator("#inventory-list")).toContainText("dagger");

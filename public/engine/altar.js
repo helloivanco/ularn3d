@@ -243,7 +243,10 @@ function crumble_altar() {
 function act_ignore_altar() {
   if (rnd(100) < 30) {
     var monstBoost = (ULARN ? 2 : 1);
-    createmonster(makemonst(level + monstBoost));
+    var kind = makemonst(level + monstBoost);
+    // Leaving an undamaged shrine must never produce a Demon Prince.
+    if (kind >= DEMONPRINCE) kind = REDDRAGON;
+    createmonster(kind);
     player.AGGRAVATE += rnd(450);
   } else
     updateLog(`  Nothing happens${period}`);

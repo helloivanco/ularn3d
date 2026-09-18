@@ -40,7 +40,7 @@ Open the URL printed by Vite. Choose one of the eight original classes and begin
 
 - `i`: inventory; `c`: cast; `q`: drink; `r`: read; `w`: wield; `W`: wear; `d`: drop.
 - `e` / Enter: enter a building; `>` / `<`: stairs; `o`: open; `t`: take; `.`: wait.
-- `F2`: toggle auto-loot (including gold); `F3`: show/hide pinned inventory. Both settings persist without consuming a turn.
+- `F2`: toggle auto-loot for items (gold is always collected); `F3`: show/hide pinned inventory. Both settings persist without consuming a turn.
 - `S`: save without ending the expedition. Escape cancels a prompt or opens the menu.
 - Contextual buttons retain the original engine's full interactions and shop menus.
 - Press `?` for the complete original manual, or open the field guide.
