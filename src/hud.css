@@ -6,7 +6,7 @@
 .playing .brand small, .playing .edition { display: none; }
 .playing #location { font-size: 9px; }
 .playing .panel { backdrop-filter: none; }
-.playing .map-panel { top: 64px; left: 18px; right: auto; width: var(--map-width); padding: 8px; }
+.playing .map-panel { top: 64px; left: 18px; right: auto; width: var(--map-width); padding: 8px; z-index: 4; }
 .playing #minimap { margin-top: 6px; cursor: crosshair; width: 100%; height: auto; }
 .playing .map-panel .panel-heading > span:last-child { display: block; }
 .playing #town-travel { margin-top: 8px; }
@@ -146,6 +146,7 @@
   bottom: auto;
   height: fit-content;
   max-height: min(440px, calc(100dvh - var(--dock-height) - var(--map-bottom, 334px) - 42px));
+  z-index: 1;
 }
 @media (max-width: 1100px) {
   .playing .camera-tools { top: calc(var(--map-bottom, 240px) + 12px); }

@@ -277,6 +277,13 @@ function update() {
 window.addEventListener("ularn:update", update);
 window.addEventListener("resize", () => {
   if (state) drawMap();
+  const panel = document.querySelector(".map-panel");
+  if (panel) {
+    document.body.style.setProperty(
+      "--map-bottom",
+      `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
+    );
+  }
 });
 function drawMap() {
   const canvas = $("minimap"),
