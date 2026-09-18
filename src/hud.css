@@ -109,14 +109,14 @@
   .playing #interaction:not(.in-modal) { left: 12px; right: 12px; bottom: calc(var(--dock-height) + 18px); max-height: 40dvh; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --dock-height: 142px; --map-width: min(118px, 22vw); }
+  .playing { --dock-height: 142px; --map-width: min(248px, 46vw); }
   .playing .topbar { height: 42px; }
-  .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 3px; z-index: 4; height: fit-content; max-height: calc(100dvh - var(--dock-height) - 12px); overflow: hidden; }
+  .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 4px; z-index: 4; display: flex; flex-direction: row; align-items: stretch; gap: 6px; height: fit-content; max-height: 78px; overflow: hidden; }
   .playing .map-panel .panel-heading { display: none; }
   .playing #minimap { margin-top: 0; width: auto; max-width: 100%; }
-  .playing #town-travel { margin-top: 2px; min-width: 0; }
-  .playing #destination { padding: 2px 4px; font-size: 8px; margin: 0; }
-  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; z-index: 6; }
+  .playing #town-travel { margin: 0; min-width: 0; flex: 1; display: flex; align-items: stretch; }
+  .playing #destination { padding: 4px 6px; font-size: 9px; margin: 0; width: 100%; }
+  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; }
   .playing .hero-heading { margin-bottom: 5px; }
   .playing .hero-heading h2 { font-size: 13px; }
@@ -156,12 +156,12 @@
   .playing .camera-tools { top: 60px; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --map-width: min(118px, 22vw); }
-  .playing .map-panel { top: 44px; padding: 3px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 12px); overflow: hidden; }
+  .playing { --map-width: min(248px, 46vw); }
+  .playing .map-panel { top: 46px; padding: 4px; z-index: 4; max-height: 78px; overflow: hidden; }
   .playing #minimap { margin-top: 0; width: auto; max-width: 100%; }
-  .playing #town-travel { margin-top: 2px; min-width: 0; }
-  .playing #destination { font-size: 8px; padding: 2px 4px; }
+  .playing #town-travel { margin: 0; min-width: 0; }
+  .playing #destination { font-size: 9px; padding: 4px 6px; }
   .playing .camera-tools { top: 46px; z-index: 5; }
   .playing #inventory-panel { display: none !important; }
-  .playing #effects-panel { top: 90px; }
+  .playing #effects-panel { top: 128px; }
 }
