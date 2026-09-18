@@ -277,6 +277,9 @@ test("compact portrait and landscape keep essential HUD and controls reachable",
       clipped,
       `${width} × ${height}: no covered or clipped controls`,
     ).toEqual([]);
+    await expect(page.locator("#attributes")).toHaveText(
+      /STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/,
+    );
     const moves = await page.evaluate(() => player.MOVESMADE);
     await page
       .getByRole("button", { name: "Wait one turn", exact: true })

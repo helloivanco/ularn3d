@@ -34,6 +34,7 @@ let character = "Adventurer",
   lastHP = null,
   graphicsLost = false;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
 function toast(message) {
   $("toast").textContent = message;
   $("toast").hidden = false;
@@ -212,9 +213,10 @@ function update() {
   $("gold").textContent = state.gold.toLocaleString();
   $("armor").textContent = state.ac;
   $("weapon").textContent = state.wc;
-  $("attributes").innerHTML = Object.entries(state.stats)
-    .map(([k, v]) => `<span>${k}<b>${v}</b></span>`)
-    .join("");
+  const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
+  $("attributes").innerHTML = HUD_STATS.map(
+    (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
+  ).join("");
   updateInventoryAndEffects();
   const location =
     state.level === 0

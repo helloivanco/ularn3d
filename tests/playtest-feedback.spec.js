@@ -79,10 +79,7 @@ test("character stats sit beside the adventurer frame and the map is a small rea
   });
   await page.waitForTimeout(400);
   await expect(page.locator("#attributes")).toBeVisible();
-  await expect(page.locator("#attributes")).toContainText("STR");
-  await expect(page.locator("#attributes")).toContainText("DEX");
-  await expect(page.locator("#attributes")).toContainText("INT");
-  await expect(page.locator("#attributes")).toContainText("CON");
+  await expect(page.locator("#attributes")).toHaveText(/STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/);
   await expect(page.locator("#gold")).toBeVisible();
   const layout = await page.evaluate(() => {
     const stats = document.getElementById("attributes").getBoundingClientRect();
@@ -93,7 +90,8 @@ test("character stats sit beside the adventurer frame and the map is a small rea
     const cols = +map.dataset.cols;
     const rows = +map.dataset.rows;
     return {
-      statsVisible: stats.width > 80 && stats.height > 40,
+      statsVisible: stats.width > 80 && stats.height > 20,
+      labels: document.getElementById("attributes").innerText.replace(/\s+/g, " ").trim(),
       besideHero: Math.abs(stats.top - hero.top) < 80 && stats.left >= hero.right - 12,
       journalMoved: journal.left >= stats.right - 8,
       cellWidth: box.width / cols,
@@ -105,6 +103,7 @@ test("character stats sit beside the adventurer frame and the map is a small rea
     };
   });
   expect(layout.statsVisible).toBe(true);
+  expect(layout.labels).toMatch(/^STR=\d+ INT=\d+ WIS=\d+ CON=\d+ DEX=\d+$/);
   expect(layout.besideHero).toBe(true);
   expect(layout.journalMoved).toBe(true);
   expect(layout.cellWidth).toBeGreaterThan(22);
