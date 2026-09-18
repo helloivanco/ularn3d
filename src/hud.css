@@ -71,9 +71,9 @@
   .playing .dpad { grid-template-columns: repeat(3,32px); }
 }
 @media (max-width: 700px) {
-  .playing { --dock-height: 268px; --map-width: min(198px, calc(100vw - 24px)); }
+  .playing { --dock-height: 268px; --map-width: min(160px, calc(100vw - 108px)); }
   .playing .topbar { padding: 0 12px; }
-  .playing .map-panel { left: 12px; top: 60px; padding: 8px; z-index: 4; }
+  .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 72px); overflow: auto; }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 62px 36px 36px 88px; gap: 8px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; border: none; padding: 0; }
   .playing .hero-heading { margin-bottom: 7px; }
@@ -95,10 +95,10 @@
   .playing .actionbar { grid-column: 1 / 3; grid-row: 4; grid-template-columns: repeat(5,minmax(0,1fr)); grid-template-rows: 42px 42px; }
   .playing .actionbar button { height: 42px; }
   .playing .actionbar button > [data-icon] { font-size: 15px; margin-bottom: 3px; }
-  .playing .run-clock { bottom: auto; top: 115px; right: 11px; width: 102px; font-size: 7px; }
+  .playing .run-clock { bottom: auto; top: 115px; right: 11px; width: 102px; font-size: 7px; z-index: 5; }
   .playing .run-clock strong { font-size: 9px; }
-  .playing .camera-tools { top: calc(var(--map-bottom, 200px) + 12px); right: 12px; }
-  .playing .camera-tools button { width: 26px; height: 28px; }
+  .playing .camera-tools { top: 60px; right: 8px; left: auto; flex-direction: column; z-index: 5; }
+  .playing .camera-tools button { width: 26px; height: 28px; border-right: 1px solid var(--border); }
   #inventory-panel { left: 12px; top: calc(var(--map-bottom, 200px) + 20px); bottom: calc(var(--dock-height) + 22px); width: calc(100vw - 170px); min-width: 165px; padding: 9px; z-index: 1; }
   #inventory-list { font-size: 10px; }
   .inventory-item { padding: 6px 0; }
@@ -109,13 +109,14 @@
   .playing #interaction:not(.in-modal) { left: 12px; right: 12px; bottom: calc(var(--dock-height) + 18px); max-height: 40dvh; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --dock-height: 142px; --map-width: min(240px, 32vw); }
+  .playing { --dock-height: 142px; --map-width: min(118px, 22vw); }
   .playing .topbar { height: 42px; }
-  .playing .map-panel { top: 50px; left: 12px; padding: 6px; }
-  .playing #minimap { margin-top: 4px; }
-  .playing #town-travel { margin-top: 4px; }
-  .playing #destination { padding: 3px; font-size: 9px; }
-  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; }
+  .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 3px; z-index: 4; height: fit-content; max-height: calc(100dvh - var(--dock-height) - 12px); overflow: hidden; }
+  .playing .map-panel .panel-heading { display: none; }
+  .playing #minimap { margin-top: 0; width: auto; max-width: 100%; }
+  .playing #town-travel { margin-top: 2px; min-width: 0; }
+  .playing #destination { padding: 2px 4px; font-size: 8px; margin: 0; }
+  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; z-index: 6; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; }
   .playing .hero-heading { margin-bottom: 5px; }
   .playing .hero-heading h2 { font-size: 13px; }
@@ -134,9 +135,9 @@
   .playing .dpad button { height: 26px; }
   .playing .movement > span { font-size: 6px; }
   .playing .run-clock { top: auto; bottom: 10px; right: 9px; width: 96px; }
-  .playing .camera-tools { top: 50px; right: 12px; }
+  .playing .camera-tools { top: 46px; right: 8px; flex-direction: row; z-index: 5; }
   #effects-panel { top: 90px; right: 12px; width: 130px; max-height: calc(100dvh - 248px); }
-  #inventory-panel { top: 50px; left: 12px; bottom: calc(var(--dock-height) + 20px); width: 230px; z-index: 2; }
+  .playing #inventory-panel { display: none !important; }
   .playing .modal-backdrop { inset: 42px 0 0; }
 }
 /* Anchor the floating panels to the map's measured height (town adds a selector). */
@@ -152,16 +153,15 @@
 }
 @media (max-width: 700px) {
   .playing #inventory-panel { width: calc(100vw - 164px); min-width: 0; }
-  .playing .camera-tools { top: calc(var(--map-bottom, 200px) + 12px); }
+  .playing .camera-tools { top: 60px; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --map-width: min(200px, 26vw); }
-  .playing .map-panel { top: 48px; padding: 4px; z-index: 4; }
-  .playing #minimap { margin-top: 3px; }
-  .playing #town-travel { margin-top: 3px; }
-  .playing #destination { font-size: 8px; padding: 2px; }
-  .playing .camera-tools { top: 50px; }
-  .playing #inventory-panel { top: 91px; left: auto; right: 12px; width: calc(100vw - var(--map-width) - 40px); max-height: calc(100dvh - var(--dock-height) - 119px); padding: 7px; z-index: 1; }
-  .playing .inventory-help { display: none; }
+  .playing { --map-width: min(118px, 22vw); }
+  .playing .map-panel { top: 44px; padding: 3px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 12px); overflow: hidden; }
+  .playing #minimap { margin-top: 0; width: auto; max-width: 100%; }
+  .playing #town-travel { margin-top: 2px; min-width: 0; }
+  .playing #destination { font-size: 8px; padding: 2px 4px; }
+  .playing .camera-tools { top: 46px; z-index: 5; }
+  .playing #inventory-panel { display: none !important; }
   .playing #effects-panel { top: 90px; }
 }

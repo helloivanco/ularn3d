@@ -88,7 +88,7 @@ test("travel avoids known traps and stops for confusion", async ({ page }) => {
     paint();
     return player.MOVESMADE;
   });
-  await mapClick(page, 15, 8);
+  await mapClick(page, 16, 8);
   await expect(page.locator("#toast")).toContainText("confused");
   expect((await snap(page)).moves).toBe(moves);
 });

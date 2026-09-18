@@ -275,13 +275,17 @@ function update() {
   drawMap();
 }
 window.addEventListener("ularn:update", update);
+window.addEventListener("resize", () => {
+  if (state) drawMap();
+});
 function drawMap() {
   const canvas = $("minimap"),
     ctx = canvas.getContext("2d");
-  const compact = innerWidth <= 700 || innerHeight <= 600;
-  const cols = Math.min(state.width, compact ? 9 : 12);
-  const rows = Math.min(state.height, compact ? 9 : 12);
-  const cell = compact ? 22 : 28;
+  const short = innerHeight <= 500 && innerWidth > innerHeight;
+  const compact = innerWidth <= 700 || short;
+  const cols = Math.min(state.width, short ? 6 : compact ? 8 : 12);
+  const rows = Math.min(state.height, short ? 4 : compact ? 8 : 12);
+  const cell = short ? 16 : compact ? 18 : 28;
   const nextWidth = cols * cell;
   const nextHeight = rows * cell;
   if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
