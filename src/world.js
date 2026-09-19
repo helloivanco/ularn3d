@@ -393,6 +393,7 @@ export class World {
       if (!this.animating) this.invalidate();
     });
     this.controls.addEventListener("start", () => this.invalidate());
+    this.controls.addEventListener("end", () => this.captureCamera());
     this.setQuality(this.quality, false);
     this.preview();
     this.invalidate();
@@ -621,7 +622,7 @@ export class World {
     if (!points.length) return paths;
     const center = {
       x: Math.round(points.reduce((a, p) => a + p.x, 0) / points.length),
-      y: 8,
+      y: Math.round(points.reduce((a, p) => a + p.y, 0) / points.length),
     };
     for (const p of points) {
       let x = p.x,
@@ -638,15 +639,31 @@ export class World {
     }
     return paths;
   }
+  captureCamera() {
+    this.heldCameraOffset = this.camera.position.clone().sub(this.controls.target);
+    return this.heldCameraOffset;
+  }
+  applyHeldCamera(target) {
+    const offset =
+      this.heldCameraOffset && this.heldCameraOffset.lengthSq() > 1
+        ? this.heldCameraOffset.clone()
+        : GAME_CAMERA.clone();
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
+    this.controls.update();
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).add(offset);
+    this.controls.update();
+    this.controls.enableDamping = damping;
+    this.heldCameraOffset = offset;
+  }
   update(state) {
     const old = this.state;
+    if (old && this.level != null) this.captureCamera();
     this.state = state;
     this.controls.autoRotate = false;
     const isNew = this.level !== state.level;
     if (isNew) {
-      if (old) {
-        this.heldCameraOffset = this.camera.position.clone().sub(this.controls.target);
-      }
       destroy(this.terrain);
       destroy(this.props);
       this.objects.clear();
@@ -849,13 +866,7 @@ export class World {
     const target = new THREE.Vector3(state.x, 0, state.y);
     if (!this.lastPlayer) {
       this.player.position.copy(target);
-      this.controls.target.copy(target);
-      const offset =
-        this.heldCameraOffset && this.heldCameraOffset.lengthSq() > 1
-          ? this.heldCameraOffset
-          : GAME_CAMERA;
-      this.camera.position.copy(target).add(offset);
-      this.controls.update();
+      this.applyHeldCamera(target);
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
       this.player.rotation.y =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
@@ -989,6 +1000,7 @@ export class World {
     offset.applyAxisAngle(UP, (direction * Math.PI) / 4);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
+    this.captureCamera();
     this.updateWalls();
     this.invalidate();
   }
@@ -997,16 +1009,16 @@ export class World {
     offset.multiplyScalar(factor).clampLength(5, 46);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
+    this.captureCamera();
     this.invalidate();
   }
   reset() {
     if (this.state) {
+      this.heldCameraOffset = GAME_CAMERA.clone();
       this.controls.target.set(this.state.x, 0, this.state.y);
       this.camera.position
         .copy(this.controls.target)
-        .add(
-          GAME_CAMERA,
-        );
+        .add(GAME_CAMERA);
       this.controls.update();
       this.updateWalls();
       this.invalidate();

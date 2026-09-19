@@ -34,6 +34,7 @@ let character = "Adventurer",
   lastHP = null,
   graphicsLost = false;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
 function toast(message) {
   $("toast").textContent = message;
   $("toast").hidden = false;
@@ -66,7 +67,11 @@ function toggleInventoryPin() {
 function toggleAutoLoot() {
   if (!state) return;
   engine.setAutoLoot(!state.autoLoot);
-  toast(`Auto-loot ${state.autoLoot ? "enabled" : "disabled"}.`);
+  toast(
+    state.autoLoot
+      ? "Auto-loot enabled."
+      : "Auto-loot disabled. Gold is still collected.",
+  );
 }
 $("inventory-pin").addEventListener("click", toggleInventoryPin);
 $("auto-loot").addEventListener("click", toggleAutoLoot);
@@ -208,9 +213,9 @@ function update() {
   $("gold").textContent = state.gold.toLocaleString();
   $("armor").textContent = state.ac;
   $("weapon").textContent = state.wc;
-  $("attributes").innerHTML = Object.entries(state.stats)
-    .map(([k, v]) => `<span>${k}<b>${v}</b></span>`)
-    .join("");
+  $("attributes").innerHTML = HUD_STATS.map(
+    (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
+  ).join(" ");
   updateInventoryAndEffects();
   const location =
     state.level === 0
@@ -271,41 +276,76 @@ function update() {
   drawMap();
 }
 window.addEventListener("ularn:update", update);
+window.addEventListener("resize", () => {
+  if (state) drawMap();
+  const panel = document.querySelector(".map-panel");
+  if (panel) {
+    document.body.style.setProperty(
+      "--map-bottom",
+      `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
+    );
+  }
+});
 function drawMap() {
   const canvas = $("minimap"),
     ctx = canvas.getContext("2d");
-  const cell = 20;
-  const nextWidth = Math.max(1, state.width) * cell;
-  const nextHeight = Math.max(1, state.height) * cell;
+  const short = innerHeight <= 500 && innerWidth > innerHeight;
+  const compact = innerWidth <= 700 || short;
+  const cols = Math.min(state.width, short ? 6 : compact ? 8 : 12);
+  const rows = Math.min(state.height, short ? 4 : compact ? 8 : 12);
+  const cell = short ? 16 : compact ? 18 : 28;
+  const nextWidth = cols * cell;
+  const nextHeight = rows * cell;
   if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
     canvas.width = nextWidth;
     canvas.height = nextHeight;
   }
-  const sx = canvas.width / state.width,
-    sy = canvas.height / state.height;
+  const x0 = Math.max(0, Math.min(state.width - cols, state.x - Math.floor(cols / 2)));
+  const y0 = Math.max(0, Math.min(state.height - rows, state.y - Math.floor(rows / 2)));
+  canvas.dataset.x0 = String(x0);
+  canvas.dataset.y0 = String(y0);
+  canvas.dataset.cols = String(cols);
+  canvas.dataset.rows = String(rows);
   ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = "#0a171c";
+  ctx.fillStyle = "#071114";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `bold ${Math.floor(Math.min(sx, sy) * 0.78)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
+  ctx.font = `bold ${Math.floor(cell * 0.82)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  for (const t of state.tiles) {
-    const cx = (t.x + 0.5) * sx, cy = (t.y + 0.5) * sy;
-    ctx.fillStyle = t.wall ? "#344746" : "#13292b";
-    ctx.fillRect(t.x * sx, t.y * sy, sx, sy);
-    ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#ddc69a";
-    const symbol = t.monster?.symbol || ({ 5: "<", 13: ">" })[t.id] || t.symbol || (t.wall ? "#" : t.id ? "?" : ".");
-    if (!t.wall && (t.monster || t.id > 0) && symbol !== "." && symbol !== " ") ctx.fillText(symbol, cx, cy);
-    else if (!t.wall) {
-      ctx.fillStyle = "#425d57";
-      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+  const known = new Map(state.tiles.map((t) => [`${t.x},${t.y}`, t]));
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = x0 + col,
+        y = y0 + row;
+      const t = known.get(`${x},${y}`);
+      const px = col * cell,
+        py = row * cell;
+      ctx.fillStyle = t ? (t.wall ? "#3a4d4a" : "#173236") : "#0a1214";
+      ctx.fillRect(px, py, cell, cell);
+      if (!t || t.wall) continue;
+      const cx = px + cell / 2,
+        cy = py + cell / 2;
+      if (x === state.x && y === state.y) continue;
+      const symbol =
+        t.monster?.symbol ||
+        ({ 5: "<", 13: ">" })[t.id] ||
+        t.symbol ||
+        (t.id ? "?" : ".");
+      if ((t.monster || t.id > 0) && symbol !== "." && symbol !== " ") {
+        ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
+        ctx.fillText(symbol, cx, cy);
+      } else {
+        ctx.fillStyle = "#6d8a82";
+        ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+      }
     }
   }
+  const px = (state.x - x0) * cell,
+    py = (state.y - y0) * cell;
   ctx.fillStyle = "#f8dea0";
-  ctx.fillRect(state.x * sx, state.y * sy, sx, sy);
+  ctx.fillRect(px, py, cell, cell);
   ctx.fillStyle = "#132325";
-  ctx.fillText("@", (state.x + 0.5) * sx, (state.y + 0.5) * sy);
-
+  ctx.fillText("@", px + cell / 2, py + cell / 2);
 }
 function stopTravel() {
   engine.interruptTravel();
@@ -500,10 +540,15 @@ function travel(tile) {
 }
 $("minimap").addEventListener("click", (event) => {
   if (!state) return;
-  const r = event.currentTarget.getBoundingClientRect(),
-    x = Math.floor(((event.clientX - r.left) / r.width) * state.width),
-    y = Math.floor(((event.clientY - r.top) / r.height) * state.height);
-  const t = state.tiles.find((t) => t.x === x && t.y === y);
+  const canvas = event.currentTarget;
+  const r = canvas.getBoundingClientRect(),
+    cols = Number(canvas.dataset.cols) || state.width,
+    rows = Number(canvas.dataset.rows) || state.height,
+    x0 = Number(canvas.dataset.x0) || 0,
+    y0 = Number(canvas.dataset.y0) || 0,
+    x = x0 + Math.floor(((event.clientX - r.left) / r.width) * cols),
+    y = y0 + Math.floor(((event.clientY - r.top) / r.height) * rows);
+  const t = state.tiles.find((tile) => tile.x === x && tile.y === y);
   if (t) travel(t);
 });
 $("sound").addEventListener("click", () => {

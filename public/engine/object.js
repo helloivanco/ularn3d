@@ -719,7 +719,7 @@ function lookforobject(do_ident, do_pickup) {
     return;
   }
   else if (item.matches(OGOLDPILE)) {
-    // Gold is always auto-looted. Other items still honor do_pickup / auto-loot.
+    // Gold is always collected. Auto-loot only applies to other items.
     if (ULARN) {
       updateLog(`${youFound} ${Number(item.arg).toLocaleString()} gold pieces${period}`)
     }
@@ -735,6 +735,8 @@ function lookforobject(do_ident, do_pickup) {
   else if (item.matches(OALTAR)) {
     if (nearbymonst()) return;
     if (do_ident) updateLog(`There is a Holy Altar here!`, formatHint('p', 'to pray', 'A', 'to desecrate'));
+    // Standing on or walking over a shrine never summons its guardian.
+    return;
   }
   //
   else if (item.matches(OTHRONE)) {

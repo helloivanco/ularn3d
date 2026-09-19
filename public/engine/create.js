@@ -240,38 +240,28 @@ function makemaze(k) {
 
   if (k == 1) setItem(Math.floor(MAXX / 2), MAXY - 1, OHOMEENTRANCE);
 
-  /*  now for open spaces */
+  /* Compact square rooms instead of the classic wide, short slabs. */
   let tmp2 = rnd(3) + 3;
-  let mx, mxl, mxh, my, myl, myh;
-  let mon = null;
   for (let tmp = 0; tmp < tmp2; tmp++) {
-    my = rnd(MAXY - 6) + 2;
-    myl = my - rnd(2);
-    myh = my + rnd(2);
-
-    if (k < MAXLEVEL) {
-      mx = rnd(Math.max(8, MAXX - 23)) + 5;
-      mxl = mx - rnd(4);
-      mxh = mx + rnd(Math.min(12, MAXX - 8)) + 3;
-      mon = null;
-    } else {
-      mx = rnd(Math.max(6, MAXX - 6)) + 3;
-      mxl = mx - rnd(2);
-      mxh = mx + rnd(2);
-      mon = makemonst(k);
-    }
-
-    for (let i = mxl; i < mxh; i++)
-      for (let j = myl; j < myh; j++) {
+    const span = rnd(4) + 3;
+    const mx = rnd(Math.max(4, MAXX - span - 3)) + 2;
+    const my = rnd(Math.max(4, MAXY - span - 3)) + 2;
+    const mon = k >= MAXLEVEL ? makemonst(k) : null;
+    for (let i = mx; i < mx + span && i < MAXX - 1; i++)
+      for (let j = my; j < my + span && j < MAXY - 1; j++) {
         setItem(i, j, OEMPTY);
         setMonster(i, j, mon);
       }
   }
-  /*  now for open spaces */
 
-  my = rnd(MAXY - 2);
-  for (let i = 1; i < MAXX - 1; i++)
-    setItem(i, my, OEMPTY);
+  /* Crossing corridors of limited length — not a full-width trench. */
+  const cx = rnd(MAXX - 6) + 3;
+  const cy = rnd(MAXY - 6) + 3;
+  const run = Math.min(12, Math.floor(Math.min(MAXX, MAXY) / 2));
+  for (let i = Math.max(1, cx - run); i < Math.min(MAXX - 1, cx + run); i++)
+    setItem(i, cy, OEMPTY);
+  for (let j = Math.max(1, cy - run); j < Math.min(MAXY - 1, cy + run); j++)
+    setItem(cx, j, OEMPTY);
 
   if (k > (ULARN ? 4 : 1)) {
     treasureroom(k);
@@ -354,11 +344,11 @@ function eat(xx, yy) {
  *  function to make a treasure room on a level
  */
 function treasureroom(lv) {
-  for (let tx = 1 + rnd(10); tx < MAXX - 10; tx += 10) {
+  for (let tx = 1 + rnd(8); tx < MAXX - 10; tx += 9) {
     if (rnd((ULARN ? 13 : 10)) == 2) {
-      let xsize = rnd(6) + 3;
-      let ysize = rnd(3) + 3;
-      let ty = rnd(MAXY - 9) + 1; /* upper left corner of room */
+      let xsize = rnd(5) + 4;
+      let ysize = rnd(5) + 4;
+      let ty = rnd(Math.max(4, MAXY - ysize - 2)) + 1; /* upper left corner of room */
       troom(lv, xsize, ysize, tx, ty, rnd(9));
     }
   }

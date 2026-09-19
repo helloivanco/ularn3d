@@ -13,8 +13,8 @@ var VBOTTOM;   // ULARN
 const LOG_SIZE = 5;       /* number of log lines to show */
 const LOG_SAVE_SIZE = 20; /* number of log lines to save */
 const MAXINVEN = 26;      /* max number of items a player can carry */
-const MAXX = 38;          /* maze width — near-square, same ~1140-tile area as classic 67×17 */
-const MAXY = 30;          /* maze height */
+const MAXX = 34;          /* square maze width — same ~1140-tile area as classic 67×17 */
+const MAXY = 34;          /* square maze height */
 const TOWN_SIZE = 18;     /* compact square town inside the dungeon grid */
 const TAXRATE = 1 / 20;   /* amount of taxes owed after winning */
 const MAXPLEVEL = 100;    /* maximum player level allowed  */

@@ -23,10 +23,15 @@ async function snap(page) {
 }
 async function mapClick(page, x, y) {
   const b = await page.locator("#minimap").boundingBox();
-  const size = await page.evaluate(() => ({ w: MAXX, h: MAXY }));
+  const view = await page.locator("#minimap").evaluate((el) => ({
+    x0: +el.dataset.x0,
+    y0: +el.dataset.y0,
+    cols: +el.dataset.cols,
+    rows: +el.dataset.rows,
+  }));
   await page.mouse.click(
-    b.x + ((x + 0.5) / size.w) * b.width,
-    b.y + ((y + 0.5) / size.h) * b.height,
+    b.x + ((x - view.x0 + 0.5) / view.cols) * b.width,
+    b.y + ((y - view.y0 + 0.5) / view.rows) * b.height,
   );
 }
 
@@ -53,7 +58,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
     };
     return player.MOVESMADE;
   });
-  await mapClick(page, 16, 8);
+  await mapClick(page, 14, 8);
   await expect(page.locator("#toast")).toContainText("hurt");
   await page.waitForTimeout(600);
   expect((await snap(page)).moves).toBe(moves + 1);
@@ -83,7 +88,7 @@ test("travel avoids known traps and stops for confusion", async ({ page }) => {
     paint();
     return player.MOVESMADE;
   });
-  await mapClick(page, 18, 8);
+  await mapClick(page, 16, 8);
   await expect(page.locator("#toast")).toContainText("confused");
   expect((await snap(page)).moves).toBe(moves);
 });
@@ -330,7 +335,7 @@ test("travel also stops for damage after regeneration raises health", async ({
     };
     return player.MOVESMADE;
   });
-  await mapClick(page, 18, 8);
+  await mapClick(page, 15, 8);
   await expect(page.locator("#toast")).toContainText("hurt");
   await page.waitForTimeout(400);
   expect((await snap(page)).moves).toBe(initial + 2);
