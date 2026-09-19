@@ -49,6 +49,7 @@
       "isAccessibleForFree": true,
       "inLanguage": "en",
       "downloadUrl": "https://ularn-3d.vercel.app/downloads/Ularn.windows.exe",
+      "softwareVersion": "__APP_VERSION__",
       "screenshot": "https://ularn-3d.vercel.app/social/ularn.png",
       "image": "https://ularn-3d.vercel.app/social/ularn.png",
       "offers": {
@@ -143,14 +144,15 @@
           <p id="start-error" role="alert"></p>
         </form>
         <div class="play-options web-only">
-          <a id="download-windows" class="windows-download" href="/downloads/Ularn.windows.exe" download="Ularn.windows.exe">
-            <span data-icon="take" aria-hidden="true"></span><span>Download for Windows <small>Free · 64-bit · Offline .exe</small></span><span aria-hidden="true">↗</span>
+          <a id="download-windows" class="windows-download" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__" aria-label="Download Ularn for Windows, version __APP_VERSION__">
+            <span data-icon="take" aria-hidden="true"></span><span>Download for Windows <small>v__APP_VERSION__ · Free · 64-bit · Offline .exe</small></span><span aria-hidden="true">↗</span>
           </a>
           <div class="site-links"><a id="about-game" href="/about/">About &amp; controls</a><a href="/downloads/SHA256SUMS.txt">Verify download</a></div>
         </div>
         <div class="welcome-note">
           <span data-icon="hourglass"></span> Time moves only when you do.
         </div>
+        <p class="site-version" aria-label="Ularn version">v__APP_VERSION__</p>
       </section>
       <div class="scene-caption" id="scene-caption">
         <span>01 / THE SURFACE</span>

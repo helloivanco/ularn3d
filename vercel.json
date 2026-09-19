@@ -52,7 +52,7 @@
         },
         {
           "key": "Content-Disposition",
-          "value": "attachment; filename=\"Ularn.windows.exe\""
+          "value": "attachment; filename=\"Ularn-1.0.0.windows.exe\""
         }
       ]
     }

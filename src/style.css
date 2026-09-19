@@ -307,6 +307,12 @@ select {
   color: #8caaa2;
   letter-spacing: 0.5px;
 }
+.site-version {
+  margin: 12px 0 0;
+  color: #7a8f82;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
 .welcome-note span {
   color: var(--gold);
   margin-right: 8px;
