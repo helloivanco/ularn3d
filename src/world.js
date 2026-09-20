@@ -488,7 +488,7 @@ export class World {
     const idle = performance.now() > this.activeUntil;
     if (idle && this.state && this.quality === "balanced" && !this.hasMotion && !this.cameraLive)
       return 0;
-    if (this.cameraLive || this.hasMotion || (this.state && !idle)) return 60;
+    if (this.state && (this.cameraLive || this.hasMotion || !idle)) return 60;
     return 12;
   }
   stopFrames() {
@@ -502,7 +502,7 @@ export class World {
     const effectsActive = this.effects.slots.some((slot) => slot.active);
     if (idle && !this.hasMotion && !this.cameraLive && !effectsActive &&
       (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
-    const live = !this.paused && (this.cameraLive || this.hasMotion || effectsActive || !idle);
+    const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || effectsActive || !idle);
     const fps = this.frameLimit() || 12;
     const delay = live ? 0 : Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
     const kick = () => {

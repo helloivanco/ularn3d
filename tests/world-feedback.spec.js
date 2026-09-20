@@ -265,7 +265,8 @@ test("idle and hidden rendering stops and gameplay wakes it without accumulating
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(hidden);
   await page.evaluate(() => { setMonster(13, 8, createMonster(GNOME)); paint(); });
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().monsterTextures)).toBeGreaterThan(0);
-  await page.waitForTimeout(200);
+  const spawned = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(spawned);
   const before = await page.evaluate(() => ularnGraphics.metrics());
   await page.evaluate(() => {
     for (let i = 0; i < 80; i++) {
