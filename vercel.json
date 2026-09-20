@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "alias": ["ularn-3d.vercel.app"],
   "headers": [
     {
       "source": "/(.*)",
