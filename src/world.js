@@ -142,7 +142,9 @@ export class World {
     this.camera.position.set(13, 17, 19);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: "low-power",
+      powerPreference: "high-performance",
+      stencil: false,
+      failIfMajorPerformanceCaveat: false,
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.info.autoReset = false;
@@ -313,11 +315,18 @@ export class World {
     this.scratchPosition = new THREE.Vector3();
     this.scratchColor = new THREE.Color();
     this.scratchOffset = new THREE.Vector3();
+    this.scratchCam = new THREE.Vector3();
+    this.lastCamQuat = new THREE.Quaternion();
+    this.lastCamQuatValid = false;
     this.identityQ = new THREE.Quaternion();
     this.heldCameraOffset = null;
+    this.pickHits = [];
+    this.cameraLive = false;
+    this.lampPool = [];
     const canvas = this.renderer.domElement;
     const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
     listen(canvas, "pointerdown", (e) => {
+      this.cameraLive = true;
       this.invalidate();
       this.pointers.set(e.pointerId, {
         x: e.clientX,
@@ -331,6 +340,7 @@ export class World {
       this.invalidate();
       const p = this.pointers.get(e.pointerId);
       if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.moved = true;
+      if (p?.moved || this.gesture || this.pointers.size > 1) return;
       const tile = this.pick(e);
       this.marker.visible = !!tile;
       if (tile) this.marker.position.set(tile.x, 0, tile.y);
@@ -392,8 +402,14 @@ export class World {
     this.controls.addEventListener("change", () => {
       if (!this.animating) this.invalidate();
     });
-    this.controls.addEventListener("start", () => this.invalidate());
-    this.controls.addEventListener("end", () => this.captureCamera());
+    this.controls.addEventListener("start", () => {
+      this.cameraLive = true;
+      this.invalidate();
+    });
+    this.controls.addEventListener("end", () => {
+      this.cameraLive = false;
+      this.captureCamera();
+    });
     this.setQuality(this.quality, false);
     this.preview();
     this.invalidate();
@@ -408,7 +424,7 @@ export class World {
         contextLost: this.lost,
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
-        frameLimit: this.quality === "cinematic" ? 45 : 30,
+        frameLimit: this.frameLimit(),
         idle: performance.now() > this.activeUntil,
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
@@ -429,14 +445,25 @@ export class World {
         mirrored: mesh.userData.artwork?.scale.x < 0,
       })),
       props: () => [...this.objects.values()].flatMap(({ mesh }) => {
-        const art = mesh.children.find((child) => child.userData.itemArt);
+        const art = mesh.userData.itemArt;
         if (!art) return [];
+        const map = art.userData.artwork?.material?.map;
+        const image = map?.image;
+        let cornerAlpha = null;
+        if (image?.getContext) {
+          const ctx = image.getContext("2d");
+          const a = ctx.getImageData(0, 0, 1, 1).data[3];
+          const b = ctx.getImageData(image.width - 1, 0, 1, 1).data[3];
+          cornerAlpha = Math.max(a, b);
+        }
         return [{
           tile: { ...mesh.userData.tile },
           id: mesh.userData.itemId,
           arg: mesh.userData.itemArg ?? 0,
           art: art.userData.artPath,
           mirrored: art.userData.artwork?.scale.x < 0,
+          stripped: !!map?.userData.stripped,
+          cornerAlpha,
         }];
       }),
       landmarks: () => [...this.objects.values()].flatMap(({ mesh }) => [mesh, ...mesh.children]
@@ -456,6 +483,14 @@ export class World {
     this.activeUntil = performance.now() + 1100;
     this.scheduleFrame();
   }
+  frameLimit() {
+    if (this.paused) return 4;
+    const idle = performance.now() > this.activeUntil;
+    if (idle && this.state && this.quality === "balanced" && !this.hasMotion && !this.cameraLive)
+      return 0;
+    if (this.cameraLive || this.hasMotion || (this.state && !idle)) return 60;
+    return 12;
+  }
   stopFrames() {
     clearTimeout(this.frameTimer);
     cancelAnimationFrame(this.frameRequest);
@@ -464,17 +499,24 @@ export class World {
   scheduleFrame() {
     if (this.disposed || document.hidden || this.lost || this.frameTimer != null || this.frameRequest != null) return;
     const idle = performance.now() > this.activeUntil;
-    if (idle && !this.hasMotion && !this.effects.slots.some((slot) => slot.active) &&
+    const effectsActive = this.effects.slots.some((slot) => slot.active);
+    if (idle && !this.hasMotion && !this.cameraLive && !effectsActive &&
       (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
-    const fps = this.paused ? 4 : !this.state || idle ? 12 : this.quality === "cinematic" ? 45 : 30;
-    const delay = Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
-    this.frameTimer = setTimeout(() => {
-      this.frameTimer = null;
+    const live = !this.paused && (this.cameraLive || this.hasMotion || effectsActive || !idle);
+    const fps = this.frameLimit() || 12;
+    const delay = live ? 0 : Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
+    const kick = () => {
       this.frameRequest = requestAnimationFrame(() => {
         this.frameRequest = null;
         this.animate();
       });
-    }, delay);
+    };
+    if (delay > 0) {
+      this.frameTimer = setTimeout(() => {
+        this.frameTimer = null;
+        kick();
+      }, delay);
+    } else kick();
   }
   setPaused(paused) {
     this.paused = !!paused;
@@ -742,40 +784,59 @@ export class World {
       this.character = state.character;
       this.scene.add(this.player);
     }
-    const ids = new Set(),
-      matrix = new THREE.Matrix4();
+    const ids = new Set();
     let floorIndex = 0,
       grassIndex = 0;
     this.wallCells = [];
-    this.lamps = [];
+    this.lamps.length = 0;
+    let lampIndex = 0;
+    let floorHash = state.tiles.length ^ (state.level * 9973);
+    for (const t of state.tiles) {
+      const grass = state.level === 0 && this.paths && !this.paths.has(`${t.x},${t.y}`);
+      floorHash =
+        (Math.imul(floorHash, 16777619) ^
+          ((t.x + 1) * 73471 + (t.y + 1) * 19349663 + (grass ? 1 : 0))) |
+        0;
+    }
+    const rebuildFloors = isNew || this.floorHash !== floorHash;
+    this.floorHash = floorHash;
+    const matrix = this.scratchMatrix;
+    const takeLamp = (x, y, z) => {
+      const lamp = this.lampPool[lampIndex] || (this.lampPool[lampIndex] = new THREE.Vector3());
+      lampIndex++;
+      lamp.set(x, y, z);
+      this.lamps.push(lamp);
+    };
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
       const sig = `${t.id}:${t.arg ?? 0}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
-      const color = this.scratchColor
-        .set(
-          grass
-            ? 0xa0af80
-            : state.level === 0
-              ? 0xb6b49c
-              : state.level > 15
-                ? 0xc29b81
-                : 0xb1c0ba,
-        )
-        .multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
-      matrix.makeTranslation(t.x, -0.105, t.y);
-      const floor = grass ? this.grassFloor : this.floor,
-        index = grass ? grassIndex++ : floorIndex++;
-      floor.setMatrixAt(index, matrix);
-      floor.setColorAt(index, color);
+      if (rebuildFloors) {
+        const color = this.scratchColor
+          .set(
+            grass
+              ? 0xa0af80
+              : state.level === 0
+                ? 0xb6b49c
+                : state.level > 15
+                  ? 0xc29b81
+                  : 0xb1c0ba,
+          )
+          .multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
+        matrix.makeTranslation(t.x, -0.105, t.y);
+        const floor = grass ? this.grassFloor : this.floor,
+          index = grass ? grassIndex++ : floorIndex++;
+        floor.setMatrixAt(index, matrix);
+        floor.setColorAt(index, color);
+      }
       if (t.wall) this.wallCells.push(t);
       if (t.store && t.id !== 55)
-        this.lamps.push(new THREE.Vector3(t.x - 0.2, 1.25, t.y + 0.75));
-      if (t.id === 55) this.lamps.push(new THREE.Vector3(t.x, 0.5, t.y));
+        takeLamp(t.x - 0.2, 1.25, t.y + 0.75);
+      if (t.id === 55) takeLamp(t.x, 0.5, t.y);
       if (t.wall && noise(t.x, t.y) > 0.87)
-        this.lamps.push(new THREE.Vector3(t.x, 1.45, t.y));
+        takeLamp(t.x, 1.45, t.y);
       if (prev?.sig === sig) continue;
       if (prev) {
         this.props.remove(prev.mesh);
@@ -791,6 +852,7 @@ export class World {
         const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
         g.add(model);
         if (art) {
+          g.userData.itemArt = art;
           g.userData.itemId = t.id;
           g.userData.itemArg = t.arg ?? 0;
           faceItem(art, this.camera);
@@ -846,14 +908,16 @@ export class World {
       destroy(actor.mesh);
       this.monsters.delete(uid);
     }
-    for (const [m, count] of [
-      [this.floor, floorIndex],
-      [this.grassFloor, grassIndex],
-    ]) {
-      m.count = count;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-      m.computeBoundingSphere();
+    if (rebuildFloors) {
+      for (const [m, count] of [
+        [this.floor, floorIndex],
+        [this.grassFloor, grassIndex],
+      ]) {
+        m.count = count;
+        m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        m.computeBoundingSphere();
+      }
     }
     for (const [key, o] of this.objects)
       if (!ids.has(key)) {
@@ -863,7 +927,8 @@ export class World {
       }
     this.walls.count = this.caps.count = this.wallCells.length;
     this.player.visible = true;
-    const target = new THREE.Vector3(state.x, 0, state.y);
+    if (!this.playerTarget) this.playerTarget = new THREE.Vector3();
+    const target = this.playerTarget.set(state.x, 0, state.y);
     if (!this.lastPlayer) {
       this.player.position.copy(target);
       this.applyHeldCamera(target);
@@ -901,7 +966,6 @@ export class World {
       this.burst.position.copy(target);
       this.burst.children.forEach((p) => p.position.set(0, 0.5, 0));
     }
-    this.playerTarget = target;
     this.lastPlayer = { x: state.x, y: state.y };
     this.playerLight.color.set(state.level > 15 ? 0xffa466 : 0xffce89);
     this.sun.position.set(state.x - 12, 24, state.y + 8);
@@ -923,11 +987,12 @@ export class World {
   }
   updateWalls() {
     if (!this.state) return;
-    const toward = this.camera.position
-      .clone()
+    const toward = this.scratchOffset
+      .copy(this.camera.position)
       .sub(this.controls.target)
-      .setY(0)
-      .normalize();
+      .setY(0);
+    if (toward.lengthSq() < 1e-8) return;
+    toward.normalize();
     const viewKey = [
       this.state.x,
       this.state.y,
@@ -974,11 +1039,12 @@ export class World {
       (-e.clientY / innerHeight) * 2 + 1,
     );
     this.ray.setFromCamera(this.mouse, this.camera);
-    const hits = this.ray.intersectObjects(
-      [...this.actors.children, ...this.props.children, this.walls, this.caps],
-      true,
-    );
-    for (const hit of hits) {
+    this.pickHits.length = 0;
+    this.ray.intersectObjects(this.actors.children, true, this.pickHits);
+    this.ray.intersectObjects(this.props.children, true, this.pickHits);
+    this.ray.intersectObject(this.walls, false, this.pickHits);
+    this.ray.intersectObject(this.caps, false, this.pickHits);
+    for (const hit of this.pickHits) {
       if (hit.object.isSprite) continue;
       if (hit.object === this.walls || hit.object === this.caps)
         return this.wallCells[hit.instanceId] || null;
@@ -989,14 +1055,13 @@ export class World {
         return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
       }
     }
-    const p = new THREE.Vector3();
-    if (!this.ray.ray.intersectPlane(this.ground, p)) return null;
-    const x = Math.round(p.x),
-      y = Math.round(p.z);
+    if (!this.ray.ray.intersectPlane(this.ground, this.scratchPosition)) return null;
+    const x = Math.round(this.scratchPosition.x),
+      y = Math.round(this.scratchPosition.z);
     return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
   }
   rotate(direction) {
-    const offset = this.camera.position.clone().sub(this.controls.target);
+    const offset = this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
     offset.applyAxisAngle(UP, (direction * Math.PI) / 4);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
@@ -1005,7 +1070,7 @@ export class World {
     this.invalidate();
   }
   zoom(factor) {
-    const offset = this.camera.position.clone().sub(this.controls.target);
+    const offset = this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
     offset.multiplyScalar(factor).clampLength(5, 46);
     this.camera.position.copy(this.controls.target).add(offset);
     this.controls.update();
@@ -1037,7 +1102,7 @@ export class World {
       (this.frameMs || elapsed * 1000) * 0.94 + elapsed * 1000 * 0.06;
     this.tick += dt;
     this.effects.update(dt);
-    this.waterTime.value = this.reduced ? 0 : this.tick;
+    if (!this.reduced && this.water.visible) this.waterTime.value = this.tick;
     this.animating = true;
     if (this.playerTarget) {
       const remain = this.playerTarget.distanceToSquared(this.controls.target);
@@ -1047,13 +1112,13 @@ export class World {
         this.camera.position.copy(this.playerTarget).add(this.scratchOffset);
         this.player.position.copy(this.playerTarget);
       } else {
-        const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11),
-          d = this.playerTarget
-            .clone()
-            .sub(this.controls.target)
-            .multiplyScalar(alpha);
-        this.controls.target.add(d);
-        this.camera.position.add(d);
+        const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11);
+        this.scratchOffset
+          .copy(this.playerTarget)
+          .sub(this.controls.target)
+          .multiplyScalar(alpha);
+        this.controls.target.add(this.scratchOffset);
+        this.camera.position.add(this.scratchOffset);
         this.player.position.lerp(this.playerTarget, alpha);
       }
       this.playerLight.position
@@ -1115,20 +1180,30 @@ export class World {
       this.shadowTime = this.tick;
     }
     this.renderer.info.reset();
+    this.scratchCam.copy(this.camera.position);
     this.controls.update();
     this.camera.updateMatrixWorld();
-    this.hasMotion = !!this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
+    this.hasMotion =
+      !!this.playerTarget &&
+      this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
+    if (this.camera.position.distanceToSquared(this.scratchCam) > 1e-8) this.hasMotion = true;
+    const camTurned = !this.lastCamQuatValid || !this.lastCamQuat.equals(this.camera.quaternion);
+    if (camTurned) {
+      this.lastCamQuat.copy(this.camera.quaternion);
+      this.lastCamQuatValid = true;
+    }
     for (const { mesh, target } of this.monsters.values()) {
       if (mesh.position.distanceToSquared(target) < 0.0004) mesh.position.copy(target);
       else mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
       if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
-      faceMonster(mesh, null, this.camera);
+      if (camTurned) faceMonster(mesh, null, this.camera);
     }
     for (const { mesh } of this.objects.values()) {
-      const art = mesh.children.find((child) => child.userData.itemArt);
-      if (art) faceItem(art, this.camera);
-      const fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
+      if (camTurned && mesh.userData.itemArt) faceItem(mesh.userData.itemArt, this.camera);
+      const fountain = mesh.userData.fountainMesh
+        || mesh.children.find((child) => child.userData.drainAge !== undefined);
       if (!fountain) continue;
+      mesh.userData.fountainMesh = fountain;
       fountain.userData.drainAge = (now - fountain.userData.drainStartedAt) / 1000;
       const water = fountain.getObjectByName("fountain-water");
       if (water) {
