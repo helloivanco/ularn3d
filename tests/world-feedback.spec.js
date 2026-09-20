@@ -191,6 +191,58 @@ test("weapons armor rings gems and consumable tables use unique art", async ({ p
   await page.screenshot({ path: "test-results/item-art-catalog.png" });
 });
 
+test("floor loot art strips pale card backgrounds without shrinking the sprite plane", async ({ page }) => {
+  await room(page);
+  const isolated = await page.evaluate(async () => {
+    const { stripPaleSpriteBackground } = await import("/src/item-art.js");
+    const data = { data: new Uint8ClampedArray(16), width: 2, height: 2 };
+    for (let i = 0; i < 4; i++) {
+      data.data[i * 4] = 224;
+      data.data[i * 4 + 1] = 224;
+      data.data[i * 4 + 2] = 224;
+      data.data[i * 4 + 3] = i === 3 ? 255 : 180;
+    }
+    data.data[12] = 40;
+    data.data[13] = 90;
+    data.data[14] = 30;
+    data.data[15] = 255;
+    stripPaleSpriteBackground(data);
+    return { pale: data.data[3], item: data.data[15], itemRed: data.data[12] };
+  });
+  expect(isolated.pale).toBe(0);
+  expect(isolated.item).toBe(255);
+  expect(isolated.itemRed).toBe(40);
+  await page.evaluate(() => {
+    setItem(8, 8, OCOOKIE);
+    setItem(9, 8, createObject(OPOTION, 1));
+    setItem(10, 8, OSWORD);
+    paint();
+  });
+  await expect.poll(() => page.evaluate(() =>
+    ularnGraphics.props().filter((p) => p.stripped).length), { timeout: 10000 }).toBe(3);
+  const props = await page.evaluate(() => ularnGraphics.props());
+  for (const prop of props) {
+    expect(prop.cornerAlpha).toBe(0);
+    expect(prop.stripped).toBe(true);
+  }
+  const cookie = props.find((p) => p.id === 83);
+  expect(cookie.tile).toEqual({ x: 8, y: 8 });
+});
+
+test("zoom and walking request display-synced frames then return to idle", async ({ page }) => {
+  await room(page);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);
+  const before = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
+  await page.locator("#zoom-in").click();
+  const zooming = await page.evaluate(() => ularnGraphics.metrics());
+  expect(zooming.idle).toBe(false);
+  expect(zooming.frameLimit).toBe(60);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(before);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().frameLimit)).toBe(60);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);
+});
+
 test("idle and hidden rendering stops and gameplay wakes it without accumulating resources", async ({ page }) => {
   await room(page);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);
@@ -213,7 +265,8 @@ test("idle and hidden rendering stops and gameplay wakes it without accumulating
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(hidden);
   await page.evaluate(() => { setMonster(13, 8, createMonster(GNOME)); paint(); });
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().monsterTextures)).toBeGreaterThan(0);
-  await page.waitForTimeout(200);
+  const spawned = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(spawned);
   const before = await page.evaluate(() => ularnGraphics.metrics());
   await page.evaluate(() => {
     for (let i = 0; i < 80; i++) {

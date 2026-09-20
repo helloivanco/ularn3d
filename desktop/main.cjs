@@ -13,6 +13,11 @@ const profilePath = !app.isPackaged && process.env.ULARN_USER_DATA
 mkdirSync(profilePath, { recursive: true });
 app.setPath("userData", profilePath);
 app.setPath("sessionData", profilePath);
+// Prefer a discrete GPU for the shared Three.js renderer. These flags must be
+// set before ready so the Windows portable build matches browser acceleration.
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+app.commandLine.appendSwitch("enable-zero-copy");
 
 protocol.registerSchemesAsPrivileged([{
   scheme: SCHEME,
@@ -26,7 +31,7 @@ const webPreferences = {
   sandbox: true,
   webSecurity: true,
   allowRunningInsecureContent: false,
-  backgroundThrottling: true,
+  backgroundThrottling: false,
 };
 
 function secureWindow(window) {

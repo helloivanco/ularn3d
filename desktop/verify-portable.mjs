@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import asar from "@electron/asar";
 import { getPath7za } from "app-builder-lib/out/toolsets/7zip.js";
+import { toArchivePath, toPosixPath } from "./asar-path.mjs";
 
 const run = promisify(execFile);
 const executable = path.resolve(process.argv[2] || "release/Ularn.windows.exe");
@@ -63,10 +64,10 @@ try {
     .filter((file) => !file.startsWith(path.join("dist", "downloads") + path.sep))
     .concat(["desktop/main.cjs", "desktop/protocol.cjs"]);
   for (const file of bundledFiles) {
-    assert.equal(asar.extractFile(archives[0], file.replaceAll(path.sep, "/")).equals(await readFile(file)), true,
+    assert.equal(asar.extractFile(archives[0], toArchivePath(file)).equals(await readFile(file)), true,
       `Bundled file differs from current source: ${file}`);
   }
-  assert.equal(asar.listPackage(archives[0]).some((file) => file.startsWith("/dist/downloads/")), false,
+  assert.equal(asar.listPackage(archives[0]).some((file) => toPosixPath(file).includes("/dist/downloads/")), false,
     "Website downloads must not be embedded recursively");
   const checksum = await digest(executable);
   await writeFile(`${executable}.sha256`, `${checksum}  ${path.basename(executable)}\n`);

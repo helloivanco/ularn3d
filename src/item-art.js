@@ -132,11 +132,83 @@ export function itemArtPath(id, arg = 0) {
   return ITEM_ART[id] || null;
 }
 
+// Generated sprites often sit on a pale rounded card. Flood-fill that plate
+// from the edges so the item floats on the dungeon floor without a white halo.
+// Hit testing still uses the original plane, so click targets do not shrink.
+export function stripPaleSpriteBackground(imageData, sat = 30, lumaMin = 168, alphaCut = 10) {
+  const { data, width: w, height: h } = imageData;
+  const n = w * h;
+  const mark = new Uint8Array(n);
+  const stack = [];
+  const isPale = (i) => {
+    const o = i * 4;
+    const r = data[o],
+      g = data[o + 1],
+      b = data[o + 2],
+      a = data[o + 3];
+    if (a < alphaCut) return true;
+    const max = r > g ? (r > b ? r : b) : g > b ? g : b;
+    const min = r < g ? (r < b ? r : b) : g < b ? g : b;
+    return max - min <= sat && (r + g + b) / 3 >= lumaMin;
+  };
+  const push = (i) => {
+    if (i < 0 || i >= n || mark[i] || !isPale(i)) return;
+    mark[i] = 1;
+    stack.push(i);
+  };
+  for (let x = 0; x < w; x++) {
+    push(x);
+    push((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    push(y * w);
+    push(y * w + w - 1);
+  }
+  while (stack.length) {
+    const i = stack.pop();
+    const x = i % w,
+      y = (i / w) | 0;
+    if (x > 0) push(i - 1);
+    if (x + 1 < w) push(i + 1);
+    if (y > 0) push(i - w);
+    if (y + 1 < h) push(i + w);
+    if (x > 0 && y > 0) push(i - w - 1);
+    if (x + 1 < w && y > 0) push(i - w + 1);
+    if (x > 0 && y + 1 < h) push(i + w - 1);
+    if (x + 1 < w && y + 1 < h) push(i + w + 1);
+  }
+  for (let i = 0; i < n; i++) {
+    if (!mark[i]) continue;
+    const o = i * 4;
+    data[o] = data[o + 1] = data[o + 2] = data[o + 3] = 0;
+  }
+  return imageData;
+}
+
+function stripLoadedTexture(texture) {
+  const image = texture.image;
+  if (!image || texture.userData.stripped || !image.width) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  stripPaleSpriteBackground(imageData);
+  ctx.putImageData(imageData, 0, 0);
+  texture.image = canvas;
+  texture.userData.stripped = true;
+  texture.needsUpdate = true;
+}
+
 export function itemSprite(tile, invalidate = () => {}) {
   const path = itemArtPath(tile?.id, tile?.arg ?? 0);
   if (!path) return null;
   if (!textures.has(path)) {
-    const texture = loader.load(path, invalidate);
+    const texture = loader.load(path, (loaded) => {
+      stripLoadedTexture(loaded);
+      invalidate();
+    });
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.magFilter = texture.minFilter = THREE.NearestFilter;
     texture.generateMipmaps = false;
@@ -146,7 +218,7 @@ export function itemSprite(tile, invalidate = () => {}) {
       new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
-        alphaTest: 0.1,
+        alphaTest: 0.2,
         side: THREE.DoubleSide,
         toneMapped: false,
       }),
