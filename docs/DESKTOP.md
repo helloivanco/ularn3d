@@ -6,7 +6,7 @@ Ularn remains playable in the browser. The optional desktop edition bundles the 
 
 Run `Ularn.windows.exe` from the website's optional Windows download. This single file contains the entire game and runtime; no ZIP extraction or installer is required. It unpacks its runtime into a temporary directory when launched, then starts the game. It targets 64-bit Windows 10 or later and is unsigned.
 
-The ZIP edition is still available through the build commands: extract every file from `Ularn-1.0.0-windows-x64.zip` and run its `Ularn.exe`. The configured `Ularn-1.0.0-windows-x64-setup.exe` target is a separate installer for creating shortcuts. Public distribution should add code signing before claiming a verified publisher.
+The ZIP edition is still available through the build commands: extract every file from `Ularn-<version>-windows-x64.zip` (the version is `package.json`) and run its `Ularn.exe`. The configured `Ularn-<version>-windows-x64-setup.exe` target is a separate installer for creating shortcuts. Public distribution should add code signing before claiming a verified publisher.
 
 Saves and preferences live in `%APPDATA%\Ularn` and survive app restarts and upgrades. The portable and installed editions share these saves. Portable means no installer is required; saves remain in the Windows user profile rather than beside the executable. Existing browser saves belong to a different origin and are not automatically imported. Uninstalling keeps saved progress.
 
@@ -31,6 +31,8 @@ The package script rebuilds the game first and never publishes anything. `deskto
 `npm run desktop:package:win` builds both portable and installer targets; use Windows or the included Windows CI workflow for the installer. `npm run desktop:package:win:zip` builds the ZIP alternative. To create only the unpacked Windows app directory, run `npm run desktop:package:win:dir`; all files in `release/win-unpacked/` must remain beside its `Ularn.exe`.
 
 The `Windows desktop` workflow runs on demand, on tags matching `desktop-v*`, and on pull requests affecting desktop packaging. It tests the real Electron game, verifies the portable payload, then uploads the executables and portable checksum as the `Ularn-Windows-x64` workflow artifact. It does not create a public release or deploy the website. The workflow has not been run from this local task.
+
+Bump the displayed product version with `npm version patch` (or `minor` / `major`). That updates `package.json`, `package-lock.json`, and the Vercel `Content-Disposition` download filename together. The play page, field guide, JSON-LD `softwareVersion`, Electron `package.json`, and `Ularn-${version}.windows.exe` save name all read from that one version.
 
 For a local macOS app bundle, run `npm run desktop:package:mac`; the unsigned app is placed below `release/`. macOS development saves live in `~/Library/Application Support/Ularn`.
 

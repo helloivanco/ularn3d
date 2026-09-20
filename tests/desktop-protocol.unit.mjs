@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import asar from "@electron/asar";
 import protocol from "../desktop/protocol.cjs";
+import { toArchivePath, toPosixPath } from "../desktop/asar-path.mjs";
 
 const root = path.resolve("/tmp/ularn-desktop-dist");
 
@@ -32,4 +36,29 @@ test("desktop responses use correct module types and restrictive CSP", () => {
   assert.match(headers["content-security-policy"], /object-src 'none'/);
   assert.doesNotMatch(headers["content-security-policy"], /unsafe-eval/);
   assert.match(protocol.assetHeaders(path.join(root, "engine", "larn_local.html"))["content-security-policy"], /script-src 'self' 'unsafe-inline'/);
+});
+
+test("asar lookup paths use native separators for nested files", () => {
+  assert.equal(toArchivePath("dist/about/index.html"), path.join("dist", "about", "index.html"));
+  assert.equal(toArchivePath("dist\\about\\index.html"), path.join("dist", "about", "index.html"));
+  assert.equal(toPosixPath(path.join("dist", "downloads", "Ularn.windows.exe")), "dist/downloads/Ularn.windows.exe");
+});
+
+test("asar nested game files extract with native path separators", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "ularn-asar-"));
+  try {
+    const source = path.join(root, "app");
+    await mkdir(path.join(source, "dist", "about"), { recursive: true });
+    await mkdir(path.join(source, "desktop"), { recursive: true });
+    await writeFile(path.join(source, "dist", "about", "index.html"), "<html>about</html>");
+    await writeFile(path.join(source, "desktop", "main.cjs"), "module.exports = {}");
+    const archive = path.join(root, "app.asar");
+    await asar.createPackage(source, archive);
+    const nested = path.join("dist", "about", "index.html");
+    assert.equal(asar.extractFile(archive, toArchivePath(nested)).toString(), "<html>about</html>");
+    assert.equal(toPosixPath(nested), "dist/about/index.html");
+    assert.equal(asar.listPackage(archive).some((file) => toPosixPath(file).includes("/dist/downloads/")), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
