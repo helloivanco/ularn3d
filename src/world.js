@@ -21,7 +21,6 @@ import {
   itemModel,
   monsterModel,
   ring,
-  torch,
   LANDMARK_NAMES,
 } from "./models.js";
 
@@ -882,7 +881,8 @@ export class World {
       g.position.set(t.x, 0, t.y);
       g.userData.tile = { x: t.x, y: t.y };
       if (t.wall) {
-        if (noise(t.x, t.y) > 0.87) torch(g, 0, 1.05, 0, 0.65);
+        // Point lights still attach via takeLamp. Per-wall torch meshes
+        // were hundreds of extra draw calls for a silhouette the camera cannot see.
       } else if (t.id !== 0) {
         const art = itemSprite(t, () => this.invalidate());
         const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });

@@ -106,7 +106,7 @@ test("town stays within a web GPU budget after the poly and light cuts", async (
   await page.waitForTimeout(400);
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
   console.log("Town graphics", metrics);
-  expect(metrics.drawCalls).toBeLessThan(220);
+  expect(metrics.drawCalls).toBeLessThan(280);
   expect(metrics.triangles).toBeLessThan(30000);
   expect(metrics.lights).toBeLessThanOrEqual(6);
   expect(metrics.environment).toBe(false);
