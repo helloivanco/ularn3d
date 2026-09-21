@@ -687,7 +687,7 @@ function valid_monst_move(x, y, monster) {
 
   /* can't move here */
   at_player = (x == player.x) && (y == player.y);
-  at_entrance = (x == 33) && (y == MAXY - 1) && (level == 1);
+  at_entrance = (x == homeEntranceX()) && (y == homeEntranceY()) && (level == 1);
 
   /*
    * A monster cannot pass through a closed door or a wall.

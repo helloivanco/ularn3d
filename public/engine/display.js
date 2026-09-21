@@ -628,6 +628,11 @@ function moveplayer(dir) {
   }
 
   if (item.matches(OHOMEENTRANCE)) {
+    // D1 spawn is on the south border; town is a centered plaza. Move onto
+    // the plaza before loading town so positionplayer is not left in walls.
+    const b = townBounds();
+    player.x = Math.floor((b.x0 + b.x1) / 2);
+    player.y = Math.floor((b.y0 + b.y1) / 2);
     newcavelevel(0);
     moveNear(OENTRANCE, false);
     return 0;

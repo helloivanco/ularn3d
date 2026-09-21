@@ -492,7 +492,7 @@ select {
   height: auto;
   display: block;
   margin-top: 16px;
-  image-rendering: auto;
+  image-rendering: pixelated;
 }
 .map-legend {
   display: flex;

@@ -868,10 +868,10 @@ export class World {
           batch(g);
           g.position.set(t.x, 0, t.y);
         }
-        if (t.store) {
+        if (t.store || t.id === 93) {
           g.userData.landmarkLabel = t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
           const text = label(g.userData.landmarkLabel);
-          text.position.y = t.id === 56 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
+          text.position.y = t.id === 56 || t.id === 93 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
           g.add(text);
         }
       }

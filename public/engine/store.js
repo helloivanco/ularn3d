@@ -79,23 +79,26 @@ function enter() {
 function dungeon() {
   setMazeMode(true);
 
-  const entranceX = Math.floor(MAXX / 2);
-  const entranceY = MAXY - 2;
+  const entranceX = homeEntranceX();
+  const entranceY = homeEntranceY() - 1;
 
   player.x = entranceX;
   player.y = entranceY;
 
   newcavelevel(1);
+  placeHomeEntrance();
 
   if (canMove(entranceX, entranceY)) {
     player.x = entranceX;
     player.y = entranceY;
+  } else {
+    positionplayer(entranceX, entranceY, false);
   }
 
   shuffleMonster(player.x, player.y);
 
-  setKnow(entranceX, MAXY - 1, KNOWALL);
-  setMonster(entranceX, MAXY - 1, null);
+  setKnow(entranceX, homeEntranceY(), KNOWALL);
+  setMonster(entranceX, homeEntranceY(), null);
   showcell(player.x, player.y); /* to show around player */
 }
 

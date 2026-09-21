@@ -286,33 +286,63 @@ window.addEventListener("resize", () => {
     );
   }
 });
+const MAP_GLYPHS = {
+  5: "<",
+  13: ">",
+  54: "E",
+  55: "V",
+  56: "V",
+  93: "<",
+};
+
+function mapExtent() {
+  if (state.level === 0 && typeof townBounds === "function") {
+    const b = townBounds();
+    const x0 = Math.max(0, b.x0 - 1);
+    const y0 = Math.max(0, b.y0 - 1);
+    return {
+      x0,
+      y0,
+      cols: Math.min(state.width - x0, b.x1 - x0 + 2),
+      rows: Math.min(state.height - y0, b.y1 - y0 + 2),
+    };
+  }
+  return { x0: 0, y0: 0, cols: state.width, rows: state.height };
+}
+
 function drawMap() {
   const canvas = $("minimap"),
     ctx = canvas.getContext("2d");
   const short = innerHeight <= 500 && innerWidth > innerHeight;
   const compact = innerWidth <= 700 || short;
-  const cols = Math.min(state.width, short ? 6 : compact ? 8 : 12);
-  const rows = Math.min(state.height, short ? 4 : compact ? 8 : 12);
-  const cell = short ? 16 : compact ? 18 : 28;
-  const nextWidth = cols * cell;
-  const nextHeight = rows * cell;
+  const { x0, y0, cols, rows } = mapExtent();
+  const minCell = short ? 8 : compact ? 9 : 12;
+  const panel = canvas.closest(".map-panel") || canvas.parentElement;
+  const slot =
+    Math.max(120, panel?.clientWidth || 0) ||
+    (short ? 220 : compact ? 272 : 442);
+  const cell = Math.max(minCell, Math.floor(slot / Math.max(cols, rows)));
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const nextWidth = Math.round(cols * cell * dpr);
+  const nextHeight = Math.round(rows * cell * dpr);
   if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
     canvas.width = nextWidth;
     canvas.height = nextHeight;
   }
-  const x0 = Math.max(0, Math.min(state.width - cols, state.x - Math.floor(cols / 2)));
-  const y0 = Math.max(0, Math.min(state.height - rows, state.y - Math.floor(rows / 2)));
   canvas.dataset.x0 = String(x0);
   canvas.dataset.y0 = String(y0);
   canvas.dataset.cols = String(cols);
   canvas.dataset.rows = String(rows);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#071114";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `bold ${Math.floor(cell * 0.82)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
+  ctx.fillRect(0, 0, cols * cell, rows * cell);
+  const fontPx = Math.max(9, Math.round(cell * 0.78));
+  ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const known = new Map(state.tiles.map((t) => [`${t.x},${t.y}`, t]));
+  const mark = Math.max(1, Math.round(cell * 0.14));
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = x0 + col,
@@ -328,24 +358,35 @@ function drawMap() {
       if (x === state.x && y === state.y) continue;
       const symbol =
         t.monster?.symbol ||
-        ({ 5: "<", 13: ">" })[t.id] ||
+        MAP_GLYPHS[t.id] ||
         t.symbol ||
         (t.id ? "?" : ".");
-      if ((t.monster || t.id > 0) && symbol !== "." && symbol !== " ") {
+      const notable =
+        t.monster ||
+        MAP_GLYPHS[t.id] ||
+        (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
+      if (notable) {
         ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
         ctx.fillText(symbol, cx, cy);
       } else {
         ctx.fillStyle = "#6d8a82";
-        ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
       }
     }
   }
-  const px = (state.x - x0) * cell,
-    py = (state.y - y0) * cell;
-  ctx.fillStyle = "#f8dea0";
-  ctx.fillRect(px, py, cell, cell);
-  ctx.fillStyle = "#132325";
-  ctx.fillText("@", px + cell / 2, py + cell / 2);
+  if (
+    state.x >= x0 &&
+    state.x < x0 + cols &&
+    state.y >= y0 &&
+    state.y < y0 + rows
+  ) {
+    const px = (state.x - x0) * cell,
+      py = (state.y - y0) * cell;
+    ctx.fillStyle = "#f8dea0";
+    ctx.fillRect(px, py, cell, cell);
+    ctx.fillStyle = "#132325";
+    ctx.fillText("@", px + cell / 2, py + cell / 2);
+  }
 }
 function stopTravel() {
   engine.interruptTravel();

@@ -308,6 +308,7 @@ export const LANDMARK_NAMES = {
   10: "THE COLLEGE",
   54: "THE CAVES",
   55: "THE VOLCANO",
+  93: "TOWN",
   100: "THE HIDEOUT",
 };
 export function building(id) {

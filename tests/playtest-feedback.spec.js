@@ -70,7 +70,7 @@ test("dungeon maps are square at the same footprint and town is a smaller square
   expect(shape.town.stores).toBeGreaterThan(0);
 });
 
-test("character stats sit beside the adventurer frame and the map is a small readable viewport", async ({ page }) => {
+test("character stats sit beside the adventurer frame and the map shows the whole floor", async ({ page }) => {
   await start(page);
   await page.evaluate(() => {
     setItem(player.x + 1, player.y, createObject(OBOOK, 1));
@@ -106,11 +106,11 @@ test("character stats sit beside the adventurer frame and the map is a small rea
   expect(layout.labels).toMatch(/^STR=\d+ INT=\d+ WIS=\d+ CON=\d+ DEX=\d+$/);
   expect(layout.besideHero).toBe(true);
   expect(layout.journalMoved).toBe(true);
-  expect(layout.cellWidth).toBeGreaterThan(22);
-  expect(layout.cellHeight).toBeGreaterThan(22);
+  expect(layout.cellWidth).toBeGreaterThanOrEqual(12);
+  expect(layout.cellHeight).toBeGreaterThanOrEqual(12);
   expect(layout.boxWidth).toBeGreaterThan(240);
-  expect(layout.boxWidth).toBeLessThan(400);
-  expect(layout.cols).toBeLessThan(layout.mapWidth);
+  expect(layout.boxWidth).toBeLessThan(520);
+  expect(layout.cols).toBeGreaterThanOrEqual(18);
   await page.screenshot({ path: "test-results/hud_stats_beside_hero.png" });
 });
 
