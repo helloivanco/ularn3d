@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { APP_VERSION, DOWNLOAD_FILENAME } from "./app-version.mjs";
+import { APP_VERSION, CHECKSUM_RELEASE_URL, DOWNLOAD_FILENAME, DOWNLOAD_PATH, DOWNLOAD_RELEASE_URL } from "./app-version.mjs";
 
 /** Shipped game, site, and desktop files. Changing them is a product release. */
 export const PRODUCT_PATHS = [
@@ -42,7 +42,10 @@ export const dispositionHeader = (vercel) =>
     .flatMap((entry) => entry.headers || [])
     .find((header) => header.key === "Content-Disposition")?.value;
 
-/** package.json, lockfile, and Vercel download filename must share one version. */
+export const redirectDestination = (vercel, source) =>
+  (vercel.redirects || []).find((item) => item.source === source)?.destination;
+
+/** package.json, lockfile, Vercel filename, and GitHub Release download URL must share one version. */
 export const checkStampedVersion = () => {
   const pkg = readJson("package.json");
   const lock = readJson("package-lock.json");
@@ -60,6 +63,14 @@ export const checkStampedVersion = () => {
   const disposition = dispositionHeader(vercel);
   if (disposition !== expected) {
     throw new Error(`vercel.json Content-Disposition is ${disposition}; expected ${expected}. Run npm version patch|minor|major.`);
+  }
+  const exeRedirect = redirectDestination(vercel, DOWNLOAD_PATH);
+  if (exeRedirect !== DOWNLOAD_RELEASE_URL) {
+    throw new Error(`vercel.json download redirect is ${exeRedirect}; expected ${DOWNLOAD_RELEASE_URL}. Run npm version patch|minor|major.`);
+  }
+  const checksumRedirect = redirectDestination(vercel, "/downloads/SHA256SUMS.txt");
+  if (checksumRedirect !== CHECKSUM_RELEASE_URL) {
+    throw new Error(`vercel.json checksum redirect is ${checksumRedirect}; expected ${CHECKSUM_RELEASE_URL}. Run npm version patch|minor|major.`);
   }
   return pkg.version;
 };

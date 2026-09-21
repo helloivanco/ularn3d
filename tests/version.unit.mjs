@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { APP_VERSION, DOWNLOAD_FILENAME } from "../scripts/app-version.mjs";
+import { APP_VERSION, CHECKSUM_RELEASE_URL, DOWNLOAD_FILENAME, DOWNLOAD_RELEASE_URL } from "../scripts/app-version.mjs";
 import {
   checkReleaseBump,
   checkStampedVersion,
@@ -15,8 +15,11 @@ test("npm version restamp keeps package.json, lockfile, and Vercel filename toge
   const version = checkStampedVersion();
   assert.equal(version, APP_VERSION);
   assert.equal(DOWNLOAD_FILENAME, `Ularn-${version}.windows.exe`);
+  assert.equal(DOWNLOAD_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/download/v${version}/${DOWNLOAD_FILENAME}`);
+  assert.equal(CHECKSUM_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/download/v${version}/SHA256SUMS.txt`);
   assert.notEqual(version, "1.0.0");
   assert.notEqual(version, "1.1.0");
+  assert.notEqual(version, "1.2.0");
 });
 
 test("play page and field guide stamp version from package.json placeholders", () => {
