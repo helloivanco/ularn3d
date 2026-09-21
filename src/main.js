@@ -311,25 +311,38 @@ function mapExtent() {
   return { x0: 0, y0: 0, cols: state.width, rows: state.height };
 }
 
+function mapCellSize(cols, rows) {
+  const short = innerHeight <= 500 && innerWidth > innerHeight;
+  const compact = innerWidth <= 700 || short;
+  const maxW = compact
+    ? Math.min(innerWidth - 28, short ? Math.floor(innerWidth * 0.62) : innerWidth - 28)
+    : Math.min(Math.floor(innerWidth * 0.56), 684);
+  const maxH = compact
+    ? Math.min(Math.floor(innerHeight * 0.34), short ? innerHeight - 148 : 240)
+    : Math.min(innerHeight - 250, 280);
+  const cell = Math.max(
+    1,
+    Math.min(Math.floor(Math.max(cols, maxW) / cols), Math.floor(Math.max(rows, maxH) / rows)),
+  );
+  return { cell, short, compact };
+}
+
 function drawMap() {
   const canvas = $("minimap"),
     ctx = canvas.getContext("2d");
-  const short = innerHeight <= 500 && innerWidth > innerHeight;
-  const compact = innerWidth <= 700 || short;
   const { x0, y0, cols, rows } = mapExtent();
-  const minCell = short ? 8 : compact ? 9 : 12;
-  const panel = canvas.closest(".map-panel") || canvas.parentElement;
-  const slot =
-    Math.max(120, panel?.clientWidth || 0) ||
-    (short ? 220 : compact ? 272 : 442);
-  const cell = Math.max(minCell, Math.floor(slot / Math.max(cols, rows)));
+  const { cell } = mapCellSize(cols, rows);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const nextWidth = Math.round(cols * cell * dpr);
-  const nextHeight = Math.round(rows * cell * dpr);
+  const cssW = cols * cell;
+  const cssH = rows * cell;
+  const nextWidth = Math.round(cssW * dpr);
+  const nextHeight = Math.round(cssH * dpr);
   if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
     canvas.width = nextWidth;
     canvas.height = nextHeight;
   }
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
   canvas.dataset.x0 = String(x0);
   canvas.dataset.y0 = String(y0);
   canvas.dataset.cols = String(cols);
@@ -337,8 +350,8 @@ function drawMap() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#071114";
-  ctx.fillRect(0, 0, cols * cell, rows * cell);
-  const fontPx = Math.max(9, Math.round(cell * 0.78));
+  ctx.fillRect(0, 0, cssW, cssH);
+  const fontPx = Math.max(6, Math.round(cell * 0.8));
   ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -387,6 +400,13 @@ function drawMap() {
     ctx.fillRect(px, py, cell, cell);
     ctx.fillStyle = "#132325";
     ctx.fillText("@", px + cell / 2, py + cell / 2);
+  }
+  const panel = canvas.closest(".map-panel");
+  if (panel) {
+    document.body.style.setProperty(
+      "--map-bottom",
+      `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
+    );
   }
 }
 function stopTravel() {

@@ -1,13 +1,13 @@
 /* Gameplay controls share one bottom dock, leaving the world open above it. */
-.playing { --dock-height: 184px; --map-width: min(442px, 38vw, calc(100dvh - var(--dock-height) - 96px)); }
+.playing { --dock-height: 184px; --map-width: min(684px, 56vw, calc(100vw - 40px)); }
 .playing .topbar { height: 50px; padding: 0 18px; background: #0c191de6; }
 .playing .brand { font-size: 20px; gap: 9px; }
 .playing .brand-mark { font-size: 28px; }
 .playing .brand small, .playing .edition { display: none; }
 .playing #location { font-size: 9px; }
 .playing .panel { backdrop-filter: none; }
-.playing .map-panel { top: 64px; left: 18px; right: auto; width: var(--map-width); padding: 8px; z-index: 4; overflow: visible; }
-.playing #minimap { margin-top: 6px; cursor: crosshair; width: 100%; height: auto; image-rendering: pixelated; }
+.playing .map-panel { top: 64px; left: 18px; right: auto; width: max-content; max-width: var(--map-width); padding: 8px; z-index: 4; overflow: visible; }
+.playing #minimap { margin-top: 6px; cursor: crosshair; width: auto; height: auto; image-rendering: pixelated; }
 .playing .map-panel .panel-heading > span:last-child { display: block; }
 .playing #town-travel { margin-top: 8px; }
 .playing #destination { margin: 0; padding: 6px 9px; width: 100%; font-size: 10px; }
@@ -67,14 +67,14 @@
 .playing .modal-backdrop { inset: 50px 0 0; }
 .playing #toast { bottom: calc(var(--dock-height) + 28px); }
 @media (max-width: 1100px) {
-  .playing { --map-width: min(400px, 42vw, calc(100dvh - var(--dock-height) - 120px)); }
+  .playing { --map-width: min(684px, 62vw, calc(100vw - 36px)); }
   .playing .adventure-bar { grid-template-columns: 170px 168px minmax(0,1fr) 108px; gap: 10px; }
   .playing .hero-panel { padding-right: 10px; }
   .playing .actionbar button { font-size: 8px; }
   .playing .dpad { grid-template-columns: repeat(3,32px); }
 }
 @media (max-width: 700px) {
-  .playing { --dock-height: 268px; --map-width: min(272px, calc(100vw - 120px)); }
+  .playing { --dock-height: 268px; --map-width: min(684px, calc(100vw - 24px)); }
   .playing .topbar { padding: 0 12px; }
   .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: none; overflow: visible; }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 58px 40px 36px 88px; gap: 8px; padding: 10px; }
@@ -114,11 +114,11 @@
   .playing #interaction:not(.in-modal) { left: 12px; right: 12px; bottom: calc(var(--dock-height) + 18px); max-height: 40dvh; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --dock-height: 142px; --map-width: min(220px, 42vw, calc(100dvh - var(--dock-height) - 52px)); }
+  .playing { --dock-height: 142px; --map-width: min(684px, 62vw, calc(100vw - 16px)); }
   .playing .topbar { height: 42px; }
   .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 4px; z-index: 4; display: flex; flex-direction: row; align-items: stretch; gap: 6px; height: fit-content; max-height: none; overflow: visible; }
   .playing .map-panel .panel-heading { display: none; }
-  .playing #minimap { margin-top: 0; width: auto; max-width: 100%; max-height: min(220px, calc(100dvh - var(--dock-height) - 54px)); }
+  .playing #minimap { margin-top: 0; width: auto; max-width: none; max-height: none; }
   .playing #town-travel { margin: 0; min-width: 0; flex: 1; display: flex; align-items: stretch; }
   .playing #destination { padding: 4px 6px; font-size: 9px; margin: 0; width: 100%; }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; }
@@ -164,9 +164,9 @@
   .playing .camera-tools { top: 60px; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --map-width: min(220px, 42vw, calc(100dvh - var(--dock-height) - 52px)); }
+  .playing { --map-width: min(684px, 62vw, calc(100vw - 16px)); }
   .playing .map-panel { top: 46px; padding: 4px; z-index: 4; max-height: none; overflow: visible; }
-  .playing #minimap { margin-top: 0; width: auto; max-width: 100%; }
+  .playing #minimap { margin-top: 0; width: auto; max-width: none; }
   .playing #town-travel { margin: 0; min-width: 0; }
   .playing #destination { font-size: 9px; padding: 4px 6px; }
   .playing .camera-tools { top: 46px; z-index: 5; }

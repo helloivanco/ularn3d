@@ -314,28 +314,26 @@ function makemaze(k) {
 
   eat(1, 1);
 
-  /* Compact square rooms instead of the classic wide, short slabs. */
+  /* Wide, short rooms that fill a 57×20 floor. */
   let tmp2 = rnd(3) + 3;
   for (let tmp = 0; tmp < tmp2; tmp++) {
-    const span = rnd(4) + 3;
-    const mx = rnd(Math.max(4, MAXX - span - 3)) + 2;
-    const my = rnd(Math.max(4, MAXY - span - 3)) + 2;
+    const xspan = rnd(8) + 6;
+    const yspan = rnd(3) + 3;
+    const mx = rnd(Math.max(4, MAXX - xspan - 3)) + 2;
+    const my = rnd(Math.max(3, MAXY - yspan - 3)) + 2;
     const mon = k >= MAXLEVEL ? makemonst(k) : null;
-    for (let i = mx; i < mx + span && i < MAXX - 1; i++)
-      for (let j = my; j < my + span && j < MAXY - 1; j++) {
+    for (let i = mx; i < mx + xspan && i < MAXX - 1; i++)
+      for (let j = my; j < my + yspan && j < MAXY - 1; j++) {
         setItem(i, j, OEMPTY);
         setMonster(i, j, mon);
       }
   }
 
-  /* Crossing corridors of limited length — not a full-width trench. */
+  /* A full-width east-west run plus a north-south crossing so stairs stay reachable. */
+  const cy = rnd(Math.max(4, MAXY - 6)) + 3;
+  for (let i = 1; i < MAXX - 1; i++) setItem(i, cy, OEMPTY);
   const cx = rnd(MAXX - 6) + 3;
-  const cy = rnd(MAXY - 6) + 3;
-  const run = Math.min(12, Math.floor(Math.min(MAXX, MAXY) / 2));
-  for (let i = Math.max(1, cx - run); i < Math.min(MAXX - 1, cx + run); i++)
-    setItem(i, cy, OEMPTY);
-  for (let j = Math.max(1, cy - run); j < Math.min(MAXY - 1, cy + run); j++)
-    setItem(cx, j, OEMPTY);
+  for (let j = 1; j < MAXY - 1; j++) setItem(cx, j, OEMPTY);
 
   if (k > (ULARN ? 4 : 1)) {
     treasureroom(k);
