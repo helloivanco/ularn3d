@@ -32,7 +32,7 @@ The package script rebuilds the game first and never publishes anything. `deskto
 
 The `Windows desktop` workflow runs on demand, on tags matching `desktop-v*`, and on pull requests affecting desktop packaging. It tests the real Electron game, verifies the portable payload, then uploads the executables and portable checksum as the `Ularn-Windows-x64` workflow artifact. It does not create a public release or deploy the website. The workflow has not been run from this local task.
 
-Bump the displayed product version with `npm version patch` (or `minor` / `major`). That updates `package.json`, `package-lock.json`, and the Vercel `Content-Disposition` download filename together. The play page, field guide, JSON-LD `softwareVersion`, Electron `package.json`, and `Ularn-${version}.windows.exe` save name all read from that one version.
+Bump the displayed product version with `npm version patch` (or `minor` / `major`) for every product release. That updates `package.json`, `package-lock.json`, and the Vercel `Content-Disposition` download filename together. The play page, field guide, JSON-LD `softwareVersion`, Electron `package.json`, and `Ularn-${version}.windows.exe` save name all read from that one version. Pull requests that change the shipped game, site, or desktop host must increase `package.json` relative to `main`; `npm run test:version` and the Release version workflow reject a stale number.
 
 For a local macOS app bundle, run `npm run desktop:package:mac`; the unsigned app is placed below `release/`. macOS development saves live in `~/Library/Application Support/Ularn`.
 
