@@ -1,6 +1,6 @@
 {
   "name": "ularn-3d",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Ularn — The Caves Below, an offline dungeon adventure",
@@ -19,6 +19,7 @@
     "desktop:package:win:zip": "npm run build && electron-builder --config desktop/electron-builder.yml --win zip --x64 --publish never",
     "desktop:package:mac": "npm run build && electron-builder --config desktop/electron-builder.yml --mac --dir --publish never",
     "test:desktop": "npm run build && node --test tests/desktop-protocol.unit.mjs && node tests/desktop-smoke.mjs",
+    "test:version": "node --test tests/version.unit.mjs && node scripts/check-release-version.mjs",
     "version": "node scripts/sync-version.mjs"
   },
   "dependencies": {
