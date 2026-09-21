@@ -41,7 +41,10 @@ test("journal keeps the full action history and scrolls past the old 7/20/60 cap
     document.getElementById("journal-lines").scrollTop = 0;
   });
   await expect(page.locator("#journal-lines")).toContainText("Journal history line 1");
-  await expect(page.locator("#journal-lines > div", { hasText: "Journal history line 1" })).toHaveCount(1);
+  await expect(page.locator("#journal-lines")).toContainText("Journal history line 90");
+  await expect(
+    page.locator("#journal-lines > div").filter({ hasText: /^Journal history line 1$/ }),
+  ).toHaveCount(1);
 
   const whileReading = await page.evaluate(() => {
     const journal = document.getElementById("journal-lines");
