@@ -315,14 +315,19 @@ function mapCellSize(cols, rows) {
   const short = innerHeight <= 500 && innerWidth > innerHeight;
   const compact = innerWidth <= 700 || short;
   const maxW = compact
-    ? Math.min(innerWidth - 28, short ? Math.floor(innerWidth * 0.62) : innerWidth - 28)
+    ? Math.min(
+        innerWidth - 28,
+        short ? Math.floor(innerWidth * 0.62) : innerWidth - 28,
+      )
     : Math.min(Math.floor(innerWidth * 0.56), 684);
+  /* Leave room for the top chrome, town destination, and bottom dock. */
+  const reserved = short ? 198 : compact ? 412 : 250;
   const maxH = compact
-    ? Math.min(Math.floor(innerHeight * 0.34), short ? innerHeight - 148 : 240)
+    ? Math.max(24, Math.min(Math.floor(innerHeight * 0.34), innerHeight - reserved))
     : Math.min(innerHeight - 250, 280);
   const cell = Math.max(
     1,
-    Math.min(Math.floor(Math.max(cols, maxW) / cols), Math.floor(Math.max(rows, maxH) / rows)),
+    Math.min(Math.floor(maxW / cols), Math.floor(maxH / rows)),
   );
   return { cell, short, compact };
 }

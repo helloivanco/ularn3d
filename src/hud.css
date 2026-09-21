@@ -9,9 +9,9 @@
 .playing .map-panel { top: 64px; left: 18px; right: auto; width: max-content; max-width: var(--map-width); padding: 8px; z-index: 4; overflow: visible; }
 .playing #minimap { margin-top: 6px; cursor: crosshair; width: auto; height: auto; image-rendering: pixelated; }
 .playing .map-panel .panel-heading > span:last-child { display: block; }
-.playing #town-travel { margin-top: 8px; }
-.playing #destination { margin: 0; padding: 6px 9px; width: 100%; font-size: 10px; }
-.playing .adventure-bar { position: absolute; inset: auto 12px 12px; height: var(--dock-height); display: grid; grid-template-columns: 188px 176px minmax(0,1fr) 116px; grid-template-rows: minmax(0,1fr) 47px; gap: 12px 14px; padding: 12px; }
+.playing #town-travel { margin-top: 8px; min-width: 0; }
+.playing #destination { margin: 0; padding: 6px 9px; width: 100%; max-width: 100%; min-width: 0; font-size: 10px; }
+.playing .adventure-bar { position: absolute; inset: auto 12px 12px; height: var(--dock-height); display: grid; grid-template-columns: 188px 176px minmax(0,1fr) 116px; grid-template-rows: minmax(0,1fr) 47px; gap: 12px 14px; padding: 12px; z-index: 6; }
 .playing .hero-panel { position: static; grid-column: 1; grid-row: 1; width: auto; padding: 0 16px 0 0; border: 0; border-right: 1px solid var(--border); background: none; box-shadow: none; min-width: 0; }
 .playing .hero-heading { margin: 0 0 8px; gap: 8px; }
 .playing .hero-heading h2 { font-size: 15px; margin-bottom: 3px; }
@@ -76,7 +76,8 @@
 @media (max-width: 700px) {
   .playing { --dock-height: 268px; --map-width: min(684px, calc(100vw - 24px)); }
   .playing .topbar { padding: 0 12px; }
-  .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: none; overflow: visible; }
+  .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 16px); overflow: visible; }
+  .playing #minimap { max-height: calc(100dvh - var(--dock-height) - 136px); }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 58px 40px 36px 88px; gap: 8px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; border: none; padding: 0; }
   .playing .hero-heading { margin-bottom: 7px; }
@@ -116,11 +117,11 @@
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
   .playing { --dock-height: 142px; --map-width: min(684px, 62vw, calc(100vw - 16px)); }
   .playing .topbar { height: 42px; }
-  .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 4px; z-index: 4; display: flex; flex-direction: row; align-items: stretch; gap: 6px; height: fit-content; max-height: none; overflow: visible; }
+  .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 4px; z-index: 4; display: flex; flex-direction: row; align-items: center; gap: 6px; height: fit-content; max-height: calc(100dvh - var(--dock-height) - 48px); overflow: visible; }
   .playing .map-panel .panel-heading { display: none; }
-  .playing #minimap { margin-top: 0; width: auto; max-width: none; max-height: none; }
-  .playing #town-travel { margin: 0; min-width: 0; flex: 1; display: flex; align-items: stretch; }
-  .playing #destination { padding: 4px 6px; font-size: 9px; margin: 0; width: 100%; }
+  .playing #minimap { margin-top: 0; width: auto; max-width: none; max-height: calc(100dvh - var(--dock-height) - 56px); }
+  .playing #town-travel { margin: 0; min-width: 0; flex: 0 0 132px; max-width: 140px; display: flex; align-items: center; }
+  .playing #destination { padding: 4px 6px; font-size: 9px; margin: 0; width: 100%; max-width: 100%; min-width: 0; height: 32px; max-height: 32px; align-self: center; }
   .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: 158px 128px minmax(0,1fr) 96px; grid-template-rows: 73px 43px; gap: 6px 10px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; }
   .playing .hero-heading { margin-bottom: 5px; }
@@ -165,10 +166,10 @@
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
   .playing { --map-width: min(684px, 62vw, calc(100vw - 16px)); }
-  .playing .map-panel { top: 46px; padding: 4px; z-index: 4; max-height: none; overflow: visible; }
-  .playing #minimap { margin-top: 0; width: auto; max-width: none; }
-  .playing #town-travel { margin: 0; min-width: 0; }
-  .playing #destination { font-size: 9px; padding: 4px 6px; }
+  .playing .map-panel { top: 46px; padding: 4px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 48px); overflow: visible; }
+  .playing #minimap { margin-top: 0; width: auto; max-width: none; max-height: calc(100dvh - var(--dock-height) - 56px); }
+  .playing #town-travel { margin: 0; min-width: 0; flex: 0 0 132px; max-width: 140px; }
+  .playing #destination { font-size: 9px; padding: 4px 6px; height: 32px; max-height: 32px; }
   .playing .camera-tools { top: 46px; z-index: 5; }
   .playing #inventory-panel { display: none !important; }
   .playing #effects-panel { top: 128px; }

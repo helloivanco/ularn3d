@@ -40,6 +40,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
 }) => {
   await start(page);
   const moves = await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     player.HP = player.HPMAX = 100;
@@ -49,6 +50,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
         setMonster(x, y, null);
         setKnow(x, y, KNOWALL);
       }
+    setMazeMode(true);
     paint();
     const original = ularn.key;
     ularn.key = function (...args) {
@@ -67,6 +69,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
 test("travel avoids known traps and stops for confusion", async ({ page }) => {
   await start(page);
   await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     for (let x = 6; x < 20; x++)
@@ -76,6 +79,7 @@ test("travel avoids known traps and stops for confusion", async ({ page }) => {
         setKnow(x, y, KNOWALL);
       }
     setItem(11, 8, ODARTRAP);
+    setMazeMode(true);
     paint();
   });
   await mapClick(page, 14, 8);
@@ -315,6 +319,7 @@ test("travel also stops for damage after regeneration raises health", async ({
 }) => {
   await start(page);
   const initial = await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     player.HP = 50;
@@ -325,6 +330,7 @@ test("travel also stops for damage after regeneration raises health", async ({
         setMonster(x, y, null);
         setKnow(x, y, KNOWALL);
       }
+    setMazeMode(true);
     paint();
     let steps = 0;
     const key = ularn.key;
