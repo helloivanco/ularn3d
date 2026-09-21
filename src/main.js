@@ -213,6 +213,7 @@ function update() {
   $("gold").textContent = state.gold.toLocaleString();
   $("armor").textContent = state.ac;
   $("weapon").textContent = state.wc;
+  $("spell-count-value").textContent = `${state.mana}/${state.manaMax}`;
   $("attributes").innerHTML = HUD_STATS.map(
     (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
   ).join(" ");
