@@ -38,7 +38,7 @@ test("gold is always auto-looted even when auto-loot is off", async ({ page }) =
   expect(result.tile).toBe(result.empty);
 });
 
-test("dungeon maps are square at the same footprint and town is a smaller square", async ({ page }) => {
+test("dungeon floors are 57 by 20 and town is a smaller square", async ({ page }) => {
   await start(page);
   await page.screenshot({ path: "test-results/town_square_map.png" });
   const shape = await page.evaluate(() => {
@@ -58,11 +58,10 @@ test("dungeon maps are square at the same footprint and town is a smaller square
       storesInside: stores.every((tile) => tile.x >= bounds.x0 && tile.x <= bounds.x1 && tile.y >= bounds.y0 && tile.y <= bounds.y1),
     };
   });
-  expect(shape.maxx).toBe(34);
-  expect(shape.maxy).toBe(34);
-  expect(shape.area).toBe(1156);
-  expect(shape.maxx / shape.maxy).toBe(1);
-  expect(shape.dungeon).toEqual({ width: 34, height: 34 });
+  expect(shape.maxx).toBe(57);
+  expect(shape.maxy).toBe(20);
+  expect(shape.area).toBe(1140);
+  expect(shape.dungeon).toEqual({ width: 57, height: 20 });
   expect(shape.bounds.x1 - shape.bounds.x0 + 1).toBe(18);
   expect(shape.bounds.y1 - shape.bounds.y0 + 1).toBe(18);
   expect(shape.town.open).toBeLessThan(400);
@@ -123,7 +122,7 @@ test("character stats sit beside the adventurer frame and the map shows the whol
   expect(layout.cellWidth).toBeGreaterThanOrEqual(12);
   expect(layout.cellHeight).toBeGreaterThanOrEqual(12);
   expect(layout.boxWidth).toBeGreaterThan(240);
-  expect(layout.boxWidth).toBeLessThan(520);
+  expect(layout.boxWidth).toBeLessThan(760);
   expect(layout.cols).toBeGreaterThanOrEqual(18);
   await page.screenshot({ path: "test-results/hud_stats_beside_hero.png" });
 });

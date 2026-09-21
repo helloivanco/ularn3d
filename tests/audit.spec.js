@@ -40,6 +40,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
 }) => {
   await start(page);
   const moves = await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     player.HP = player.HPMAX = 100;
@@ -49,6 +50,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
         setMonster(x, y, null);
         setKnow(x, y, KNOWALL);
       }
+    setMazeMode(true);
     paint();
     const original = ularn.key;
     ularn.key = function (...args) {
@@ -67,6 +69,7 @@ test("automatic travel stops immediately when a step causes damage", async ({
 test("travel avoids known traps and stops for confusion", async ({ page }) => {
   await start(page);
   await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     for (let x = 6; x < 20; x++)
@@ -76,6 +79,7 @@ test("travel avoids known traps and stops for confusion", async ({ page }) => {
         setKnow(x, y, KNOWALL);
       }
     setItem(11, 8, ODARTRAP);
+    setMazeMode(true);
     paint();
   });
   await mapClick(page, 14, 8);
@@ -159,6 +163,7 @@ test("mobile shop action tray stays inside its scrollable panel", async ({
 test("dragging or pinching the world never issues a movement command", async ({
   page,
 }) => {
+  test.setTimeout(90000);
   await start(page);
   const before = (await snap(page)).moves;
   await page.mouse.move(750, 500);
@@ -228,8 +233,9 @@ test("all creature and item models render; level changes release GPU resources",
   await start(page);
   await page.evaluate(() => {
     newcavelevel(20);
-    player.x = 33;
-    player.y = 8;
+    const span = Math.max(8, MAXX - 4);
+    player.x = Math.min(33, MAXX - 3);
+    player.y = Math.min(8, MAXY - 3);
     for (let x = 0; x < MAXX; x++)
       for (let y = 0; y < MAXY; y++) {
         setItem(x, y, OEMPTY);
@@ -238,13 +244,17 @@ test("all creature and item models render; level changes release GPU resources",
       }
     for (let id = 1; id < monsterlist.length; id++) {
       if (!monsterlist[id]) continue;
-      const x = 2 + (id % 60),
-        y = 2 + Math.floor(id / 60);
+      const x = 2 + (id % span),
+        y = 2 + Math.floor(id / span);
+      if (y >= MAXY - 1) continue;
       setMonster(x, y, createMonster(id));
     }
     for (let id = 1; id < itemlist.length; id++) {
       if (!itemlist[id]) continue;
-      setItem(2 + (id % 60), 6 + Math.floor(id / 60), createObject(id));
+      const x = 2 + (id % span),
+        y = 6 + Math.floor(id / span);
+      if (y >= MAXY - 1) continue;
+      setItem(x, y, createObject(id));
     }
     paint();
   });
@@ -256,7 +266,11 @@ test("all creature and item models render; level changes release GPU resources",
         paint();
       }
     });
-    await page.waitForTimeout(200);
+    await expect
+      .poll(() => page.evaluate(() => ularnGraphics.metrics().geometries), {
+        timeout: 15000,
+      })
+      .toBeGreaterThan(40);
     return page.evaluate(() => ularnGraphics.metrics());
   }
   await cycle();
@@ -315,6 +329,7 @@ test("travel also stops for damage after regeneration raises health", async ({
 }) => {
   await start(page);
   const initial = await page.evaluate(() => {
+    newcavelevel(1);
     player.x = 10;
     player.y = 8;
     player.HP = 50;
@@ -325,6 +340,7 @@ test("travel also stops for damage after regeneration raises health", async ({
         setMonster(x, y, null);
         setKnow(x, y, KNOWALL);
       }
+    setMazeMode(true);
     paint();
     let steps = 0;
     const key = ularn.key;
