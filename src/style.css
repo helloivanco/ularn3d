@@ -586,7 +586,10 @@ select {
   color: #92a79f;
   line-height: 1.65;
   height: 78px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 #journal-lines > div:last-child {
   color: #d5d7c7;

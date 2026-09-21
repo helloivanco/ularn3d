@@ -192,6 +192,35 @@ $("start-form").addEventListener("submit", (e) => {
 });
 $("continue").addEventListener("click", () => start(true));
 let townOptions = "";
+let journalSynced = 0;
+const journalNearBottom = (el) =>
+  el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+const syncJournal = (rawLog) => {
+  const lines = rawLog.filter((line) => String(line).trim());
+  const el = $("journal-lines");
+  const stickToBottom = journalNearBottom(el);
+  if (lines.length < journalSynced) {
+    el.replaceChildren();
+    journalSynced = 0;
+  }
+  if (journalSynced > 0) {
+    const last = el.lastElementChild;
+    const latest = lines[journalSynced - 1];
+    if (last && latest != null && last.innerHTML !== latest)
+      last.innerHTML = latest;
+  }
+  if (lines.length > journalSynced) {
+    const extra = document.createDocumentFragment();
+    for (let i = journalSynced; i < lines.length; i++) {
+      const row = document.createElement("div");
+      row.innerHTML = lines[i];
+      extra.appendChild(row);
+    }
+    el.appendChild(extra);
+    journalSynced = lines.length;
+  }
+  if (stickToBottom) el.scrollTop = el.scrollHeight;
+};
 function update() {
   const next = engine.snapshot();
   if (!next) return;
@@ -231,11 +260,7 @@ function update() {
       : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
   $("turn-count").textContent = `TURN ${state.moves}`;
   $("time-left").textContent = Math.ceil(state.timeLeft);
-  const log = state.log.filter((line) => line.trim()).slice(-60);
-  $("journal-lines").innerHTML = log
-    .map((line) => `<div>${line}</div>`)
-    .join("");
-  $("journal-lines").scrollTop = $("journal-lines").scrollHeight;
+  syncJournal(state.log);
   $("engine-modal").hidden = state.maze && !state.over;
   $("engine-title").textContent = state.over
     ? "EXPEDITION ENDED"

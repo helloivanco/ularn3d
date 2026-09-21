@@ -411,7 +411,8 @@ function bottomline() {
   cursor(1, 18);
   lprcat(`${player.getBottomLine()}\n`);
 
-  for (var logindex = LOG_SAVE_SIZE - LOG_SIZE; logindex < LOG.length; logindex++) {
+  const logStart = Math.max(0, LOG.length - LOG_SIZE);
+  for (var logindex = logStart; logindex < LOG.length; logindex++) {
     // less pretty code but more efficient for amiga mode, especially in firefox
     lprcat(`${LOG[logindex]}`);
     cltoeoln();
@@ -811,9 +812,6 @@ function updateLog(text, hint) {
     text = `${text} ${hint}`;
   }
   LOG.push(text);
-  if (LOG.length > LOG_SAVE_SIZE) {
-    LOG.shift();
-  }
 }
 
 
