@@ -246,6 +246,36 @@ test("zoom and walking request display-synced frames then return to idle", async
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);
 });
 
+test("walking beside a long wall does not bite a missing chunk out of it", async ({ page }) => {
+  await page.evaluate(() => {
+    newcavelevel(1);
+    player.x = 12;
+    player.y = 8;
+    player.HP = player.HPMAX = 200;
+    for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) {
+      setMonster(x, y, null);
+      setItem(x, y, OEMPTY);
+      setKnow(x, y, KNOWALL);
+    }
+    for (let x = 4; x <= 20; x++) setItem(x, 10, OWALL);
+    paint();
+  });
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  const row = await page.evaluate(() => ularnGraphics.walls().filter((w) => w.y === 10));
+  expect(row.length).toBe(17);
+  expect(row.every((w) => w.height > 0.3)).toBe(true);
+  expect(row.filter((w) => w.height < 0.5).length).toBeLessThanOrEqual(2);
+});
+
+test("town plaza walls stay full height while walking past them", async ({ page }) => {
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+  const walls = await page.evaluate(() => ularnGraphics.walls());
+  expect(walls.length).toBeGreaterThan(8);
+  expect(walls.every((w) => w.height > 1)).toBe(true);
+});
+
 test("idle and hidden rendering stops and gameplay wakes it without accumulating resources", async ({ page }) => {
   await room(page);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);

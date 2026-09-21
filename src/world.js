@@ -10,6 +10,7 @@ import { mat, surface, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
+import { wallHeight } from "./wall-cut.js";
 import {
   box,
   block,
@@ -473,6 +474,16 @@ export class World {
           stairBlocked: child.userData.stairBlocked,
           label: mesh.userData.landmarkLabel,
         }))),
+      walls: () => {
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        return this.wallCells.map((tile, i) => {
+          this.walls.getMatrixAt(i, this.scratchMatrix);
+          this.scratchMatrix.decompose(position, quaternion, scale);
+          return { x: tile.x, y: tile.y, height: scale.y };
+        });
+      },
     });
   }
   invalidate() {
@@ -1053,13 +1064,12 @@ export class World {
     if (this.wallView === viewKey) return;
     this.wallView = viewKey;
     this.renderer.shadowMap.needsUpdate = true;
+    const town = this.state.level === 0;
     for (let i = 0; i < this.wallCells.length; i++) {
       const t = this.wallCells[i],
         dx = t.x - this.state.x,
         dz = t.y - this.state.y;
-      const cut =
-        Math.hypot(dx, dz) < 2.8 && dx * toward.x + dz * toward.z > 0.2;
-      const h = cut ? 0.36 : 1.15;
+      const h = wallHeight(dx, dz, toward.x, toward.z, town);
       this.scratchPosition.set(t.x, h / 2 - 0.01, t.y);
       this.scratchScale.set(0.985, h, 0.985);
       this.scratchMatrix.compose(
