@@ -1,6 +1,6 @@
 {
   "name": "ularn-3d",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "description": "Ularn — The Caves Below, an offline dungeon adventure",

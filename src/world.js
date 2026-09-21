@@ -6,7 +6,6 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, surface, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
@@ -39,7 +38,7 @@ function destroy(group) {
   });
   group.clear();
 }
-function batch(group) {
+function batch(group, { castShadow = true } = {}) {
   group.updateMatrixWorld(true);
   const sets = new Map(),
     sprites = [];
@@ -65,7 +64,7 @@ function batch(group) {
     const merged = mergeGeometries(geometries);
     geometries.forEach((g) => g.dispose());
     const m = new THREE.Mesh(merged, material);
-    m.castShadow = true;
+    m.castShadow = castShadow;
     m.receiveShadow = true;
     group.add(m);
   }
@@ -141,7 +140,9 @@ export class World {
     );
     this.camera.position.set(13, 17, 19);
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      // MSAA is a context-creation flag. Balanced skips it: fill-rate on the
+      // web is the hitch, and Cinematic's higher pixel ratio plus bloom covers edges.
+      antialias: this.quality === "cinematic",
       powerPreference: "high-performance",
       stencil: false,
       failIfMajorPerformanceCaveat: false,
@@ -154,13 +155,7 @@ export class World {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
-    const pmrem = new THREE.PMREMGenerator(this.renderer),
-      environment = new RoomEnvironment();
-    this.environment = pmrem.fromScene(environment, 0.04);
-    this.scene.environment = this.environment.texture;
-    this.scene.environmentIntensity = 0.24;
-    environment.dispose();
-    pmrem.dispose();
+    this.environment = null;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     Object.assign(this.controls, {
       enableDamping: !this.reduced,
@@ -214,7 +209,7 @@ export class World {
     this.grassFloor.count = 0;
     this.grassFloor.receiveShadow = true;
     this.scene.add(this.grassFloor);
-    const wallGeo = new RoundedBoxGeometry(1, 1, 1, 1, 0.035);
+    const wallGeo = new THREE.BoxGeometry(1, 1, 1);
     this.walls = new THREE.InstancedMesh(
       wallGeo,
       surface("stone", 0x99aba7),
@@ -234,6 +229,7 @@ export class World {
     }
     this.player = hero();
     this.player.visible = false;
+    this.bindHero();
     this.scene.add(this.player);
     this.playerLight = new THREE.PointLight(0xffc172, 6, 8, 2);
     this.scene.add(this.playerLight);
@@ -257,7 +253,7 @@ export class World {
       );
     };
     this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(250, 250, 16, 16),
+      new THREE.PlaneGeometry(250, 250, 4, 4),
       this.waterMaterial,
     );
     this.water.rotation.x = -Math.PI / 2;
@@ -323,6 +319,9 @@ export class World {
     this.pickHits = [];
     this.cameraLive = false;
     this.lampPool = [];
+    this.billboards = [];
+    this.draining = [];
+    this.torchBudget = 2;
     const canvas = this.renderer.domElement;
     const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
     listen(canvas, "pointerdown", (e) => {
@@ -372,13 +371,8 @@ export class World {
       window.dispatchEvent(new Event("ularn:graphics-lost"));
     });
     listen(canvas, "webglcontextrestored", () => {
-      const pmrem = new THREE.PMREMGenerator(this.renderer),
-        environment = new RoomEnvironment();
-      this.environment = pmrem.fromScene(environment, 0.04);
-      this.scene.environment = this.environment.texture;
-      environment.dispose();
-      pmrem.dispose();
-      this.renderer.shadowMap.needsUpdate = true;
+      this.environment = null;
+      this.applyGpuQuality();
       this.lost = false;
       this.resize();
       this.invalidate();
@@ -421,6 +415,10 @@ export class World {
         triangles: this.renderer.info.render.triangles,
         geometries: this.renderer.info.memory.geometries,
         textures: this.renderer.info.memory.textures,
+        lights: this.scene.children.filter((o) => o.isLight && o.visible && o.intensity > 0).length,
+        environment: !!this.scene.environment,
+        shadowMap: this.sun.shadow.mapSize.x,
+        antialias: this.quality === "cinematic",
         contextLost: this.lost,
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
@@ -555,15 +553,52 @@ export class World {
     this.environment = null;
     this.scene.environment = null;
   }
+  bindHero() {
+    this.heroBody = this.player.getObjectByName("body");
+    this.heroLeftLeg = this.player.getObjectByName("left-leg");
+    this.heroRightLeg = this.player.getObjectByName("right-leg");
+    this.heroWeapon = this.player.getObjectByName("weapon");
+    this.heroCape = this.player.getObjectByName("cape");
+  }
+  buildEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(this.renderer),
+      environment = new RoomEnvironment();
+    this.environment?.dispose();
+    this.environment = pmrem.fromScene(environment, 0.04);
+    environment.dispose();
+    pmrem.dispose();
+  }
+  applyGpuQuality() {
+    const cinematic = this.quality === "cinematic";
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 1));
+    this.renderer.shadowMap.type = cinematic ? THREE.PCFShadowMap : THREE.BasicShadowMap;
+    this.sun.shadow.mapSize.set(cinematic ? 2048 : 512, cinematic ? 2048 : 512);
+    this.sun.shadow.map?.dispose();
+    this.sun.shadow.map = null;
+    this.bloom.enabled = cinematic;
+    this.torchBudget = cinematic ? this.torchLights.length : 2;
+    this.torchLights.forEach((light, i) => {
+      if (i >= this.torchBudget) {
+        light.visible = false;
+        light.intensity = 0;
+      } else light.visible = true;
+    });
+    if (cinematic) {
+      if (!this.environment) this.buildEnvironment();
+      this.scene.environment = this.environment.texture;
+      this.scene.environmentIntensity = 0.24;
+    } else {
+      this.scene.environment = null;
+      this.scene.environmentIntensity = 0;
+    }
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.renderer.shadowMap.needsUpdate = true;
+  }
   setQuality(value, persist = true) {
     this.quality = ["cinematic", "balanced"].includes(value)
       ? value
       : "balanced";
-    const cinematic = this.quality === "cinematic";
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 1));
-    this.sun.shadow.mapSize.set(cinematic ? 2048 : 1024, cinematic ? 2048 : 1024);
-    this.bloom.enabled = cinematic;
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.applyGpuQuality();
     if (persist)
       try {
         localStorage.setItem("ularn3d.quality", this.quality);
@@ -652,7 +687,7 @@ export class World {
       }
     }
     this.mountains(20, 16, -7, -8);
-    batch(this.terrain);
+    batch(this.terrain, { castShadow: false });
     this.camera.position.set(21, 20, 26);
     this.controls.target.set(-3, 0, 0);
     this.controls.autoRotate = !this.reduced;
@@ -774,7 +809,7 @@ export class World {
           rock.scale.y = 0.7;
         }
         this.mountains(state.width, state.height);
-        batch(this.terrain);
+        batch(this.terrain, { castShadow: false });
       }
     }
     if (this.character !== state.character) {
@@ -782,6 +817,7 @@ export class World {
       destroy(this.player);
       this.player = hero(state.character);
       this.character = state.character;
+      this.bindHero();
       this.scene.add(this.player);
     }
     const ids = new Set();
@@ -925,6 +961,17 @@ export class World {
         destroy(o.mesh);
         this.objects.delete(key);
       }
+    this.billboards.length = 0;
+    this.draining.length = 0;
+    for (const { mesh } of this.objects.values()) {
+      if (mesh.userData.itemArt) this.billboards.push(mesh.userData.itemArt);
+      let fountain = mesh.userData.fountainMesh;
+      if (!fountain) {
+        fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
+        if (fountain) mesh.userData.fountainMesh = fountain;
+      }
+      if (fountain?.userData.drainStartedAt) this.draining.push(fountain);
+    }
     this.walls.count = this.caps.count = this.wallCells.length;
     this.player.visible = true;
     if (!this.playerTarget) this.playerTarget = new THREE.Vector3();
@@ -967,6 +1014,9 @@ export class World {
       this.burst.children.forEach((p) => p.position.set(0, 0.5, 0));
     }
     this.lastPlayer = { x: state.x, y: state.y };
+    const town = state.level === 0;
+    this.playerLight.visible = !town;
+    this.playerLight.intensity = town ? 0 : 6;
     this.playerLight.color.set(state.level > 15 ? 0xffa466 : 0xffce89);
     this.sun.position.set(state.x - 12, 24, state.y + 8);
     this.sun.target.position.copy(target);
@@ -975,8 +1025,9 @@ export class World {
       (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
     );
     for (let i = 0; i < this.torchLights.length; i++) {
-      const lamp = this.lamps[i],
+      const lamp = i < this.torchBudget ? this.lamps[i] : null,
         light = this.torchLights[i];
+      light.visible = !!lamp;
       light.intensity = lamp ? 5 : 0;
       if (lamp) light.position.copy(lamp);
     }
@@ -1124,23 +1175,18 @@ export class World {
       this.playerLight.position
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
-      const body = this.player.getObjectByName("body");
+      const body = this.heroBody;
       if (body && !this.reduced) {
         this.walkAge = this.walkStartedAt === undefined ? 1 : (now - this.walkStartedAt) / 1000;
         this.attackAge = this.attackStartedAt === undefined ? 1 : (now - this.attackStartedAt) / 1000;
         this.castAge = this.castStartedAt === undefined ? 1 : (now - this.castStartedAt) / 1000;
         const walk = Math.max(0, 1 - this.walkAge / 0.28);
         body.position.y = Math.abs(Math.sin(this.walkAge * 26)) * 0.045 * walk;
-        for (const name of ["left-leg", "right-leg"]) {
-          const limb = this.player.getObjectByName(name);
-          if (limb)
-            limb.rotation.x =
-              Math.sin(this.walkAge * 26) *
-              (name === "left-leg" ? 1 : -1) *
-              0.45 *
-              walk;
-        }
-        const weapon = this.player.getObjectByName("weapon");
+        if (this.heroLeftLeg)
+          this.heroLeftLeg.rotation.x = Math.sin(this.walkAge * 26) * 0.45 * walk;
+        if (this.heroRightLeg)
+          this.heroRightLeg.rotation.x = Math.sin(this.walkAge * 26) * -0.45 * walk;
+        const weapon = this.heroWeapon;
         if (weapon)
           weapon.rotation.x =
             this.castAge < 0.65
@@ -1148,8 +1194,7 @@ export class World {
               : this.attackAge < 0.3
               ? -Math.sin((this.attackAge / 0.3) * Math.PI) * 1.4
               : 0;
-        const cape = this.player.getObjectByName("cape");
-        if (cape) cape.rotation.x = -0.25 + Math.sin(this.tick * 2) * 0.035;
+        if (this.heroCape) this.heroCape.rotation.x = -0.25 + Math.sin(this.tick * 2) * 0.035;
       }
     }
     if (!this.reduced) {
@@ -1198,12 +1243,10 @@ export class World {
       if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
       if (camTurned) faceMonster(mesh, null, this.camera);
     }
-    for (const { mesh } of this.objects.values()) {
-      if (camTurned && mesh.userData.itemArt) faceItem(mesh.userData.itemArt, this.camera);
-      const fountain = mesh.userData.fountainMesh
-        || mesh.children.find((child) => child.userData.drainAge !== undefined);
-      if (!fountain) continue;
-      mesh.userData.fountainMesh = fountain;
+    if (camTurned) {
+      for (const art of this.billboards) faceItem(art, this.camera);
+    }
+    for (const fountain of this.draining) {
       fountain.userData.drainAge = (now - fountain.userData.drainStartedAt) / 1000;
       const water = fountain.getObjectByName("fountain-water");
       if (water) {

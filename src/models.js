@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, surface, noise } from "./materials.js";
 export { mat } from "./materials.js";
 const shared = new Map();
@@ -11,8 +10,10 @@ const geometry = (key, create) => {
   }
   return shared.get(key);
 };
-const boxGeo = geometry("box", () => new RoundedBoxGeometry(1, 1, 1, 1, 0.055));
-const sphereGeo = geometry("orb", () => new THREE.IcosahedronGeometry(1, 2));
+// Box/orb/ring are the common solids. Rounded boxes and high-segment tori
+// cost ~9× the triangles at a distance where the extra silhouette is lost.
+const boxGeo = geometry("box", () => new THREE.BoxGeometry(1, 1, 1));
+const sphereGeo = geometry("orb", () => new THREE.IcosahedronGeometry(1, 1));
 const letterMaps = new Map();
 function letterTexture(letter, ink, paper) {
   const key = `${letter}:${ink}:${paper}`;
@@ -76,7 +77,7 @@ export function cone(g, color, x, y, z, r, h, n = 8) {
     r,
   );
 }
-export function cylinder(g, color, x, y, z, r, h, n = 12) {
+export function cylinder(g, color, x, y, z, r, h, n = 8) {
   return mesh(
     g,
     geometry(`cylinder${n}`, () => new THREE.CylinderGeometry(1, 1, 1, n)),
@@ -92,7 +93,7 @@ export function cylinder(g, color, x, y, z, r, h, n = 12) {
 export function ring(g, color, r = 0.4, y = 0.025) {
   const m = mesh(
     g,
-    geometry("ring", () => new THREE.TorusGeometry(1, 0.026, 6, 48)),
+    geometry("ring", () => new THREE.TorusGeometry(1, 0.026, 4, 16)),
     mat(color, {
       emissive: color,
       emissiveIntensity: 0.65,

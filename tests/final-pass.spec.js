@@ -84,17 +84,32 @@ test("pausing interrupts native auto-explore without spending another turn", asy
   expect(await page.evaluate(() => player.MOVESMADE)).toBe(before + 1);
 });
 
-test("title renderer batches buildings within its draw-call budget", async ({
+test("title renderer batches buildings within its draw-call and triangle budget", async ({
   page,
 }) => {
   await page.waitForTimeout(300);
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
   console.log("Title graphics", metrics);
   expect(metrics.drawCalls).toBeLessThan(160);
-  // Frustum culling at the slowly rotating title camera can move this by a
-  // few thousand triangles; the floor is a batching/detail regression guard.
-  expect(metrics.triangles).toBeGreaterThan(35000);
+  expect(metrics.triangles).toBeGreaterThan(4000);
+  expect(metrics.triangles).toBeLessThan(25000);
+  expect(metrics.lights).toBeLessThanOrEqual(6);
+  expect(metrics.environment).toBe(false);
+  expect(metrics.shadowMap).toBe(512);
   await page.screenshot({ path: "test-results/optimized-title.png" });
+});
+
+test("town stays within a web GPU budget after the poly and light cuts", async ({
+  page,
+}) => {
+  await start(page);
+  await page.waitForTimeout(400);
+  const metrics = await page.evaluate(() => ularnGraphics.metrics());
+  console.log("Town graphics", metrics);
+  expect(metrics.drawCalls).toBeLessThan(220);
+  expect(metrics.triangles).toBeLessThan(30000);
+  expect(metrics.lights).toBeLessThanOrEqual(6);
+  expect(metrics.environment).toBe(false);
 });
 
 test("all generated floors and changed inventory survive a save and reload", async ({

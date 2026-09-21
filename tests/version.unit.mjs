@@ -20,6 +20,7 @@ test("npm version restamp keeps package.json, lockfile, and Vercel filename toge
   assert.notEqual(version, "1.0.0");
   assert.notEqual(version, "1.1.0");
   assert.notEqual(version, "1.2.0");
+  assert.notEqual(version, "1.2.1");
 });
 
 test("play page and field guide stamp version from package.json placeholders", () => {
