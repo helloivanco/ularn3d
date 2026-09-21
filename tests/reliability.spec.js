@@ -280,6 +280,8 @@ test("compact portrait and landscape keep essential HUD and controls reachable",
     await expect(page.locator("#attributes")).toHaveText(
       /STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/,
     );
+    await expect(page.locator("#spell-count")).toHaveText(/Spells\s*:\s*\d+\/\d+/);
+    await expect(page.locator("#mana-text")).toBeVisible();
     const moves = await page.evaluate(() => player.MOVESMADE);
     await page
       .getByRole("button", { name: "Wait one turn", exact: true })

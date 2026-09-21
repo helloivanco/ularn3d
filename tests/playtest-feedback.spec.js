@@ -79,31 +79,45 @@ test("character stats sit beside the adventurer frame and the map shows the whol
   });
   await page.waitForTimeout(400);
   await expect(page.locator("#attributes")).toBeVisible();
+  await expect(page.locator("#spell-count")).toHaveText(/Spells\s*:\s*\d+\/\d+/);
   await expect(page.locator("#attributes")).toHaveText(/STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/);
   await expect(page.locator("#gold")).toBeVisible();
   const layout = await page.evaluate(() => {
+    const box = document.getElementById("stat-box").getBoundingClientRect();
     const stats = document.getElementById("attributes").getBoundingClientRect();
     const hero = document.querySelector(".hero-panel").getBoundingClientRect();
     const journal = document.querySelector(".journal").getBoundingClientRect();
     const map = document.getElementById("minimap");
-    const box = map.getBoundingClientRect();
+    const mapBox = map.getBoundingClientRect();
+    const snap = ularn.snapshot();
     const cols = +map.dataset.cols;
     const rows = +map.dataset.rows;
     return {
       statsVisible: stats.width > 80 && stats.height > 20,
       labels: document.getElementById("attributes").innerText.replace(/\s+/g, " ").trim(),
-      besideHero: Math.abs(stats.top - hero.top) < 80 && stats.left >= hero.right - 12,
-      journalMoved: journal.left >= stats.right - 8,
-      cellWidth: box.width / cols,
-      cellHeight: box.height / rows,
-      boxWidth: box.width,
+      spells: document.getElementById("spell-count").innerText.replace(/\s+/g, " ").trim(),
+      mana: snap.mana,
+      manaMax: snap.manaMax,
+      manaMeter: document.getElementById("mana-text").textContent.replace(/\s+/g, " ").trim(),
+      besideHero: Math.abs(box.top - hero.top) < 80 && box.left >= hero.right - 12,
+      journalMoved: journal.left >= box.right - 8,
+      spellAboveStats: document.getElementById("spell-count").getBoundingClientRect().bottom <= stats.top + 2,
+      spellLarger: parseFloat(getComputedStyle(document.getElementById("spell-count")).fontSize) >
+        parseFloat(getComputedStyle(document.getElementById("attributes")).fontSize),
+      cellWidth: mapBox.width / cols,
+      cellHeight: mapBox.height / rows,
+      boxWidth: mapBox.width,
       canvas: { w: map.width, h: map.height },
       cols,
-      mapWidth: ularn.snapshot().width,
+      mapWidth: snap.width,
     };
   });
   expect(layout.statsVisible).toBe(true);
   expect(layout.labels).toMatch(/^STR=\d+ INT=\d+ WIS=\d+ CON=\d+ DEX=\d+$/);
+  expect(layout.spells).toBe(`Spells : ${layout.mana}/${layout.manaMax}`);
+  expect(layout.manaMeter).toBe(`${layout.mana} / ${layout.manaMax}`);
+  expect(layout.spellAboveStats).toBe(true);
+  expect(layout.spellLarger).toBe(true);
   expect(layout.besideHero).toBe(true);
   expect(layout.journalMoved).toBe(true);
   expect(layout.cellWidth).toBeGreaterThanOrEqual(12);
