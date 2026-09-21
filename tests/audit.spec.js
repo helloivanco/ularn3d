@@ -233,8 +233,9 @@ test("all creature and item models render; level changes release GPU resources",
   await start(page);
   await page.evaluate(() => {
     newcavelevel(20);
-    player.x = 33;
-    player.y = 8;
+    const span = Math.max(8, MAXX - 4);
+    player.x = Math.min(33, MAXX - 3);
+    player.y = Math.min(8, MAXY - 3);
     for (let x = 0; x < MAXX; x++)
       for (let y = 0; y < MAXY; y++) {
         setItem(x, y, OEMPTY);
@@ -243,13 +244,17 @@ test("all creature and item models render; level changes release GPU resources",
       }
     for (let id = 1; id < monsterlist.length; id++) {
       if (!monsterlist[id]) continue;
-      const x = 2 + (id % 60),
-        y = 2 + Math.floor(id / 60);
+      const x = 2 + (id % span),
+        y = 2 + Math.floor(id / span);
+      if (y >= MAXY - 1) continue;
       setMonster(x, y, createMonster(id));
     }
     for (let id = 1; id < itemlist.length; id++) {
       if (!itemlist[id]) continue;
-      setItem(2 + (id % 60), 6 + Math.floor(id / 60), createObject(id));
+      const x = 2 + (id % span),
+        y = 6 + Math.floor(id / span);
+      if (y >= MAXY - 1) continue;
+      setItem(x, y, createObject(id));
     }
     paint();
   });
@@ -261,7 +266,11 @@ test("all creature and item models render; level changes release GPU resources",
         paint();
       }
     });
-    await page.waitForTimeout(400);
+    await expect
+      .poll(() => page.evaluate(() => ularnGraphics.metrics().geometries), {
+        timeout: 15000,
+      })
+      .toBeGreaterThan(40);
     return page.evaluate(() => ularnGraphics.metrics());
   }
   await cycle();
