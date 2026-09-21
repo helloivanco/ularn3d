@@ -379,43 +379,39 @@ function drawMap() {
   canvas.dataset.rows = String(rows);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = "#071114";
+  ctx.fillStyle = "#0a1214";
   ctx.fillRect(0, 0, cssW, cssH);
   const fontPx = Math.max(6, Math.round(cell * 0.8));
   ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const known = new Map(state.tiles.map((t) => [`${t.x},${t.y}`, t]));
   const mark = Math.max(1, Math.round(cell * 0.14));
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = x0 + col,
-        y = y0 + row;
-      const t = known.get(`${x},${y}`);
-      const px = col * cell,
-        py = row * cell;
-      ctx.fillStyle = t ? (t.wall ? "#3a4d4a" : "#173236") : "#0a1214";
-      ctx.fillRect(px, py, cell, cell);
-      if (!t || t.wall) continue;
-      const cx = px + cell / 2,
-        cy = py + cell / 2;
-      if (x === state.x && y === state.y) continue;
-      const symbol =
-        t.monster?.symbol ||
-        MAP_GLYPHS[t.id] ||
-        t.symbol ||
-        (t.id ? "?" : ".");
-      const notable =
-        t.monster ||
-        MAP_GLYPHS[t.id] ||
-        (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
-      if (notable) {
-        ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
-        ctx.fillText(symbol, cx, cy);
-      } else {
-        ctx.fillStyle = "#6d8a82";
-        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
-      }
+  for (const t of state.tiles) {
+    const col = t.x - x0,
+      row = t.y - y0;
+    if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+    const px = col * cell,
+      py = row * cell;
+    ctx.fillStyle = t.wall ? "#3a4d4a" : "#173236";
+    ctx.fillRect(px, py, cell, cell);
+    if (t.wall || (t.x === state.x && t.y === state.y)) continue;
+    const cx = px + cell / 2,
+      cy = py + cell / 2;
+    const symbol =
+      t.monster?.symbol ||
+      MAP_GLYPHS[t.id] ||
+      t.symbol ||
+      (t.id ? "?" : ".");
+    const notable =
+      t.monster ||
+      MAP_GLYPHS[t.id] ||
+      (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
+    if (notable) {
+      ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
+      ctx.fillText(symbol, cx, cy);
+    } else {
+      ctx.fillStyle = "#6d8a82";
+      ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
     }
   }
   if (
@@ -431,12 +427,16 @@ function drawMap() {
     ctx.fillStyle = "#132325";
     ctx.fillText("@", px + cell / 2, py + cell / 2);
   }
-  const panel = canvas.closest(".map-panel");
-  if (panel) {
-    document.body.style.setProperty(
-      "--map-bottom",
-      `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
-    );
+  const sizeKey = `${nextWidth}x${nextHeight}:${cssW}x${cssH}`;
+  if (canvas.dataset.sizeKey !== sizeKey) {
+    canvas.dataset.sizeKey = sizeKey;
+    const panel = canvas.closest(".map-panel");
+    if (panel) {
+      document.body.style.setProperty(
+        "--map-bottom",
+        `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
+      );
+    }
   }
 }
 function stopTravel() {

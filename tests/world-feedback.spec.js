@@ -276,6 +276,45 @@ test("town plaza walls stay full height while walking past them", async ({ page 
   expect(walls.every((w) => w.height > 1)).toBe(true);
 });
 
+test("a revealed dungeon floor does not keep a scene node per empty tile", async ({ page }) => {
+  const stats = await page.evaluate(() => {
+    newcavelevel(1);
+    player.x = 10;
+    player.y = 8;
+    player.HP = player.HPMAX = 200;
+    for (let x = 0; x < MAXX; x++)
+      for (let y = 0; y < MAXY; y++) {
+        setMonster(x, y, null);
+        setItem(x, y, x === 0 || y === 0 || x === MAXX - 1 || y === MAXY - 1 ? OWALL : OEMPTY);
+        setKnow(x, y, KNOWALL);
+      }
+    paint();
+    const snap = ularn.snapshot();
+    const metrics = ularnGraphics.metrics();
+    ularn.key("l");
+    ularn.key("l");
+    const walked = ularnGraphics.metrics();
+    return {
+      tiles: snap.tiles.length,
+      walls: ularnGraphics.walls().length,
+      cut: ularnGraphics.walls().filter((w) => w.height < 0.5).length,
+      propGroups: metrics.propGroups,
+      floorInstances: metrics.floorInstances,
+      wallInstances: metrics.wallInstances,
+      lights: metrics.lights,
+      walkedGroups: walked.propGroups,
+      size: { width: MAXX, height: MAXY },
+    };
+  });
+  expect(stats.tiles).toBe(stats.size.width * stats.size.height);
+  expect(stats.propGroups).toBe(0);
+  expect(stats.walkedGroups).toBe(0);
+  expect(stats.floorInstances).toBeGreaterThan(100);
+  expect(stats.wallInstances).toBe(stats.walls);
+  expect(stats.cut).toBeLessThanOrEqual(2);
+  expect(stats.lights).toBeLessThanOrEqual(5);
+});
+
 test("idle and hidden rendering stops and gameplay wakes it without accumulating resources", async ({ page }) => {
   await room(page);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().idle), { timeout: 8000 }).toBe(true);

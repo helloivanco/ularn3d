@@ -87,7 +87,7 @@ test("pausing interrupts native auto-explore without spending another turn", asy
 test("title renderer batches buildings within its draw-call and triangle budget", async ({
   page,
 }) => {
-  await page.waitForTimeout(300);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(1);
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
   console.log("Title graphics", metrics);
   expect(metrics.drawCalls).toBeLessThan(160);

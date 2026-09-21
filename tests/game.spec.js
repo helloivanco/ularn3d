@@ -210,12 +210,13 @@ test("shop, spell casting, item use, and full depth generation", async ({
         l,
         items: LEVELS[l].items.length,
         monsters: LEVELS[l].monsters.length,
+        width: MAXX,
       });
     }
     return counts;
   });
   expect(levels).toHaveLength(20);
-  expect(levels.every((l) => l.items === 34 && l.monsters === 34)).toBe(true);
+  expect(levels.every((l) => l.items === l.width && l.monsters === l.width)).toBe(true);
 });
 test("death ends the run, clears autosave, and allows a fresh expedition", async ({
   page,

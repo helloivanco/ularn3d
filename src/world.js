@@ -232,7 +232,12 @@ export class World {
     this.bindHero();
     this.scene.add(this.player);
     this.playerLight = new THREE.PointLight(0xffc172, 6, 8, 2);
+    this.playerLight.visible = false;
+    this.playerLight.intensity = 0;
     this.scene.add(this.playerLight);
+    this.wallHeightAt = [];
+    this.wallLayout = 0;
+    this.wallLayoutKey = null;
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
       this.scene.add(l);
@@ -433,6 +438,9 @@ export class World {
           this.camera.position.z - this.controls.target.z,
         ],
         monsterActors: this.monsters.size,
+        propGroups: this.objects.size,
+        floorInstances: this.floor.count + this.grassFloor.count,
+        wallInstances: this.walls.count,
         ...monsterArtMetrics(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
@@ -602,7 +610,17 @@ export class World {
       this.scene.environmentIntensity = 0;
     }
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.syncPlayerLight();
     this.renderer.shadowMap.needsUpdate = true;
+  }
+  syncPlayerLight() {
+    // Balanced already dropped the hero point light in town. Dungeon paid it
+    // on the whole InstancedMesh floor, which is most of the screen.
+    const lantern = this.quality === "cinematic" && this.state && this.state.level !== 0;
+    this.playerLight.visible = lantern;
+    this.playerLight.intensity = lantern ? 6 : 0;
+    if (lantern)
+      this.playerLight.color.set(this.state.level > 15 ? 0xffa466 : 0xffce89);
   }
   setQuality(value, persist = true) {
     this.quality = ["cinematic", "balanced"].includes(value)
@@ -758,6 +776,9 @@ export class World {
       this.monsters.clear();
       this.effects.clear();
       this.lamps = [];
+      this.wallHeightAt.length = 0;
+      this.wallView = null;
+      this.wallLayoutKey = null;
       this.level = state.level;
       this.lastPlayer = null;
       const town = state.level === 0,
@@ -774,8 +795,8 @@ export class World {
       this.floor.material = surface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
       this.water.visible = town;
       this.paths = this.townPaths(state.tiles);
-      if (!town)
-        box(
+      if (!town) {
+        const slab = box(
           this.terrain,
           volcano ? 0x22191a : 0x101d24,
           (state.width - 1) / 2,
@@ -785,7 +806,11 @@ export class World {
           0.45,
           state.height,
         );
-      else {
+        // Town terrain is merged with castShadow off. The dungeon slab used to
+        // recast a 57×20 box into the shadow map on every cutaway step.
+        slab.castShadow = false;
+        slab.receiveShadow = false;
+      } else {
         block(
           this.terrain,
           "stone",
@@ -835,6 +860,7 @@ export class World {
       grassIndex = 0;
     this.wallCells = [];
     this.lamps.length = 0;
+    let wallLayout = 0;
     let lampIndex = 0;
     let floorHash = state.tiles.length ^ (state.level * 9973);
     for (const t of state.tiles) {
@@ -877,12 +903,26 @@ export class World {
         floor.setMatrixAt(index, matrix);
         floor.setColorAt(index, color);
       }
-      if (t.wall) this.wallCells.push(t);
+      if (t.wall) {
+        this.wallCells.push(t);
+        wallLayout =
+          (Math.imul(wallLayout, 16777619) ^ ((t.x + 1) * 73471 + (t.y + 1))) | 0;
+      }
       if (t.store && t.id !== 55)
         takeLamp(t.x - 0.2, 1.25, t.y + 0.75);
       if (t.id === 55) takeLamp(t.x, 0.5, t.y);
       if (t.wall && noise(t.x, t.y) > 0.87)
         takeLamp(t.x, 1.45, t.y);
+      // Empty floors and walls are already InstancedMeshes. A Group per
+      // HAVESEEN tile made large dungeon rooms walk like molasses.
+      if (t.wall || t.id === 0) {
+        if (prev) {
+          this.props.remove(prev.mesh);
+          destroy(prev.mesh);
+          this.objects.delete(key);
+        }
+        continue;
+      }
       if (prev?.sig === sig) continue;
       if (prev) {
         this.props.remove(prev.mesh);
@@ -891,40 +931,36 @@ export class World {
       const g = new THREE.Group();
       g.position.set(t.x, 0, t.y);
       g.userData.tile = { x: t.x, y: t.y };
-      if (t.wall) {
-        // Point lights still attach via takeLamp. Per-wall torch meshes
-        // were hundreds of extra draw calls for a silhouette the camera cannot see.
-      } else if (t.id !== 0) {
-        const art = itemSprite(t, () => this.invalidate());
-        const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
-        g.add(model);
-        if (art) {
-          g.userData.itemArt = art;
-          g.userData.itemId = t.id;
-          g.userData.itemArg = t.arg ?? 0;
-          faceItem(art, this.camera);
+      const art = itemSprite(t, () => this.invalidate());
+      const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
+      g.add(model);
+      if (art) {
+        g.userData.itemArt = art;
+        g.userData.itemId = t.id;
+        g.userData.itemArg = t.arg ?? 0;
+        faceItem(art, this.camera);
+      }
+      if (t.store) {
+        // Batching replaces the model group with merged meshes. Keep its
+        // stair meaning on the tile group so the surface shaft stays legible.
+        if (model.userData.stairDirection) {
+          g.userData.stairDirection = model.userData.stairDirection;
+          g.userData.stairBlocked = model.userData.stairBlocked;
         }
-        if (t.store) {
-          // Batching replaces the model group with merged meshes. Keep its
-          // stair meaning on the tile group so the surface shaft stays legible.
-          if (model.userData.stairDirection) {
-            g.userData.stairDirection = model.userData.stairDirection;
-            g.userData.stairBlocked = model.userData.stairBlocked;
-          }
-          g.position.set(0, 0, 0);
-          batch(g);
-          g.position.set(t.x, 0, t.y);
-        }
-        if (t.store || t.id === 93) {
-          g.userData.landmarkLabel = t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
-          const text = label(g.userData.landmarkLabel);
-          text.position.y = t.id === 56 || t.id === 93 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
-          g.add(text);
-        }
+        g.position.set(0, 0, 0);
+        batch(g);
+        g.position.set(t.x, 0, t.y);
+      }
+      if (t.store || t.id === 93) {
+        g.userData.landmarkLabel = t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
+        const text = label(g.userData.landmarkLabel);
+        text.position.y = t.id === 56 || t.id === 93 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
+        g.add(text);
       }
       this.props.add(g);
       this.objects.set(key, { sig, mesh: g });
     }
+    this.wallLayout = wallLayout ^ this.wallCells.length;
     const creatures = new Set();
     for (const tile of state.tiles) {
       const monster = tile.monster;
@@ -1025,10 +1061,7 @@ export class World {
       this.burst.children.forEach((p) => p.position.set(0, 0.5, 0));
     }
     this.lastPlayer = { x: state.x, y: state.y };
-    const town = state.level === 0;
-    this.playerLight.visible = !town;
-    this.playerLight.intensity = town ? 0 : 6;
-    this.playerLight.color.set(state.level > 15 ? 0xffa466 : 0xffce89);
+    this.syncPlayerLight();
     this.sun.position.set(state.x - 12, 24, state.y + 8);
     this.sun.target.position.copy(target);
     this.dust.position.set(state.x, 0, state.y);
@@ -1042,7 +1075,6 @@ export class World {
       light.intensity = lamp ? 5 : 0;
       if (lamp) light.position.copy(lamp);
     }
-    this.wallView = null;
     this.updateWalls();
     if (isNew) this.renderer.shadowMap.needsUpdate = true;
     this.invalidate();
@@ -1055,21 +1087,32 @@ export class World {
       .setY(0);
     if (toward.lengthSq() < 1e-8) return;
     toward.normalize();
-    const viewKey = [
-      this.state.x,
-      this.state.y,
-      Math.round(toward.x * 50),
-      Math.round(toward.z * 50),
-    ].join(":");
+    const town = this.state.level === 0;
+    // Town heights never change. Skip player/orbit from the cache key so a
+    // plaza walk does not rebuild every wall matrix.
+    const viewKey = town
+      ? `t:${this.wallLayout}`
+      : [
+          this.state.x,
+          this.state.y,
+          Math.round(toward.x * 50),
+          Math.round(toward.z * 50),
+          this.wallLayout,
+        ].join(":");
     if (this.wallView === viewKey) return;
     this.wallView = viewKey;
-    this.renderer.shadowMap.needsUpdate = true;
-    const town = this.state.level === 0;
+    const layoutChanged = this.wallLayoutKey !== this.wallLayout;
+    this.wallLayoutKey = this.wallLayout;
+    if (layoutChanged) this.wallHeightAt.length = 0;
+    let changed = 0;
     for (let i = 0; i < this.wallCells.length; i++) {
       const t = this.wallCells[i],
         dx = t.x - this.state.x,
         dz = t.y - this.state.y;
       const h = wallHeight(dx, dz, toward.x, toward.z, town);
+      if (!layoutChanged && this.wallHeightAt[i] === h) continue;
+      this.wallHeightAt[i] = h;
+      changed++;
       this.scratchPosition.set(t.x, h / 2 - 0.01, t.y);
       this.scratchScale.set(0.985, h, 0.985);
       this.scratchMatrix.compose(
@@ -1087,10 +1130,12 @@ export class World {
       );
       this.caps.setMatrixAt(i, this.scratchMatrix);
     }
+    if (!changed) return;
     for (const mesh of [this.walls, this.caps]) {
       mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
+      if (layoutChanged) mesh.computeBoundingSphere();
     }
+    if (layoutChanged) this.renderer.shadowMap.needsUpdate = true;
   }
   pick(e) {
     if (!this.state || !this.state.maze || this.state.over || this.lost)
