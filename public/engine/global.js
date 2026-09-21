@@ -241,8 +241,8 @@ function enchantarmor(enchant_source) {
     if (enchant_source == ENCH_FOUNTAIN && armor.arg >= 0) {
       return false; // fountains should only improve negative stats
     }
-    if (ULARN) {
-      // choose what to enchant
+    if (ULARN && enchant_source != ENCH_SCROLL) {
+      // altars and fountains still choose randomly; scrolls always keep worn armor
       armor = (rund(100) < 50) ? player.SHIELD : player.WEAR;
       if (!armor) armor = (armor == player.SHIELD) ? player.WEAR : player.SHIELD;
     }
