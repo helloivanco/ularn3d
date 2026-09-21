@@ -3,6 +3,7 @@ name: Windows desktop
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags: ['desktop-v*']
   pull_request:
     paths:
@@ -10,9 +11,11 @@ on:
       - 'tests/desktop*'
       - 'package*.json'
       - '.github/workflows/windows-desktop.yml'
+      - 'scripts/publish-windows-release.mjs'
+      - 'scripts/app-version.mjs'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -37,6 +40,11 @@ jobs:
             release/*.exe
             release/*.exe.sha256
           if-no-files-found: error
+      - name: Publish versioned Windows download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-windows-release.mjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

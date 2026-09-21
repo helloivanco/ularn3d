@@ -55,12 +55,22 @@
         },
         {
           "key": "Content-Disposition",
-          "value": "attachment; filename=\"Ularn-1.2.0.windows.exe\""
+          "value": "attachment; filename=\"Ularn-1.2.1.windows.exe\""
         }
       ]
     }
   ],
   "redirects": [
+    {
+      "source": "/downloads/SHA256SUMS.txt",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.2.1/SHA256SUMS.txt",
+      "permanent": false
+    },
+    {
+      "source": "/downloads/Ularn.windows.exe",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.2.1/Ularn-1.2.1.windows.exe",
+      "permanent": false
+    },
     {
       "source": "/index.html",
       "destination": "/",

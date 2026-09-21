@@ -87,16 +87,13 @@ test("robots and sitemap advertise only canonical public pages", async ({ reques
 test("published Windows link serves a real executable and its checksum", async ({ request }) => {
   test.skip(process.env.DOWNLOAD_AVAILABLE !== "1", "Enable after the optional Windows artifact has been published.");
   const path = "/downloads/Ularn.windows.exe";
+  const redirect = await request.head(path, { maxRedirects: 0 });
+  expect(redirect.status()).toBe(307);
+  expect(new URL(redirect.headers().location).href).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/${downloadName}`);
   const head = await request.head(path);
   expect(head.status()).toBe(200);
   expect(head.headers()["content-type"]).not.toContain("text/html");
   expect(Number(head.headers()["content-length"])).toBeGreaterThan(65536);
-  if (process.env.SEO_DEPLOYED === "1") {
-    expect(head.headers()["content-type"]).toContain("application/vnd.microsoft.portable-executable");
-    expect(head.headers()["content-disposition"]).toContain(`attachment; filename="${downloadName}"`);
-    expect(head.headers()["x-robots-tag"]).toContain("noindex");
-  }
-  // Avoid transferring the entire desktop runtime during a routine site check.
   if (head.headers()["accept-ranges"]?.includes("bytes")) {
     const prefix = await request.get(path, { headers: { Range: "bytes=0-1" } });
     expect(prefix.status()).toBe(206);
@@ -104,7 +101,8 @@ test("published Windows link serves a real executable and its checksum", async (
   }
   const checksum = await request.get("/downloads/SHA256SUMS.txt");
   expect(checksum.status()).toBe(200);
-  expect(await checksum.text()).toMatch(/^[a-f\d]{64}\s+\*?Ularn\.windows\.exe\s*$/im);
+  const checksumName = downloadName.replaceAll(".", "\\.");
+  expect(await checksum.text()).toMatch(new RegExp(`^[a-f\\d]{64}\\s+\\*?${checksumName}\\s*$`, "im"));
 });
 
 test("deployed utility pages stay out of search and unknown routes are real 404s", async ({ request }) => {
@@ -125,11 +123,16 @@ test("deployed utility pages stay out of search and unknown routes are real 404s
   expect(missing.status()).toBe(404);
 });
 
-test("vercel download disposition filename matches package version", async () => {
+test("vercel download points at the GitHub Release for this package version", async () => {
   const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
   const disposition = vercel.headers
     .flatMap((entry) => entry.headers)
     .find((header) => header.key === "Content-Disposition")
     ?.value;
   expect(disposition).toBe(`attachment; filename="${downloadName}"`);
+  const exeRedirect = vercel.redirects.find((entry) => entry.source === "/downloads/Ularn.windows.exe");
+  expect(exeRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/${downloadName}`);
+  expect(exeRedirect?.permanent).toBe(false);
+  const checksumRedirect = vercel.redirects.find((entry) => entry.source === "/downloads/SHA256SUMS.txt");
+  expect(checksumRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/SHA256SUMS.txt`);
 });

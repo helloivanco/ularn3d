@@ -80,7 +80,9 @@ npm run preview
 
 `vercel.json` specifies Vite, `npm run build`, and the `dist` output directory. It normalizes the guide URL, marks engine/download URLs as non-indexable, and serves the executable as an attachment with cache revalidation. No application environment variables or server functions are needed.
 
-The Windows executable is deliberately excluded from Git. Every release deployment must stage a verified executable and its matching checksum under `public/downloads/` before building. A source-only Git deployment without that staging step will omit the download. From the linked Vercel project root, the complete macOS/Linux release sequence is:
+The Windows executable is deliberately excluded from Git. A source-only Git deployment therefore cannot embed it. Production keeps the stable `/downloads/Ularn.windows.exe` URL and redirects it to the GitHub Release asset `Ularn-${version}.windows.exe` for the current `package.json` version. A push to `main` runs the Windows desktop workflow, which publishes that release after verifying the portable build.
+
+Optional local prebuilt deploys can still stage a verified executable under `public/downloads/` before building:
 
 ```sh
 npm ci
@@ -101,7 +103,7 @@ After both comparisons succeed, publish that prebuilt output:
 npx vercel deploy --prebuilt --prod --scope hellos-projects-dbb58047
 ```
 
-Vercel's local build writes `.vercel/output`, and `--prebuilt` uploads that verified output. See the [Vercel build documentation](https://vercel.com/docs/cli/build). For a website-only update, reuse the currently released executable and matching checksum in the staging step. `release/` is excluded from Vercel uploads; `public/downloads/` is copied into `dist/downloads/`. Desktop packaging excludes `dist/downloads/`, preventing the executable from recursively bundling itself.
+Vercel's local build writes `.vercel/output`, and `--prebuilt` uploads that verified output. See the [Vercel build documentation](https://vercel.com/docs/cli/build). `release/` is excluded from Vercel uploads. Git-connected production deploys rely on the GitHub Release redirect rather than a staged binary. Desktop packaging excludes `dist/downloads/`, preventing the executable from recursively bundling itself.
 
 A classic 2D fallback is available at `/engine/larn_local.html?ularn=true` for devices without WebGL2. Its saves use the original engine's storage keys, separate from the 3D edition's autosave.
 
