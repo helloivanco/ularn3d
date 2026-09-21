@@ -74,10 +74,10 @@
   .playing .dpad { grid-template-columns: repeat(3,32px); }
 }
 @media (max-width: 700px) {
-  .playing { --dock-height: 280px; --map-width: min(272px, calc(100vw - 120px)); }
+  .playing { --dock-height: 268px; --map-width: min(272px, calc(100vw - 120px)); }
   .playing .topbar { padding: 0 12px; }
   .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: none; overflow: visible; }
-  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 58px 52px 36px 88px; gap: 8px; padding: 10px; }
+  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 58px 40px 36px 88px; gap: 8px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; border: none; padding: 0; }
   .playing .hero-heading { margin-bottom: 7px; }
   .playing .hero-heading h2 { font-size: 13px; }
@@ -90,7 +90,7 @@
   .playing #journal-lines { height: 17px; margin: 0; font-size: 9px; }
   .playing #CONTEXT { max-height: 24px; }
   .playing #stat-box { grid-column: 1; grid-row: 2; padding: 0; border: 0; gap: 2px; }
-  .playing #spell-count { font-size: 13px; }
+  .playing #spell-count { font-size: 12px; }
   .playing #attributes { padding: 0; border: 0; font-size: 9px; }
   .playing #attributes b { font-size: 11px; }
   .playing .movement { grid-column: 2; grid-row: 1 / 4; }
@@ -132,7 +132,7 @@
   .playing #journal-lines { height: 28px; font-size: 10px; margin-top: 3px; }
   .playing #CONTEXT { max-height: 26px; }
   .playing #stat-box { grid-column: 2; grid-row: 1; padding: 0 8px; gap: 2px; }
-  .playing #spell-count { font-size: 13px; }
+  .playing #spell-count { font-size: 12px; }
   .playing #attributes { padding: 0; font-size: 9px; }
   .playing #attributes b { font-size: 11px; }
   .playing .actionbar { grid-column: 1 / 4; grid-row: 2; grid-template-columns: repeat(10,minmax(0,1fr)); grid-template-rows: 43px; }
