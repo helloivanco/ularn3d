@@ -524,7 +524,15 @@ window.ularn = {
           arg: masked ? 0 : item.arg ?? 0,
           name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
           stair,
-          symbol: plainText3D(itemlist[masked ? 0 : item.id].ularnchar),
+          symbol: masked
+            ? plainText3D(itemlist[0].ularnchar)
+            : item.matches(OHOMEENTRANCE)
+              ? "<"
+              : item.matches(OSTAIRSUP)
+                ? "<"
+                : item.matches(OSTAIRSDOWN)
+                  ? ">"
+                  : plainText3D(itemlist[item.id].ularnchar),
           wall: !masked && item.matches(OWALL),
           hazard: !masked && !!item.isTrap(),
           closed: !masked && item.matches(OCLOSEDDOOR),

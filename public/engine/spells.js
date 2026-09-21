@@ -483,7 +483,7 @@ function speldamage(x) {
       }
       if (level != 0) eat(1, 1);
       if (level == 1)
-        setItem(33, MAXY - 1, OHOMEENTRANCE);
+        placeHomeEntrance();
       for (j = rnd(MAXY - 2), i = 1; i < MAXX - 1; i++) {
         setItem(i, j, OEMPTY);
       }

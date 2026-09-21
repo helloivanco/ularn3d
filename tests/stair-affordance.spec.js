@@ -53,7 +53,7 @@ test("known dead-end stairs match the level rules without exposing hidden tiles"
       setItem(8, 7, OSTAIRSUP);
       setItem(9, 7, OSTAIRSDOWN);
       if (depth === 16) setItem(10, 6, OVOLUP);
-      setItem(50, 2, OSTAIRSUP); // Unexplored stairs must remain absent.
+      setItem(MAXX - 2, 2, OSTAIRSUP); // Unexplored stairs must remain absent.
       setItem(12, 8, OSTAIRSUP);
       const hiddenMonster = createMonster(GNOME);
       hiddenMonster.isVisible = () => false;
@@ -63,7 +63,7 @@ test("known dead-end stairs match the level rules without exposing hidden tiles"
       return {
         up: snapshot.tiles.find((tile) => tile.x === 8 && tile.y === 7),
         down: snapshot.tiles.find((tile) => tile.x === 9 && tile.y === 7),
-        unseen: snapshot.tiles.find((tile) => tile.x === 50 && tile.y === 2),
+        unseen: snapshot.tiles.find((tile) => tile.x === MAXX - 2 && tile.y === 2),
         masked: snapshot.tiles.find((tile) => tile.x === 12 && tile.y === 8),
         landmarks: ularnGraphics.landmarks(),
       };

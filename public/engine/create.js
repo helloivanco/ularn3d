@@ -117,6 +117,82 @@ function townBounds() {
   return { x0, y0, x1: x0 + TOWN_SIZE - 1, y1: y0 + TOWN_SIZE - 1 };
 }
 
+function homeEntranceX() {
+  return Math.floor(MAXX / 2);
+}
+
+function homeEntranceY() {
+  return MAXY - 1;
+}
+
+function isOpenMazeTile(x, y) {
+  if (!inBounds(x, y)) return false;
+  const item = itemAt(x, y);
+  return item && !item.matches(OWALL) && !item.matches(OCLOSEDDOOR);
+}
+
+/* D1's town exit sits on the south border. Square rooms no longer span that
+   edge, so carve a guaranteed approach from the maze after generation. */
+function placeHomeEntrance() {
+  const x = homeEntranceX();
+  const y = homeEntranceY();
+  const ax = x;
+  const ay = y - 1;
+  setItem(x, y, OHOMEENTRANCE);
+  setMonster(x, y, null);
+  if (inBounds(ax, ay) && !isOpenMazeTile(ax, ay)) {
+    setItem(ax, ay, OEMPTY);
+    setMonster(ax, ay, null);
+  }
+
+  const reachesMaze = () => {
+    const seen = new Set([`${ax},${ay}`]);
+    const q = [[ax, ay]];
+    while (q.length) {
+      const [cx, cy] = q.shift();
+      if (!(cx === ax && cy === ay) && !(cx === x && cy === y) && cy < MAXY - 1)
+        return true;
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const nx = cx + dx,
+          ny = cy + dy,
+          key = `${nx},${ny}`;
+        if (seen.has(key) || !isOpenMazeTile(nx, ny)) continue;
+        seen.add(key);
+        q.push([nx, ny]);
+      }
+    }
+    return false;
+  };
+
+  if (reachesMaze()) return;
+
+  let tx = 1,
+    ty = 1,
+    best = Infinity;
+  for (let j = 1; j < MAXY - 1; j++) {
+    for (let i = 1; i < MAXX - 1; i++) {
+      if (i === ax && j === ay) continue;
+      if (!isOpenMazeTile(i, j)) continue;
+      const d = Math.abs(i - ax) + Math.abs(j - ay);
+      if (d < best) {
+        best = d;
+        tx = i;
+        ty = j;
+      }
+    }
+  }
+  let cx = ax,
+    cy = ay;
+  while (cx !== tx || cy !== ty) {
+    if (cx !== tx) cx += Math.sign(tx - cx);
+    else cy += Math.sign(ty - cy);
+    if (itemAt(cx, cy).matches(OWALL)) {
+      setItem(cx, cy, OEMPTY);
+      setMonster(cx, cy, null);
+    }
+  }
+}
+
 function inTown(x, y) {
   const b = townBounds();
   return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
@@ -238,8 +314,6 @@ function makemaze(k) {
 
   eat(1, 1);
 
-  if (k == 1) setItem(Math.floor(MAXX / 2), MAXY - 1, OHOMEENTRANCE);
-
   /* Compact square rooms instead of the classic wide, short slabs. */
   let tmp2 = rnd(3) + 3;
   for (let tmp = 0; tmp < tmp2; tmp++) {
@@ -266,6 +340,8 @@ function makemaze(k) {
   if (k > (ULARN ? 4 : 1)) {
     treasureroom(k);
   }
+
+  if (k == 1) placeHomeEntrance();
 
 }
 
@@ -430,10 +506,6 @@ function makeobject(depth) {
     return;
   }
 
-  if (depth == 1) {
-    setItem(Math.floor(MAXX / 2), MAXY - 1, OHOMEENTRANCE);
-  }
-
   if (depth == MAXLEVEL) fillroom(OVOLUP, 0); /* volcano shaft up from the temple */
 
   if ((depth > 0) &&        /* no stairs on home level */
@@ -571,6 +643,8 @@ function makeobject(depth) {
       if (!ULARN) froom(3, OCLEVERRING, 1 + rnd(2)); /* ring of cleverness */
     }
   }
+
+  if (depth == 1) placeHomeEntrance();
 } // makeobject()
 
 
