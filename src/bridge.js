@@ -578,7 +578,7 @@ window.ularn = {
       autoLoot: !!getPref("auto_pickup"),
       moves: player.MOVESMADE,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
-      log: LOG.slice(-7),
+      log: LOG.slice(),
       stats: {
         STR: player.STRENGTH + player.STREXTRA,
         INT: player.INTELLIGENCE,
