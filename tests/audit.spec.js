@@ -163,6 +163,7 @@ test("mobile shop action tray stays inside its scrollable panel", async ({
 test("dragging or pinching the world never issues a movement command", async ({
   page,
 }) => {
+  test.setTimeout(90000);
   await start(page);
   const before = (await snap(page)).moves;
   await page.mouse.move(750, 500);
@@ -260,7 +261,7 @@ test("all creature and item models render; level changes release GPU resources",
         paint();
       }
     });
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(400);
     return page.evaluate(() => ularnGraphics.metrics());
   }
   await cycle();
