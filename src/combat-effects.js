@@ -20,8 +20,8 @@ export class CombatEffects {
       lineGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(POINT_LIMIT * 3), 3));
       lineGeometry.setDrawRange(0, 0);
       const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
-      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), material);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 5, 32), material);
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), material);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 4, 12), material);
       ring.rotation.x = -Math.PI / 2;
       const line = new THREE.LineSegments(lineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }));
       line.frustumCulled = false;

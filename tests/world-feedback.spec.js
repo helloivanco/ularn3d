@@ -237,6 +237,9 @@ test("zoom and walking request display-synced frames then return to idle", async
   const zooming = await page.evaluate(() => ularnGraphics.metrics());
   expect(zooming.idle).toBe(false);
   expect(zooming.frameLimit).toBe(60);
+  expect(zooming.triangles).toBeLessThan(18000);
+  expect(zooming.lights).toBeLessThanOrEqual(6);
+  expect(zooming.environment).toBe(false);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(before);
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().frameLimit)).toBe(60);
