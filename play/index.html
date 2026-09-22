@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c1417" />
+    <title>Play Ularn — Free Online or Download for Windows</title>
+    <meta name="description" content="Play Ularn, a free turn-based dungeon crawler, in your browser. Explore 20 floors with eight classes, or download the Windows game for offline adventures." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://ularn-3d.vercel.app/play/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Ularn — The Caves Below" />
+    <meta property="og:title" content="Play Ularn — Free Online or Download for Windows" />
+    <meta property="og:description" content="Eight classes. Twenty dungeon floors. Play this free turn-based roguelike in your browser, or take the Windows game offline." />
+    <meta property="og:url" content="https://ularn-3d.vercel.app/play/" />
+    <meta property="og:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
+    <meta property="og:image:width" content="1440" />
+    <meta property="og:image:height" content="1000" />
+    <meta property="og:image:alt" content="Ularn gameplay with an overhead town view, symbol map, inventory, and bottom adventure controls" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Play Ularn — Free Online or Download for Windows" />
+    <meta name="twitter:description" content="Explore 20 floors with eight classes in a free turn-based dungeon crawler. Play online or download for Windows." />
+    <meta name="twitter:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
+    <meta name="twitter:image:alt" content="Ularn's overhead town, symbol map, inventory, and adventure controls" />
+    <script type="application/ld+json">
+{
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "@id": "https://ularn-3d.vercel.app/play/#webpage",
+      "url": "https://ularn-3d.vercel.app/play/",
+      "name": "Play Ularn — Free Online or Download for Windows",
+      "description": "Play Ularn in your browser or download the Windows edition. Eight classes, twenty floors, turn-based dungeon crawling.",
+      "inLanguage": "en",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Ularn — The Caves Below",
+        "url": "https://ularn-3d.vercel.app/"
+      },
+      "mainEntity": {
+        "@type": ["VideoGame", "SoftwareApplication"],
+        "@id": "https://ularn-3d.vercel.app/#game",
+        "name": "Ularn — The Caves Below",
+        "url": "https://ularn-3d.vercel.app/play/",
+        "description": "A free, single-player turn-based dungeon crawler with eight character classes, 20 underground floors, and browser and offline Windows editions.",
+        "applicationCategory": "GameApplication",
+        "genre": ["Roguelike", "Role-playing game", "Dungeon crawler"],
+        "operatingSystem": "Windows 10 or later (64-bit); macOS, Linux, and Windows through a WebGL2 browser",
+        "browserRequirements": "JavaScript and WebGL2 enabled",
+        "gamePlatform": ["Web browser", "Windows"],
+        "playMode": "SinglePlayer",
+        "isAccessibleForFree": true,
+        "inLanguage": "en",
+        "downloadUrl": "https://ularn-3d.vercel.app/downloads/Ularn.windows.exe",
+        "softwareVersion": "__APP_VERSION__",
+        "screenshot": "https://ularn-3d.vercel.app/social/ularn.png",
+        "image": "https://ularn-3d.vercel.app/social/ularn.png",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "license": "https://ularn-3d.vercel.app/engine/LICENSE"
+      }
+}
+    </script>
+    <script src="/site-runtime.js" defer></script>
+  </head>
+  <body>
+    <main id="app">
+      <div id="world" aria-label="Interactive 3D world"></div>
+      <div class="vignette"></div>
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Ularn home"
+          ><span class="brand-mark" data-icon="sigil"></span
+          ><span>ULARN<small>THE CAVES BELOW</small></span
+          ><span class="edition">3D</span></a
+        >
+        <div id="location">
+          <span class="location-dot"></span
+          ><span id="location-name">THE ADVENTURE AWAITS</span>
+        </div>
+        <nav>
+          <button
+            id="sound"
+            class="icon-button"
+            aria-label="Enable sound"
+            aria-pressed="false"
+            title="Enable sound"
+          >
+            <span data-icon="soundOff"></span
+            ><span class="button-label">Sound off</span></button
+          ><button id="guide" class="icon-button" aria-label="How to play">
+            <span data-icon="book"></span
+            ><span class="button-label">Field guide</span></button
+          ><button
+            id="pause"
+            class="icon-button"
+            hidden
+            aria-label="Pause and settings"
+          >
+            <span data-icon="pause"></span
+            ><span class="button-label">Menu</span>
+          </button>
+        </nav>
+      </header>
+      <section id="welcome" aria-labelledby="title">
+        <div class="eyebrow"><span></span> A CLASSIC REAWAKENED</div>
+        <h1 id="title">Ularn.<br /><em>The caves below.</em></h1>
+        <p class="intro">
+          A free, turn-based dungeon crawler. Eight classes. Twenty floors.
+          Play in your browser, or take the Windows game offline.
+        </p>
+        <form id="start-form">
+          <div class="form-row">
+            <label
+              >YOUR NAME<input
+                id="hero-name"
+                name="name"
+                maxlength="24"
+                value="Adventurer"
+                autocomplete="off"
+                required /></label
+            ><label class="difficulty-label"
+              >DIFFICULTY<select id="difficulty">
+                <option value="0">0 · Classic</option>
+                <option value="1">1 · Dangerous</option>
+                <option value="3">3 · Merciless</option>
+                <option value="10">10 · Legendary</option>
+              </select></label
+            >
+          </div>
+          <label class="field-label" id="class-label"
+            >CHOOSE YOUR CALLING</label
+          >
+          <div id="classes" role="group" aria-labelledby="class-label"></div>
+          <p id="class-description"></p>
+          <button type="submit" class="primary" id="begin">
+            Play in browser <span data-icon="northeast"></span>
+          </button>
+          <button type="button" id="continue" class="secondary" hidden>
+            Continue expedition <span data-icon="east"></span>
+          </button>
+          <p id="save-notice" class="fine-print" hidden>
+            A new expedition replaces your saved expedition.
+          </p>
+          <p id="start-error" role="alert"></p>
+        </form>
+        <div class="play-options web-only">
+          <a id="download-windows" class="windows-download" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__" aria-label="Download Ularn for Windows, version __APP_VERSION__">
+            <span data-icon="take" aria-hidden="true"></span><span>Download for Windows <small>v__APP_VERSION__ · Free · 64-bit · Offline .exe</small></span><span aria-hidden="true">↗</span>
+          </a>
+          <div class="site-links"><a id="about-game" href="/about/">About &amp; controls</a><a href="/credits/">Credits &amp; history</a><a href="/downloads/SHA256SUMS.txt">Verify download</a><a href="/">Site home</a></div>
+        </div>
+        <div class="welcome-note">
+          <span data-icon="hourglass"></span> Time moves only when you do.
+        </div>
+        <p class="site-version" aria-label="Ularn version">v__APP_VERSION__</p>
+      </section>
+      <div class="scene-caption" id="scene-caption">
+        <span>01 / THE SURFACE</span>
+        <h2>A quiet town.<br />A world beneath.</h2>
+        <p>15 dungeon floors · 5 volcanic depths · One chance</p>
+      </div>
+      <div id="hud" hidden>
+        <aside class="map-panel panel">
+          <div class="panel-heading">
+            <span>CHARTED TERRITORY</span><span id="map-depth">SURFACE</span>
+          </div>
+          <canvas
+            id="minimap"
+            width="684"
+            height="240"
+            aria-label="Symbol map of the entire explored floor; @ marks your position"
+          ></canvas>
+          <div id="town-travel">
+            <select id="destination" aria-label="Travel to town landmark">
+              <option value="">Choose a destination…</option>
+            </select>
+          </div>
+        </aside>
+        <aside id="inventory-panel" class="panel" aria-label="Pinned inventory">
+          <div class="panel-heading"><span>INVENTORY</span><span id="inventory-count"></span></div>
+          <div id="inventory-list"></div>
+          <div class="inventory-help">Manage items with <kbd>i</kbd> · Hide with <kbd>F3</kbd></div>
+        </aside>
+        <aside id="effects-panel" aria-label="Active effects" hidden>
+          <div class="panel-heading">ACTIVE EFFECTS</div>
+          <div id="effects"></div>
+        </aside>
+        <div id="tile-label" hidden></div>
+        <div class="camera-tools">
+          <button
+            id="rotate-left"
+            title="Rotate camera left"
+            aria-label="Rotate camera left"
+          >
+            <span data-icon="rotateLeft"></span></button
+          ><button
+            id="camera-reset"
+            title="Center camera"
+            aria-label="Center camera"
+          >
+            <span data-icon="center"></span></button
+          ><button
+            id="rotate-right"
+            title="Rotate camera right"
+            aria-label="Rotate camera right"
+          >
+            <span data-icon="rotateRight"></span></button
+          ><button id="zoom-in" aria-label="Zoom in">
+            <span data-icon="plus"></span></button
+          ><button id="zoom-out" aria-label="Zoom out">
+            <span data-icon="minus"></span>
+          </button>
+        </div>
+        <div class="adventure-bar panel" aria-label="Adventure controls">
+        <aside class="hero-panel panel">
+          <div class="hero-heading">
+            <span class="hero-seal" data-icon="swords"></span>
+            <div>
+              <h2 id="player-name"></h2>
+              <p id="player-class"></p>
+            </div>
+            <span id="player-rank" class="rank"></span>
+          </div>
+          <div class="vital-pair"><div class="vital"><div class="meter-label">
+            <span>VITALITY</span><strong id="health-text"></strong>
+          </div>
+          <div class="meter health"><i id="health-bar"></i></div></div><div class="vital">
+          <div class="meter-label">
+            <span>SPELL POWER</span><strong id="mana-text"></strong>
+          </div>
+          <div class="meter mana"><i id="mana-bar"></i></div></div></div>
+          <div class="combat-stats">
+            <div><span>GOLD</span><strong id="gold"></strong></div>
+            <div><span>ARMOR</span><strong id="armor"></strong></div>
+            <div><span>WEAPON</span><strong id="weapon"></strong></div>
+          </div>
+        </aside>
+        <div id="stat-box">
+          <div id="spell-count" aria-label="Spells remaining">Spells : <b id="spell-count-value">0/0</b></div>
+          <div id="attributes" aria-label="Character attributes"></div>
+        </div>
+        <section class="journal">
+          <div class="panel-heading">
+            <span>JOURNAL</span><span id="turn-count">TURN 0</span>
+          </div>
+          <div id="journal-lines" role="log" aria-live="polite" aria-label="Expedition journal" tabindex="0"></div>
+          <div id="CONTEXT" class="native-buttons"></div>
+        </section>
+        <div class="actionbar">
+          <button data-key="i">
+            <span data-icon="backpack"></span>Inventory<kbd>i</kbd></button
+          ><button data-key="c">
+            <span data-icon="spell"></span>Cast spell<kbd>c</kbd></button
+          ><button data-key="q">
+            <span data-icon="potion"></span>Quaff<kbd>q</kbd></button
+          ><button data-key="r">
+            <span data-icon="scroll"></span>Read<kbd>r</kbd></button
+          ><button data-key="o">
+            <span data-icon="chest"></span>Open<kbd>o</kbd></button
+          ><button data-key="t">
+            <span data-icon="take"></span>Take<kbd>t</kbd></button
+          ><button data-key=".">
+            <span data-icon="hourglass"></span>Wait<kbd>·</kbd></button
+          ><button id="auto-loot" aria-pressed="true" title="Toggle auto-loot (F2). Gold is always collected."><span data-icon="take"></span><span class="button-label">Auto-loot on</span><kbd>F2</kbd></button
+          ><button id="inventory-pin" aria-pressed="true" title="Toggle pinned inventory (F3)"><span data-icon="backpack"></span><span class="button-label">Pin inventory</span><kbd>F3</kbd></button
+          ><button id="save"><span data-icon="save"></span>Save</button>
+        </div>
+        <div class="movement">
+          <span>MOVE / ATTACK</span>
+          <div class="dpad">
+            <button data-key="y" aria-label="Move northwest">
+              <span data-icon="northwest"></span></button
+            ><button data-key="k" aria-label="Move north">
+              <span data-icon="north"></span></button
+            ><button data-key="u" aria-label="Move northeast">
+              <span data-icon="northeast"></span></button
+            ><button data-key="h" aria-label="Move west">
+              <span data-icon="west"></span></button
+            ><button data-key="." aria-label="Wait one turn">
+              <span data-icon="hourglass"></span></button
+            ><button data-key="l" aria-label="Move east">
+              <span data-icon="east"></span></button
+            ><button data-key="b" aria-label="Move southwest">
+              <span data-icon="southwest"></span></button
+            ><button data-key="j" aria-label="Move south">
+              <span data-icon="south"></span></button
+            ><button data-key="n" aria-label="Move southeast">
+              <span data-icon="southeast"></span>
+            </button>
+          </div>
+        </div>
+        <div class="run-clock" title="Time remaining"><span data-icon="hourglass"></span><strong id="time-left">400</strong> mobuls</div>
+        </div>
+        <div class="bottom-hint">
+          Arrow keys to move <span>·</span> Click a tile to travel
+          <span>·</span> Drag to orbit / scroll to zoom
+        </div>
+      </div>
+      <div id="interaction" class="panel" hidden>
+        <div class="panel-heading">
+          <span id="interaction-title">CHOOSE AN ACTION</span
+          ><button data-key="escape" aria-label="Cancel action">
+            Esc <span data-icon="close"></span>
+          </button>
+        </div>
+        <div id="ACTIONS" class="native-buttons"></div>
+        <div id="KEYBOARD" class="native-buttons"></div>
+      </div>
+      <section
+        id="engine-modal"
+        class="modal-backdrop"
+        hidden
+        aria-label="Game interaction"
+      >
+        <div class="terminal-card panel">
+          <div class="panel-heading">
+            <span id="engine-title">ULARN</span
+            ><button data-key="escape" aria-label="Close game panel">
+              Esc <span data-icon="close"></span>
+            </button>
+          </div>
+          <div class="terminal-scroll"><pre id="LARN" tabindex="-1"></pre></div>
+          <div class="terminal-footer">
+            <button data-key="space">Continue / next page</button
+            ><button data-key="return">Enter ↵</button
+            ><button data-key="escape">Return to game</button
+            ><button id="new-after-death" hidden>
+              New expedition <span data-icon="northeast"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+      <dialog id="guide-dialog" class="panel dialog">
+        <button class="close-dialog" aria-label="Close field guide">
+          <span data-icon="close"></span>
+        </button>
+        <div class="eyebrow">THE ADVENTURER’S FIELD GUIDE</div>
+        <h2>Every step matters.</h2>
+        <p>
+          Find the potion of cure dianthroritis on Volcano 5 and return home
+          before 400 mobuls pass. The Eye of Larn, on Dungeon 15, reveals the
+          demons guarding your way.
+        </p>
+        <div class="guide-grid">
+          <section>
+            <h3>Explore & fight</h3>
+            <p>
+              Arrow keys or the direction pad move you. Step into a creature to
+              attack. Click a known tile to travel; travel stops at danger. Time
+              advances with actions, not while you think.
+            </p>
+          </section>
+          <section>
+            <h3>Enter & descend</h3>
+            <p>
+              Stand on a landmark and use its contextual button.
+              <kbd>E</kbd> enters buildings, <kbd>&gt;</kbd> descends, and
+              <kbd>&lt;</kbd> ascends. Use <kbd>o</kbd> to open doors and
+              chests.
+            </p>
+          </section>
+          <section>
+            <h3>Prepare</h3>
+            <p>
+              <kbd>i</kbd> inventory · <kbd>w</kbd> wield · <kbd>W</kbd> wear ·
+              <kbd>q</kbd> drink · <kbd>r</kbd> read · <kbd>d</kbd> drop ·
+              <kbd>c</kbd> cast. <kbd>F2</kbd> toggles auto-loot for items
+              (gold is always collected); <kbd>F3</kbd>
+              pins your inventory. The town’s stores, bank, and college can help.
+            </p>
+          </section>
+          <section>
+            <h3>Survive</h3>
+            <p>
+              Wait with <kbd>.</kbd> to recover slowly. Your expedition saves
+              automatically between actions. Death ends the expedition.
+              Reloading restores your last saved turn, not a new life.
+            </p>
+          </section>
+        </div>
+        <p class="fineprint">
+          The complete Ularn rules are preserved. Press <kbd>?</kbd> during play
+          for the original command reference. Camera rotation never changes the
+          compass directions.
+        </p>
+        <div class="credits">
+          Built on Jason Primeau’s MIT-licensed
+          <a
+            href="https://github.com/primeau/Larn"
+            target="_blank"
+            rel="noreferrer"
+            >Larn / Ularn engine</a
+          >. Original Ularn by Phil Cordier.
+          <a href="/engine/LICENSE" target="_blank">License</a>.
+        </div>
+      </dialog>
+      <dialog id="pause-dialog" class="panel dialog compact">
+        <button class="close-dialog" aria-label="Close menu">
+          <span data-icon="close"></span>
+        </button>
+        <div class="eyebrow">TAKE A BREATH</div>
+        <h2>Your adventure waits.</h2>
+        <p>This is a turn-based world. Nothing moves while you take a break.</p>
+        <button id="resume-game" class="primary">
+          Return to expedition <span data-icon="east"></span></button
+        ><button id="save-exit" class="secondary">Save & return to title</button
+        ><button id="original-help" class="secondary">
+          Original game manual
+        </button>
+        <label class="quality-setting" for="graphics-quality"
+          >Graphics
+          <select id="graphics-quality">
+            <option value="cinematic">Cinematic · bloom & detail</option>
+            <option value="balanced">Balanced · lighter rendering</option>
+          </select>
+        </label>
+        <p id="pause-status" role="status"></p>
+      </dialog>
+      <div id="graphics-status" role="alert" class="panel" hidden>
+        Graphics paused. Waiting for your browser to restore the 3D view.<br /><small
+          >Your expedition has been saved when possible. Reload if this message
+          persists.</small
+        ><button class="secondary" onclick="location.reload()">
+          Reload game
+        </button>
+      </div>
+      <div id="toast" role="status" hidden></div>
+      <div id="engine-hidden" hidden>
+        <div id="FAIL"></div>
+        <div id="ALL"></div>
+        <div id="FOOTER"></div>
+        <div id="STATS"></div>
+        <div id="HELP"></div>
+        <div id="RUN"></div>
+        <div id="KEYPAD"></div>
+      </div>
+      <noscript><div class="no-script"><h2>Play Ularn online or on Windows</h2><p>The browser game needs JavaScript and WebGL2. You can also <a href="/downloads/Ularn.windows.exe">download the Windows game</a>, read the <a href="/about/">game overview and controls</a>, or return to the <a href="/">Ularn home page</a>.</p></div></noscript>
+      <div id="loading">Preparing the caves…</div>
+    </main>
+    <script src="/engine/lib/lz-string.min.js"></script>
+    <script src="/engine/lib/mousetrap.min.js"></script>
+    <script src="/engine/lib/diff_match_patch.js"></script>
+    <script src="/engine/game.js"></script>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

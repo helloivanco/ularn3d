@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 async function start(page) {
   await page.addInitScript(() => localStorage.setItem("ularn3d.quality", "balanced"));
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden({ timeout: 15000 });
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);

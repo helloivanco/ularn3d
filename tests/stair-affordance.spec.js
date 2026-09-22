@@ -25,7 +25,7 @@ test("known dead-end stairs match the level rules without exposing hidden tiles"
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.addInitScript(() => localStorage.setItem("ularn3d.quality", "balanced"));
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden();
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);

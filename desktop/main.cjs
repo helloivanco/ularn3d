@@ -76,7 +76,8 @@ function createWindow() {
   secureWindow(mainWindow);
   mainWindow.once("ready-to-show", () => mainWindow.show());
   mainWindow.on("closed", () => { mainWindow = null; });
-  mainWindow.loadURL(`${APP_ORIGIN}/`);
+  // Desktop opens the playable game; the web marketing site lives at `/`.
+  mainWindow.loadURL(`${APP_ORIGIN}/play/`);
 }
 
 if (!app.requestSingleInstanceLock()) {

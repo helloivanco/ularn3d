@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 
 const origin = "https://ularn-3d.vercel.app";
-const routes = ["/", "/about/"];
+const routes = ["/", "/play/", "/about/", "/credits/"];
 const { version } = JSON.parse(readFileSync("package.json", "utf8"));
 const downloadName = `Ularn-${version}.windows.exe`;
 test.use({ javaScriptEnabled: false });
@@ -34,7 +34,13 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
       expect(nodes.some((node) => [node["@type"]].flat().includes("SoftwareApplication"))).toBe(true);
       expect(nodes.some((node) => node.softwareVersion === version)).toBe(true);
     }
-    expect(await page.locator('img:not([alt])').count()).toBe(0);
+    if (route === "/play/") {
+      const entity = nodes.find((node) => node.mainEntity)?.mainEntity;
+      expect([entity?.["@type"]].flat().includes("SoftwareApplication")).toBe(true);
+      expect(entity?.softwareVersion).toBe(version);
+    }
+    expect(await page.locator("img:not([alt])").count()).toBe(0);
+    await expect(page.locator('link[rel="icon"][href="/favicon.svg"]')).toHaveCount(1);
   }
   expect(new Set(titles).size).toBe(routes.length);
   expect(new Set(descriptions).size).toBe(routes.length);
@@ -44,6 +50,12 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
 
 test("field guide and optional Windows download are reachable through normal links", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
+  await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
+  await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
+  await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
+  await expect(page.getByRole("link", { name: /Play in your browser/i }).first()).toHaveAttribute("href", "/play/");
+  await page.goto("/play/");
   await expect(page.locator("#about-game")).toHaveAttribute("href", "/about/");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
@@ -51,7 +63,7 @@ test("field guide and optional Windows download are reachable through normal lin
   await expect(page.locator(".site-version")).toHaveText(`v${version}`);
   await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
   await page.goto("/about/");
-  await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/play/");
   await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toBeVisible();
   await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toHaveAttribute("download", downloadName);
   await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toContainText(new RegExp(`v${version}`));
@@ -62,6 +74,12 @@ test("field guide and optional Windows download are reachable through normal lin
   await expect(page.locator("#controls")).toContainText("F3");
   await expect(page.locator("#windows")).toContainText(/separate from browser saves/);
   await expect(page.locator("#windows")).toContainText(downloadName);
+  await page.goto("/credits/");
+  await expect(page.locator("h1")).toContainText(/Ularn/i);
+  await expect(page.getByText("Noah Morgan", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Phil Cordier", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Ultra-Larn/i).first()).toBeVisible();
+  await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -82,6 +100,12 @@ test("robots and sitemap advertise only canonical public pages", async ({ reques
   expect(image.status()).toBe(200);
   expect(image.headers()["content-type"]).toContain("image/png");
   expect((await image.body()).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+  const favicon = await request.get("/favicon.svg");
+  expect(favicon.status()).toBe(200);
+  const touch = await request.get("/apple-touch-icon.png");
+  expect(touch.status()).toBe(200);
+  const manifest = await request.get("/site.webmanifest");
+  expect(manifest.status()).toBe(200);
 });
 
 test("published Windows link serves a real executable and its checksum", async ({ request }) => {
@@ -112,7 +136,15 @@ test("deployed utility pages stay out of search and unknown routes are real 404s
     expect(page.status()).toBe(200);
     expect(page.headers()["x-robots-tag"] || "").not.toContain("noindex");
   }
-  for (const [duplicate, canonical] of [["/index.html", "/"], ["/about", "/about/"], ["/about/index.html", "/about/"]]) {
+  for (const [duplicate, canonical] of [
+    ["/index.html", "/"],
+    ["/play", "/play/"],
+    ["/play/index.html", "/play/"],
+    ["/about", "/about/"],
+    ["/about/index.html", "/about/"],
+    ["/credits", "/credits/"],
+    ["/credits/index.html", "/credits/"],
+  ]) {
     const redirect = await request.get(duplicate, { maxRedirects: 0 });
     expect(redirect.status()).toBe(308);
     expect(new URL(redirect.headers().location, origin).pathname).toBe(canonical);

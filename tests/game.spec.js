@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem("ularn3d.quality", "balanced"),
   );
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden({ timeout: 15000 });
 });
 test.afterEach(async ({ page }) => expect(errors.get(page)).toEqual([]));
@@ -277,7 +277,7 @@ test("all eight classes receive their original attributes and equipment", async 
     "Rambo",
   ];
   for (const name of classes) {
-    await page.goto("/");
+    await page.goto("/play/");
     await page.getByRole("button", { name, exact: true }).click();
     await start(page);
     const s = await snap(page);

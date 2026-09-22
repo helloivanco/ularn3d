@@ -32,7 +32,7 @@ async function launch() {
 
 try {
   const page = await launch();
-  assert.equal(page.url(), "ularn://game/");
+  assert.equal(page.url(), "ularn://game/play/");
   assert.deepEqual(await page.evaluate(() => ({ require: typeof window.require, process: typeof window.process })),
     { require: "undefined", process: "undefined" });
   const preferences = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences());

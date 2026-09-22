@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem("ularn3d.quality", "balanced"),
   );
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden({ timeout: 15000 });
 });
 test.afterEach(async ({ page }) => expect(faults.get(page)).toEqual([]));

@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   await page.addInitScript(() => localStorage.setItem("ularn3d.quality", "balanced"));
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden();
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);

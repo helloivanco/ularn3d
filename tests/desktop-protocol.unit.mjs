@@ -12,6 +12,7 @@ const root = path.resolve("/tmp/ularn-desktop-dist");
 test("desktop URLs resolve only within the bundled assets", () => {
   assert.equal(protocol.resolveAssetPath("ularn://game/", root), path.join(root, "index.html"));
   assert.equal(protocol.resolveAssetPath("ularn://game", root), path.join(root, "index.html"));
+  assert.equal(protocol.resolveAssetPath("ularn://game/play/", root), path.join(root, "play/index.html"));
   assert.equal(protocol.resolveAssetPath("ularn://game/about/", root), path.join(root, "about/index.html"));
   assert.equal(protocol.resolveAssetPath("ularn://game/about/?source=desktop", root), path.join(root, "about/index.html"));
   assert.equal(protocol.resolveAssetPath("ularn://game/engine/larn_local.html?ularn=true", root), path.join(root, "engine/larn_local.html"));
