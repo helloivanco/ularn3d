@@ -76,8 +76,8 @@ test("field guide and optional Windows download are reachable through normal lin
   await expect(page.locator("#windows")).toContainText(downloadName);
   await page.goto("/credits/");
   await expect(page.locator("h1")).toContainText(/Ularn/i);
-  await expect(page.getByText("Noah Morgan")).toBeVisible();
-  await expect(page.getByText("Phil Cordier")).toBeVisible();
+  await expect(page.getByText("Noah Morgan", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Phil Cordier", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Ultra-Larn/i).first()).toBeVisible();
   await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
   await page.setViewportSize({ width: 390, height: 844 });
