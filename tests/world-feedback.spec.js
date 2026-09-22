@@ -276,6 +276,44 @@ test("town plaza walls stay full height while walking past them", async ({ page 
   expect(walls.every((w) => w.height > 1)).toBe(true);
 });
 
+test("balanced walking skips floor rebuilds and wall shadow casting", async ({ page }) => {
+  const stats = await page.evaluate(() => {
+    newcavelevel(1);
+    player.x = 10;
+    player.y = 8;
+    player.HP = player.HPMAX = 200;
+    for (let x = 0; x < MAXX; x++)
+      for (let y = 0; y < MAXY; y++) {
+        setMonster(x, y, null);
+        setItem(x, y, x === 0 || y === 0 || x === MAXX - 1 || y === MAXY - 1 ? OWALL : OEMPTY);
+        setKnow(x, y, KNOWALL);
+      }
+    paint();
+    const before = ularnGraphics.metrics();
+    ularn.key("l");
+    ularn.key("l");
+    ularn.key("h");
+    const after = ularnGraphics.metrics();
+    return {
+      floorMaterial: after.floorMaterial,
+      wallCastShadow: after.wallCastShadow,
+      floorReceiveShadow: after.floorReceiveShadow,
+      pixelRatio: after.pixelRatio,
+      shadowBefore: before.shadowUpdates,
+      shadowAfter: after.shadowUpdates,
+      propGroups: after.propGroups,
+      lights: after.lights,
+    };
+  });
+  expect(stats.floorMaterial).toBe("MeshLambertMaterial");
+  expect(stats.wallCastShadow).toBe(false);
+  expect(stats.floorReceiveShadow).toBe(false);
+  expect(stats.pixelRatio).toBeLessThanOrEqual(0.85);
+  expect(stats.shadowAfter).toBe(stats.shadowBefore);
+  expect(stats.propGroups).toBe(0);
+  expect(stats.lights).toBeLessThanOrEqual(5);
+});
+
 test("a revealed dungeon floor does not keep a scene node per empty tile", async ({ page }) => {
   const stats = await page.evaluate(() => {
     newcavelevel(1);

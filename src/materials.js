@@ -116,6 +116,20 @@ export function mat(color, extra = {}) {
     );
   return materials.get(key);
 }
+// Instanced floors/walls fill the screen. Lambert without a bump map cuts the
+// Balanced fragment cost that MeshStandardMaterial + bump paid on every pixel.
+export function matLambert(color, extra = {}) {
+  const key = `L|${color?.isColor ? color.getHex() : color}|${Object.entries(
+    extra,
+  )
+    .map(
+      ([k, v]) => `${k}:${v?.isTexture ? v.uuid : v?.isColor ? v.getHex() : v}`,
+    )
+    .join("|")}`;
+  if (!materials.has(key))
+    materials.set(key, new THREE.MeshLambertMaterial({ color, ...extra }));
+  return materials.get(key);
+}
 export function surface(kind, color, extra = {}) {
   const map = texture(kind);
   return mat(color, {
@@ -125,4 +139,7 @@ export function surface(kind, color, extra = {}) {
     roughness: kind === "roof" ? 0.85 : 0.88,
     ...extra,
   });
+}
+export function surfaceLambert(kind, color, extra = {}) {
+  return matLambert(color, { map: texture(kind), ...extra });
 }
