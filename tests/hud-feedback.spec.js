@@ -4,7 +4,7 @@ let errors;
 test.beforeEach(async ({ page }) => {
   errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden({ timeout: 15000 });
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);

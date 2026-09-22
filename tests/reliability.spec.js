@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem("ularn3d.quality", "balanced"),
   );
-  await page.goto("/");
+  await page.goto("/play/");
   await expect(page.locator("#loading")).toBeHidden({ timeout: 15000 });
 });
 test.afterEach(async ({ page }) => expect(faults.get(page)).toEqual([]));
@@ -212,7 +212,7 @@ test("duplicate equipment keeps the exact equipped slots across reloads", async 
     window.legacySave = LZString.compressToUTF16(JSON.stringify(data));
   });
   const legacy = await page.evaluate(() => window.legacySave);
-  await page.goto("/");
+  await page.goto("/play/");
   await page.evaluate(
     (value) => localStorage.setItem("ularn3d.expedition.v1", value),
     legacy,

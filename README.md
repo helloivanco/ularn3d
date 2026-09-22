@@ -2,7 +2,7 @@
 
 A complete Ularn game with a Three.js presentation, playable on the web or as an offline Windows desktop app. The original JavaScript Ularn engine powers the rules; this is not a reduced recreation of its mechanics.
 
-[Play in your browser](https://ularn-3d.vercel.app/) · [Download Windows .exe](https://ularn-3d.vercel.app/downloads/Ularn.windows.exe) · [About and controls](https://ularn-3d.vercel.app/about/)
+[Home](https://ularn-3d.vercel.app/) · [Play in your browser](https://ularn-3d.vercel.app/play/) · [Download Windows .exe](https://ularn-3d.vercel.app/downloads/Ularn.windows.exe) · [About](https://ularn-3d.vercel.app/about/) · [Credits](https://ularn-3d.vercel.app/credits/)
 
 ## Gameplay screenshots
 
@@ -76,7 +76,7 @@ npm run build
 npm run preview
 ```
 
-`dist/` is a standalone static website, containing HTML, JavaScript, CSS, and local assets. Serve over HTTP/HTTPS; ES modules cannot be opened directly via `file://`. The game lives at `/`; `/about/` serves a static guide with controls, gameplay information, and links to browser play and the Windows download. Both pages have canonical URLs, descriptions, social cards, and JSON-LD. `public/robots.txt` advertises the sitemap, and `public/sitemap.xml` lists these two public pages. Social previews use `public/social/ularn.png`.
+`dist/` is a standalone static website, containing HTML, JavaScript, CSS, and local assets. Serve over HTTP/HTTPS; ES modules cannot be opened directly via `file://`. The marketing home lives at `/`; browser play is at `/play/`; `/about/` is the field guide; `/credits/` covers Larn and Ultra-Larn history. These pages have canonical URLs, descriptions, social cards, and JSON-LD. `public/robots.txt` advertises the sitemap, and `public/sitemap.xml` lists the public pages. Social previews use `public/social/ularn.png`.
 
 `vercel.json` specifies Vite, `npm run build`, and the `dist` output directory. It normalizes the guide URL, marks engine/download URLs as non-indexable, and serves the executable as an attachment with cache revalidation. No application environment variables or server functions are needed.
 

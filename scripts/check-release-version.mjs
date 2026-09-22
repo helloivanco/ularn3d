@@ -10,6 +10,7 @@ export const PRODUCT_PATHS = [
   "public/",
   "desktop/",
   "index.html",
+  "play/",
   "vite.config.js",
   "scripts/app-version.mjs",
   "scripts/build-engine.mjs",

@@ -55,7 +55,7 @@
         },
         {
           "key": "Content-Disposition",
-          "value": "attachment; filename=\"Ularn-1.3.7.windows.exe\""
+          "value": "attachment; filename=\"Ularn-1.3.8.windows.exe\""
         }
       ]
     }
@@ -63,17 +63,27 @@
   "redirects": [
     {
       "source": "/downloads/SHA256SUMS.txt",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.7/SHA256SUMS.txt",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.8/SHA256SUMS.txt",
       "permanent": false
     },
     {
       "source": "/downloads/Ularn.windows.exe",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.7/Ularn-1.3.7.windows.exe",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.8/Ularn-1.3.8.windows.exe",
       "permanent": false
     },
     {
       "source": "/index.html",
       "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/play/index.html",
+      "destination": "/play/",
+      "permanent": true
+    },
+    {
+      "source": "/play",
+      "destination": "/play/",
       "permanent": true
     },
     {
@@ -84,6 +94,16 @@
     {
       "source": "/about",
       "destination": "/about/",
+      "permanent": true
+    },
+    {
+      "source": "/credits/index.html",
+      "destination": "/credits/",
+      "permanent": true
+    },
+    {
+      "source": "/credits",
+      "destination": "/credits/",
       "permanent": true
     }
   ]

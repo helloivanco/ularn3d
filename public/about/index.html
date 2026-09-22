@@ -3,37 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0c1417" />
-    <title>How to Play Ularn 3D — Classes, Controls &amp; Windows Download</title>
-    <meta name="description" content="Learn Ularn 3D's eight classes, turn-based combat, spells, controls and local saves. Play the roguelike online or get the optional offline Windows edition." />
+    <meta name="theme-color" content="#0f5c52" />
+    <title>About Ularn — Classes, Controls &amp; Windows Download</title>
+    <meta
+      name="description"
+      content="Learn Ularn's eight classes, turn-based combat, spells, controls, and local saves. Play the roguelike online or get the optional offline Windows edition."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://ularn-3d.vercel.app/about/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="stylesheet" href="/about/style.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/site/site.css" />
     <script src="/site-runtime.js" defer></script>
+    <script src="/site/site.js" defer></script>
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Ularn 3D" />
-    <meta property="og:title" content="How to Play Ularn 3D" />
-    <meta property="og:description" content="Your field guide to eight classes, twenty floors, combat, spells and saving your adventure. Play online or download the Windows edition." />
+    <meta property="og:site_name" content="Ularn — The Caves Below" />
+    <meta property="og:title" content="About Ularn — Classes, Controls & Windows Download" />
+    <meta
+      property="og:description"
+      content="Your field guide to eight classes, twenty floors, combat, spells, and saving your adventure. Play online or download for Windows."
+    />
     <meta property="og:url" content="https://ularn-3d.vercel.app/about/" />
     <meta property="og:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
-    <meta property="og:image:alt" content="Ularn's overhead town, symbol map, inventory and adventure controls" />
+    <meta property="og:image:alt" content="Ularn overhead town with symbol map and adventure controls" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="How to Play Ularn 3D" />
-    <meta name="twitter:description" content="Classes, controls, spells and local saves for the turn-based dungeon adventure. Play online or download for Windows." />
+    <meta name="twitter:title" content="About Ularn — Classes, Controls & Windows Download" />
+    <meta
+      name="twitter:description"
+      content="Classes, controls, spells, and local saves for the turn-based dungeon adventure."
+    />
     <meta name="twitter:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
-    <meta name="twitter:image:alt" content="Ularn's overhead town, symbol map, inventory and adventure controls" />
+    <meta name="twitter:image:alt" content="Ularn overhead town with symbol map and adventure controls" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "@id": "https://ularn-3d.vercel.app/about/#webpage",
         "url": "https://ularn-3d.vercel.app/about/",
-        "name": "How to Play Ularn 3D — Classes, Controls & Windows Download",
-        "description": "A field guide to Ularn 3D's classes, controls, combat, spells, local saves and optional Windows edition.",
+        "name": "About Ularn — Classes, Controls & Windows Download",
+        "description": "A field guide to Ularn's classes, controls, combat, spells, local saves, and optional Windows edition.",
         "inLanguage": "en",
         "isPartOf": {
           "@type": "WebSite",
-          "name": "Ularn 3D",
+          "name": "Ularn — The Caves Below",
           "url": "https://ularn-3d.vercel.app/"
         }
       }
@@ -42,73 +62,173 @@
   <body>
     <a class="skip-link" href="#guide">Skip to field guide</a>
     <header class="site-header">
-      <a class="brand" href="/" aria-label="Ularn 3D home"><img src="/favicon.svg" width="38" height="38" alt="" /><span>ULARN<small>THE CAVES BELOW</small></span></a>
-      <nav aria-label="Main navigation"><a href="#controls">Controls</a><a class="web-only" href="#windows">Windows edition</a><a class="nav-play" href="/">Play online <span aria-hidden="true">↗</span></a></nav>
+      <a class="brand" href="/" aria-label="Ularn home">
+        <img src="/favicon.svg" width="38" height="38" alt="" />
+        <span class="brand-word">ULARN<small>THE CAVES BELOW</small></span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="/play/">Play</a>
+        <a href="/about/" aria-current="page">About</a>
+        <a href="/credits/">Credits</a>
+        <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
+      </nav>
     </header>
-    <main id="guide">
-      <section class="hero" aria-labelledby="guide-title">
-        <p class="eyebrow">THE ADVENTURER'S FIELD GUIDE</p>
-        <h1 id="guide-title">Ularn 3D.<br /><em>Learn the depths.</em></h1>
-        <p class="lede">A classic turn-based roguelike, brought into an overhead 3D world. Prepare in town, explore the caves, and make every move count.</p>
-        <div class="hero-actions"><a class="button primary" href="/">Play in your browser <span aria-hidden="true">↗</span></a><a class="text-link web-only" href="#windows">Prefer an offline adventure? <span aria-hidden="true">↓</span></a></div>
-        <dl class="facts"><div><dt>20</dt><dd>floors to explore</dd></div><div><dt>8</dt><dd>character classes</dd></div><div><dt>Your pace</dt><dd>turn-based decisions</dd></div></dl>
-      </section>
 
-      <section class="section overview" aria-labelledby="first-steps">
-        <div class="section-heading"><p class="eyebrow">01 / BEGIN IN TOWN</p><h2 id="first-steps">Take your first steps.</h2></div>
+    <main id="guide" class="wrap">
+      <header class="page-hero">
+        <p class="section-kicker">Field guide</p>
+        <h1>About Ularn</h1>
+        <p class="lede">
+          A classic turn-based roguelike in an overhead 3D world. Prepare in town, explore the caves, and make every move count.
+        </p>
+        <div class="cta-row" style="margin-top: 1.5rem">
+          <a class="button accent" href="/play/">Play in your browser <span aria-hidden="true">↗</span></a>
+          <a class="button ghost web-only" href="#windows">Windows edition <span aria-hidden="true">↓</span></a>
+        </div>
+      </header>
+
+      <section class="section reveal" aria-labelledby="first-steps">
+        <p class="section-kicker">01 / Begin in town</p>
+        <h2 id="first-steps">Take your first steps.</h2>
         <div class="prose">
-          <p>Choose a name, class and difficulty on the <a href="/">Ularn play page</a>. The Adventurer is a balanced place to start. Town gives you room to find your bearings: stores, a bank and a college offer ways to prepare before entering the caves.</p>
-          <p>Stand on a building or entrance and use its contextual action. Beneath town lie fifteen dungeon floors; the volcano adds five more. Your map reveals explored territory and uses the original game symbols. Monsters move and fight as you spend turns. You can stop to think without letting them take another turn.</p>
-          <p>Move into a monster to attack with your equipped weapon. Learn spells, manage your inventory and watch the effects shown on the right side of the screen. Stronger enemies make preparation as useful as a good weapon.</p>
+          <p>
+            Choose a name, class, and difficulty on the
+            <a href="/play/">Ularn play page</a>. The Adventurer is a balanced place to start. Town gives you room to find your bearings: stores, a bank, and a college offer ways to prepare before entering the caves.
+          </p>
+          <p>
+            Stand on a building or entrance and use its contextual action. Beneath town lie fifteen dungeon floors; the volcano adds five more. Your map reveals explored territory and uses the original game symbols. Monsters move and fight as you spend turns. You can stop to think without letting them take another turn.
+          </p>
+          <p>
+            Move into a monster to attack with your equipped weapon. Learn spells, manage your inventory, and watch the effects shown on the right side of the screen. Stronger enemies make preparation as useful as a good weapon.
+          </p>
+        </div>
+        <figure class="gallery-feature" style="margin-top: 1.75rem">
+          <img
+            src="/screenshots/town.jpg"
+            width="1440"
+            height="1000"
+            alt="Ularn town gameplay with adventurer, cave entrance, inventory, and symbol map"
+            loading="lazy"
+          />
+          <figcaption>Surface town — the last quiet place before the caves.</figcaption>
+        </figure>
+      </section>
+
+      <section class="section reveal" aria-labelledby="classes-title">
+        <p class="section-kicker">02 / Choose your calling</p>
+        <h2 id="classes-title">Eight ways to enter the caves.</h2>
+        <p class="support">Each class starts with its own attributes and equipment.</p>
+        <div class="class-list class-grid">
+          <article><h3>Adventurer</h3><p>A balanced traveler, capable with steel and spells.</p></article>
+          <article><h3>Wizard</h3><p>A brilliant spellcaster with powerful magic and fragile defenses.</p></article>
+          <article><h3>Rogue</h3><p>Nimble and clever, with dexterity as a particular strength.</p></article>
+          <article><h3>Elf</h3><p>A versatile spellcaster with a light touch in combat.</p></article>
+          <article><h3>Dwarf</h3><p>Sturdy and strong, built to endure the depths.</p></article>
+          <article><h3>Ogre</h3><p>Exceptional strength, with little aptitude for magic.</p></article>
+          <article><h3>Klingon</h3><p>A formidable fighter: strong and fierce, with limited wisdom.</p></article>
+          <article><h3>Rambo</h3><p>Weak starting attributes, paired with an extraordinary Lance of Death.</p></article>
         </div>
       </section>
 
-      <section class="section" aria-labelledby="classes-title">
-        <div class="section-heading"><p class="eyebrow">02 / CHOOSE YOUR CALLING</p><h2 id="classes-title">Eight ways to enter the caves.</h2><p>Each class starts with its own attributes and equipment. Choose the style you want to explore.</p></div>
-        <div class="class-grid">
-          <article><span class="class-number" aria-hidden="true">01</span><h3>Adventurer</h3><p>A balanced traveler, capable with steel and spells.</p></article>
-          <article><span class="class-number" aria-hidden="true">02</span><h3>Wizard</h3><p>A brilliant spellcaster with powerful magic and fragile defenses.</p></article>
-          <article><span class="class-number" aria-hidden="true">03</span><h3>Rogue</h3><p>Nimble and clever, with dexterity as a particular strength.</p></article>
-          <article><span class="class-number" aria-hidden="true">04</span><h3>Elf</h3><p>A versatile spellcaster with a light touch in combat.</p></article>
-          <article><span class="class-number" aria-hidden="true">05</span><h3>Dwarf</h3><p>Sturdy and strong, built to endure the depths.</p></article>
-          <article><span class="class-number" aria-hidden="true">06</span><h3>Ogre</h3><p>Exceptional strength, with little aptitude for magic.</p></article>
-          <article><span class="class-number" aria-hidden="true">07</span><h3>Klingon</h3><p>A formidable fighter: strong and fierce, with limited wisdom.</p></article>
-          <article><span class="class-number" aria-hidden="true">08</span><h3>Rambo</h3><p>Weak starting attributes, paired with an extraordinary Lance of Death.</p></article>
+      <section class="section reveal" id="controls" aria-labelledby="controls-title">
+        <p class="section-kicker">03 / Every step matters</p>
+        <h2 id="controls-title">The controls you’ll use most.</h2>
+        <p class="support">
+          The on-screen action bar and direction pad work alongside the keyboard. Camera rotation keeps the compass directions unchanged.
+        </p>
+        <div class="control-table-wrap">
+          <table class="control-table">
+            <caption>Ularn movement, inventory, and spell controls</caption>
+            <thead>
+              <tr><th scope="col">Action</th><th scope="col">Control</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Move or attack</th><td>Arrow keys or the on-screen direction pad</td></tr>
+              <tr><th scope="row">Travel to an explored tile</th><td>Click the world or symbol map; travel stops near danger</td></tr>
+              <tr><th scope="row">Wait one turn</th><td><kbd>.</kbd></td></tr>
+              <tr><th scope="row">Enter a building or landmark</th><td>Contextual action or <kbd>E</kbd></td></tr>
+              <tr><th scope="row">Go down / go up</th><td><kbd>&gt;</kbd> / <kbd>&lt;</kbd></td></tr>
+              <tr><th scope="row">Open a door or chest</th><td><kbd>o</kbd>, then follow the prompt</td></tr>
+              <tr><th scope="row">Open inventory</th><td><kbd>i</kbd></td></tr>
+              <tr><th scope="row">Wield a weapon / wear armor</th><td><kbd>w</kbd> / <kbd>W</kbd></td></tr>
+              <tr><th scope="row">Drink / read / drop an item</th><td><kbd>q</kbd> / <kbd>r</kbd> / <kbd>d</kbd></td></tr>
+              <tr><th scope="row">Cast a spell</th><td><kbd>c</kbd>, then its three-letter code and a direction if requested</td></tr>
+              <tr><th scope="row">Toggle auto-loot</th><td><kbd>F2</kbd> or the Auto-loot button (gold is always collected)</td></tr>
+              <tr><th scope="row">Show or hide pinned inventory</th><td><kbd>F3</kbd> or the Pin inventory button</td></tr>
+              <tr><th scope="row">Cancel a prompt</th><td><kbd>Esc</kbd></td></tr>
+              <tr><th scope="row">Original command reference</th><td><kbd>?</kbd></td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <section class="section controls-section" id="controls" aria-labelledby="controls-title">
-        <div class="section-heading"><p class="eyebrow">03 / EVERY STEP MATTERS</p><h2 id="controls-title">The controls you'll use most.</h2><p>The on-screen action bar and direction pad work alongside the keyboard. Camera rotation keeps the compass directions unchanged.</p></div>
-        <div class="control-table"><table><caption>Ularn movement, inventory and spell controls</caption><thead><tr><th scope="col">Action</th><th scope="col">Control</th></tr></thead><tbody>
-          <tr><th scope="row">Move or attack</th><td>Arrow keys or the on-screen direction pad</td></tr>
-          <tr><th scope="row">Travel to an explored tile</th><td>Click the world or symbol map; travel stops near danger</td></tr>
-          <tr><th scope="row">Wait one turn</th><td><kbd>.</kbd></td></tr>
-          <tr><th scope="row">Enter a building or landmark</th><td>Contextual action or <kbd>E</kbd></td></tr>
-          <tr><th scope="row">Go down / go up</th><td><kbd>&gt;</kbd> / <kbd>&lt;</kbd></td></tr>
-          <tr><th scope="row">Open a door or chest</th><td><kbd>o</kbd>, then follow the prompt</td></tr>
-          <tr><th scope="row">Open inventory</th><td><kbd>i</kbd></td></tr>
-          <tr><th scope="row">Wield a weapon / wear armor</th><td><kbd>w</kbd> / <kbd>W</kbd></td></tr>
-          <tr><th scope="row">Drink / read / drop an item</th><td><kbd>q</kbd> / <kbd>r</kbd> / <kbd>d</kbd></td></tr>
-          <tr><th scope="row">Cast a spell</th><td><kbd>c</kbd>, then its three-letter code and a direction if requested</td></tr>
-          <tr><th scope="row">Toggle auto-loot</th><td><kbd>F2</kbd> or the Auto-loot button (gold is always collected)</td></tr>
-          <tr><th scope="row">Show or hide pinned inventory</th><td><kbd>F3</kbd> or the Pin inventory button</td></tr>
-          <tr><th scope="row">Cancel a prompt</th><td><kbd>Esc</kbd></td></tr>
-          <tr><th scope="row">See the original command reference</th><td><kbd>?</kbd></td></tr>
-        </tbody></table></div>
+      <section class="section reveal" aria-labelledby="spells-title">
+        <p class="section-kicker">04 / Spells and saving</p>
+        <h2 id="spells-title">Magic with a direction. Progress that stays local.</h2>
+        <div class="prose">
+          <p>
+            Known spells appear in the game’s spell reference. Casting spends spell power, and some spells ask for a direction before they take effect. Watch the casting animation and visible trail to follow a projectile through the dungeon. Active buffs and conditions appear beside the play area.
+          </p>
+          <p>
+            The game saves automatically between actions. Use <strong>Save</strong> for a manual checkpoint, or <strong>Save &amp; return to title</strong> from the menu. Return to the same browser and site, then choose <strong>Continue expedition</strong>. Browser saves live in that browser’s site storage. Desktop saves stay in your Windows profile and are separate from browser saves. Death ends the current run. There is no account or cloud sync.
+          </p>
+        </div>
       </section>
 
-      <section class="section advice-grid" aria-label="Spells and saving">
-        <article><p class="eyebrow">04 / READY YOUR SPELLS</p><h2>Magic with a direction.</h2><p>Known spells appear in the game's spell reference. Casting spends spell power, and some spells ask you to choose a direction before they take effect. Watch the casting animation and visible trail to follow a projectile through the dungeon.</p><p>Active buffs and conditions appear beside the play area. Keep an eye on them before committing to a fight. An empty fountain stays visibly dry, and raised or descending stairs help you read a room at a glance.</p></article>
-        <article><p class="eyebrow">05 / KEEP YOUR PLACE</p><h2>Your adventure stays local.</h2><p>The game saves automatically between actions. Use <strong>Save</strong> for a manual checkpoint, or <strong>Save &amp; return to title</strong> from the menu. Return to the same browser and site, then choose <strong>Continue expedition</strong>.</p><p>Browser saves live in that browser's site storage. Clearing it removes those saves; another device or browser has its own progress. Death ends the current run. There is no account or cloud save synchronization.</p></article>
+      <section class="section reveal web-only" id="windows" aria-labelledby="windows-title">
+        <p class="section-kicker">05 / Windows edition</p>
+        <h2 id="windows-title">Take Ularn offline.</h2>
+        <div class="prose">
+          <p>
+            The browser game is ready without a download. If you prefer a separate window, the Windows edition bundles the same adventure for offline play.
+          </p>
+          <p>
+            Download and run <strong>__DOWNLOAD_FILENAME__</strong> (latest release <strong>v__APP_VERSION__</strong>). This portable build needs no installation and targets 64-bit Windows 10 or later. It is unsigned, so Windows may identify it as an unrecognized publisher. Desktop saves are separate from browser saves.
+          </p>
+        </div>
+        <div class="cta-row" style="margin-top: 1.25rem">
+          <a
+            class="button accent"
+            href="/downloads/Ularn.windows.exe"
+            download="__DOWNLOAD_FILENAME__"
+            aria-label="Download Ularn for Windows, version __APP_VERSION__"
+            >Download Windows .exe v__APP_VERSION__ <span aria-hidden="true">↓</span></a
+          >
+          <a class="button ghost" href="/downloads/SHA256SUMS.txt">View SHA-256 checksum</a>
+        </div>
+        <p class="download-note" style="margin-top: 1rem">
+          Optional download. <a href="/play/">Play online</a> anytime.
+        </p>
       </section>
 
-      <section class="section windows-panel web-only" id="windows" aria-labelledby="windows-title">
-        <div><p class="eyebrow">06 / AN OPTIONAL WAY TO PLAY</p><h2 id="windows-title">Take Ularn offline.</h2><p>The browser game is ready to play without a download. If you prefer a separate game window, the Windows edition bundles the same adventure for offline play.</p><p>Download and run <strong>__DOWNLOAD_FILENAME__</strong> (latest release <strong>v__APP_VERSION__</strong>). This portable build needs no installation and targets 64-bit Windows 10 or later. It is unsigned, so Windows may identify it as an unrecognized publisher.</p><p>Desktop saves stay in your Windows user profile and are separate from browser saves. The same graphics settings are available in both editions; Balanced is the lighter default.</p></div>
-        <div class="download-card"><span class="download-label">WINDOWS · 64-BIT · v__APP_VERSION__</span><h3>A window into the depths.</h3><a class="button primary" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__" aria-label="Download Ularn for Windows, version __APP_VERSION__">Download Windows .exe v__APP_VERSION__ <span aria-hidden="true">↓</span></a><a class="checksum-link" href="/downloads/SHA256SUMS.txt">View SHA-256 checksum</a><p>Optional download. <a href="/">Play online</a> anytime.</p></div>
+      <section class="section reveal" aria-labelledby="performance-title">
+        <p class="section-kicker">Settle in</p>
+        <h2 id="performance-title">A calmer view of a dangerous place.</h2>
+        <div class="prose">
+          <p>
+            Use the camera buttons to rotate, center, and zoom. Balanced graphics limits rendering work and stops drawing idle gameplay scenes; background tabs suspend rendering. Cinematic graphics adds bloom. Sound starts muted, and the game respects your device’s reduced-motion preference.
+          </p>
+        </div>
+        <div class="cta-row" style="margin-top: 1.25rem">
+          <a class="button accent" href="/play/">Return to play <span aria-hidden="true">↗</span></a>
+          <a class="button ghost" href="/credits/">Credits &amp; history</a>
+        </div>
       </section>
-
-      <section class="section final-note" aria-labelledby="performance-title"><p class="eyebrow">SETTLE IN</p><h2 id="performance-title">A calmer view of a dangerous place.</h2><p>Use the camera buttons to rotate, center and zoom. Balanced graphics limits rendering work and stops drawing idle gameplay scenes; background tabs suspend rendering. Cinematic graphics adds bloom. Sound starts muted, and the game respects your device's reduced-motion preference.</p><a class="button secondary" href="/">Return to Ularn <span aria-hidden="true">↗</span></a></section>
     </main>
-    <footer><a class="footer-brand" href="/">ULARN 3D</a><p>Original Ularn by Phil Cordier, descended from Noah Morgan's Larn. Built on <a href="https://github.com/primeau/Larn">Jason Primeau's JavaScript Larn / Ularn engine</a>. <a href="/engine/LICENSE">Engine license</a>.</p><p class="footer-version" aria-label="Ularn version">v__APP_VERSION__</p><a href="#guide">Back to top ↑</a></footer>
+
+    <footer class="site-footer wrap">
+      <a class="footer-brand" href="/">ULARN</a>
+      <p class="footer-copy">
+        Original Ularn by Phil Cordier, descended from Noah Morgan’s Larn. Built on
+        <a href="https://github.com/primeau/Larn">Jason Primeau’s JavaScript Larn / Ularn engine</a>.
+        <a href="/engine/LICENSE">Engine license</a>.
+      </p>
+      <p class="footer-version" aria-label="Ularn version">v__APP_VERSION__</p>
+      <nav aria-label="Footer">
+        <a href="/play/">Play</a>
+        <a href="/credits/">Credits</a>
+        <a href="#guide">Back to top ↑</a>
+      </nav>
+    </footer>
   </body>
 </html>

@@ -9,7 +9,8 @@ import {
   versionGreater,
 } from "../scripts/check-release-version.mjs";
 
-const htmlSources = ["index.html", "public/about/index.html"];
+const htmlSources = ["index.html", "play/index.html", "public/about/index.html", "public/credits/index.html"];
+const downloadSources = ["index.html", "play/index.html", "public/about/index.html"];
 
 test("npm version restamp keeps package.json, lockfile, and Vercel filename together", () => {
   const version = checkStampedVersion();
@@ -26,21 +27,30 @@ test("npm version restamp keeps package.json, lockfile, and Vercel filename toge
   assert.notEqual(version, "1.3.3");
   assert.notEqual(version, "1.3.4");
   assert.notEqual(version, "1.3.5");
+  assert.notEqual(version, "1.3.6");
+  assert.notEqual(version, "1.3.7");
 });
 
 test("play page and field guide stamp version from package.json placeholders", () => {
   for (const file of htmlSources) {
     const html = readFileSync(file, "utf8");
     assert.match(html, /__APP_VERSION__/);
-    assert.match(html, /__DOWNLOAD_FILENAME__/);
     assert.equal(html.includes(APP_VERSION), false, `${file} must not hardcode ${APP_VERSION}`);
     assert.doesNotMatch(html, /Ularn-1\.\d+\.\d+\.windows\.exe/);
   }
-  const play = readFileSync("index.html", "utf8");
+  for (const file of downloadSources) {
+    assert.match(readFileSync(file, "utf8"), /__DOWNLOAD_FILENAME__/);
+  }
+  const home = readFileSync("index.html", "utf8");
+  assert.match(home, /"softwareVersion": "__APP_VERSION__"/);
+  assert.match(home, /class="footer-version"[^>]*>v__APP_VERSION__/);
+  const play = readFileSync("play/index.html", "utf8");
   assert.match(play, /"softwareVersion": "__APP_VERSION__"/);
   assert.match(play, /class="site-version"[^>]*>v__APP_VERSION__/);
   const about = readFileSync("public/about/index.html", "utf8");
   assert.match(about, /class="footer-version"[^>]*>v__APP_VERSION__/);
+  const credits = readFileSync("public/credits/index.html", "utf8");
+  assert.match(credits, /class="footer-version"[^>]*>v__APP_VERSION__/);
 });
 
 test("Electron artifact names read package.json version", () => {
@@ -55,6 +65,7 @@ test("product path matcher covers shipped web and exe sources", () => {
   assert.equal(isProductPath("public/about/index.html"), true);
   assert.equal(isProductPath("desktop/main.cjs"), true);
   assert.equal(isProductPath("index.html"), true);
+  assert.equal(isProductPath("play/index.html"), true);
   assert.equal(isProductPath("docs/DESKTOP.md"), false);
   assert.equal(isProductPath("tests/version.unit.mjs"), false);
   assert.equal(versionGreater("1.2.0", "1.1.0"), true);
