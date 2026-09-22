@@ -362,7 +362,7 @@ function drawMap() {
     ctx = canvas.getContext("2d");
   const { x0, y0, cols, rows } = mapExtent();
   const { cell } = mapCellSize(cols, rows);
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(1.25, window.devicePixelRatio || 1);
   const cssW = cols * cell;
   const cssH = rows * cell;
   const nextWidth = Math.round(cssW * dpr);
@@ -379,6 +379,80 @@ function drawMap() {
   canvas.dataset.rows = String(rows);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
+  let contentHash =
+    (state.level * 9973) ^
+    (state.tiles.length * 131) ^
+    ((x0 + 1) * 17 + (y0 + 1) * 19 + cols * 23 + rows * 29 + cell);
+  for (const t of state.tiles) {
+    contentHash =
+      (Math.imul(contentHash, 16777619) ^
+        ((t.x + 1) * 73471 +
+          (t.y + 1) * 19349663 +
+          (t.wall ? 3 : 0) +
+          t.id * 997 +
+          (t.arg ?? 0) * 13 +
+          (t.monster?.id ?? 0) * 47)) |
+      0;
+  }
+  const contentKey = `${contentHash}:${cssW}x${cssH}`;
+  const playerKey = `${state.x},${state.y}`;
+  if (canvas.dataset.contentKey === contentKey && canvas.dataset.playerKey === playerKey)
+    return;
+  // Walking only moves @. Redraw the old and new cell instead of 57×20 fillRects.
+  if (
+    canvas.dataset.contentKey === contentKey &&
+    canvas.dataset.playerKey &&
+    canvas.dataset.playerKey !== playerKey
+  ) {
+    const [ox, oy] = canvas.dataset.playerKey.split(",").map(Number);
+    const paintCell = (x, y, isPlayer) => {
+      if (x < x0 || y < y0 || x >= x0 + cols || y >= y0 + rows) return;
+      const px = (x - x0) * cell,
+        py = (y - y0) * cell;
+      if (isPlayer) {
+        ctx.fillStyle = "#f8dea0";
+        ctx.fillRect(px, py, cell, cell);
+        ctx.fillStyle = "#132325";
+        const fontPx = Math.max(6, Math.round(cell * 0.8));
+        ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("@", px + cell / 2, py + cell / 2);
+        return;
+      }
+      const t = state.tiles.find((tile) => tile.x === x && tile.y === y);
+      ctx.fillStyle = t?.wall ? "#3a4d4a" : "#173236";
+      ctx.fillRect(px, py, cell, cell);
+      if (!t || t.wall) return;
+      const cx = px + cell / 2,
+        cy = py + cell / 2;
+      const symbol =
+        t.monster?.symbol ||
+        MAP_GLYPHS[t.id] ||
+        t.symbol ||
+        (t.id ? "?" : ".");
+      const notable =
+        t.monster ||
+        MAP_GLYPHS[t.id] ||
+        (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
+      if (notable) {
+        const fontPx = Math.max(6, Math.round(cell * 0.8));
+        ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
+        ctx.fillText(symbol, cx, cy);
+      } else {
+        const mark = Math.max(1, Math.round(cell * 0.14));
+        ctx.fillStyle = "#6d8a82";
+        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
+      }
+    };
+    paintCell(ox, oy, false);
+    paintCell(state.x, state.y, true);
+    canvas.dataset.playerKey = playerKey;
+    return;
+  }
   ctx.fillStyle = "#0a1214";
   ctx.fillRect(0, 0, cssW, cssH);
   const fontPx = Math.max(6, Math.round(cell * 0.8));
@@ -427,6 +501,8 @@ function drawMap() {
     ctx.fillStyle = "#132325";
     ctx.fillText("@", px + cell / 2, py + cell / 2);
   }
+  canvas.dataset.contentKey = contentKey;
+  canvas.dataset.playerKey = playerKey;
   const sizeKey = `${nextWidth}x${nextHeight}:${cssW}x${cssH}`;
   if (canvas.dataset.sizeKey !== sizeKey) {
     canvas.dataset.sizeKey = sizeKey;

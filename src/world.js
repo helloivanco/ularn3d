@@ -6,7 +6,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, surface, noise } from "./materials.js";
+import { mat, surface, surfaceLambert, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
@@ -238,6 +238,8 @@ export class World {
     this.wallHeightAt = [];
     this.wallLayout = 0;
     this.wallLayoutKey = null;
+    this.structureKey = null;
+    this.shadowUpdates = 0;
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
       this.scene.add(l);
@@ -441,6 +443,11 @@ export class World {
         propGroups: this.objects.size,
         floorInstances: this.floor.count + this.grassFloor.count,
         wallInstances: this.walls.count,
+        shadowUpdates: this.shadowUpdates,
+        wallCastShadow: this.walls.castShadow,
+        floorReceiveShadow: this.floor.receiveShadow,
+        floorMaterial: this.floor.material?.type || null,
+        pixelRatio: this.renderer.getPixelRatio(),
         ...monsterArtMetrics(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
@@ -588,7 +595,9 @@ export class World {
   }
   applyGpuQuality() {
     const cinematic = this.quality === "cinematic";
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 1));
+    // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.85));
+    this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = cinematic ? THREE.PCFShadowMap : THREE.BasicShadowMap;
     this.sun.shadow.mapSize.set(cinematic ? 2048 : 512, cinematic ? 2048 : 512);
     this.sun.shadow.map?.dispose();
@@ -609,9 +618,44 @@ export class World {
       this.scene.environment = null;
       this.scene.environmentIntensity = 0;
     }
+    // Walls and floors filled the shadow pass on every walk frame. Balanced keeps
+    // the hero silhouette only; cinematic restores full contact shadows.
+    this.walls.castShadow = cinematic;
+    this.caps.castShadow = cinematic;
+    this.floor.receiveShadow = cinematic;
+    this.grassFloor.receiveShadow = cinematic;
+    this.walls.receiveShadow = cinematic;
+    this.caps.receiveShadow = cinematic;
+    this.applyFloorMaterials();
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.syncPlayerLight();
+    this.markShadowUpdate();
+  }
+  floorSurface(kind, color) {
+    return this.quality === "cinematic"
+      ? surface(kind, color)
+      : surfaceLambert(kind, color);
+  }
+  applyFloorMaterials() {
+    if (!this.state) {
+      this.floor.material = this.floorSurface("stone", 0xffffff);
+      this.grassFloor.material = this.floorSurface("grass", 0xffffff);
+      this.walls.material = this.floorSurface("stone", 0x99aba7);
+      this.caps.material = this.floorSurface("stone", 0xb2bbad);
+      return;
+    }
+    const volcano = this.state.level > 15;
+    this.floor.material = this.floorSurface(
+      "stone",
+      this.state.level === 0 ? 0xffffff : volcano ? 0xa77b62 : 0xc0c8c3,
+    );
+    this.grassFloor.material = this.floorSurface("grass", 0xffffff);
+    this.walls.material = this.floorSurface("stone", 0x99aba7);
+    this.caps.material = this.floorSurface("stone", 0xb2bbad);
+  }
+  markShadowUpdate() {
     this.renderer.shadowMap.needsUpdate = true;
+    this.shadowUpdates++;
   }
   syncPlayerLight() {
     // Balanced already dropped the hero point light in town. Dungeon paid it
@@ -779,6 +823,7 @@ export class World {
       this.wallHeightAt.length = 0;
       this.wallView = null;
       this.wallLayoutKey = null;
+      this.structureKey = null;
       this.level = state.level;
       this.lastPlayer = null;
       const town = state.level === 0,
@@ -792,7 +837,7 @@ export class World {
       this.sun.intensity = town ? 3.9 : 0.85;
       this.fill.intensity = town ? 1.1 : 0.5;
       this.fill.color.set(volcano ? 0xb54c35 : 0x659bbf);
-      this.floor.material = surface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
+      this.floor.material = this.floorSurface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
       this.water.visible = town;
       this.paths = this.townPaths(state.tiles);
       if (!town) {
@@ -858,23 +903,69 @@ export class World {
     const ids = new Set();
     let floorIndex = 0,
       grassIndex = 0;
-    this.wallCells = [];
-    this.lamps.length = 0;
     let wallLayout = 0;
+    let wallCount = 0;
     let lampIndex = 0;
     let floorHash = state.tiles.length ^ (state.level * 9973);
+    let propHash = 0;
+    let monsterHash = 0;
     for (const t of state.tiles) {
-      const grass = state.level === 0 && this.paths && !this.paths.has(`${t.x},${t.y}`);
+      const grass =
+        state.level === 0 && this.paths && !this.paths.has(`${t.x},${t.y}`);
       floorHash =
         (Math.imul(floorHash, 16777619) ^
           ((t.x + 1) * 73471 + (t.y + 1) * 19349663 + (grass ? 1 : 0))) |
         0;
+      if (t.wall) {
+        wallCount++;
+        wallLayout =
+          (Math.imul(wallLayout, 16777619) ^ ((t.x + 1) * 73471 + (t.y + 1))) |
+          0;
+      } else if (t.id !== 0) {
+        propHash =
+          (Math.imul(propHash, 16777619) ^
+            ((t.x + 1) * 131 +
+              (t.y + 1) * 17 +
+              t.id * 997 +
+              (t.arg ?? 0) * 13 +
+              (t.stair?.blocked ? 1 : 0))) |
+          0;
+      }
+      if (t.monster) {
+        const uid = t.monster.uid ?? `${t.x},${t.y}`;
+        monsterHash =
+          (Math.imul(monsterHash, 16777619) ^
+            ((t.x + 1) * 131 +
+              (t.y + 1) * 17 +
+              (t.monster.id ?? 0) * 997 +
+              String(uid).length * 13)) |
+          0;
+      }
     }
+    this.wallLayout = wallLayout ^ wallCount;
+    const structureKey = `${floorHash}|${this.wallLayout}|${propHash}|${monsterHash}|${state.tiles.length}`;
+    // Walking across an already-known floor only moves the hero. Skip rebuilding
+    // every wall cell list, floor instance, and empty-tile skip path.
+    if (
+      !isNew &&
+      this.structureKey === structureKey &&
+      this.wallCells.length === wallCount
+    ) {
+      this.floorHash = floorHash;
+      this.syncMovers(state, old);
+      this.invalidate();
+      return;
+    }
+    this.structureKey = structureKey;
+    this.wallCells = [];
+    this.lamps.length = 0;
     const rebuildFloors = isNew || this.floorHash !== floorHash;
     this.floorHash = floorHash;
     const matrix = this.scratchMatrix;
     const takeLamp = (x, y, z) => {
-      const lamp = this.lampPool[lampIndex] || (this.lampPool[lampIndex] = new THREE.Vector3());
+      const lamp =
+        this.lampPool[lampIndex] ||
+        (this.lampPool[lampIndex] = new THREE.Vector3());
       lampIndex++;
       lamp.set(x, y, z);
       this.lamps.push(lamp);
@@ -903,16 +994,10 @@ export class World {
         floor.setMatrixAt(index, matrix);
         floor.setColorAt(index, color);
       }
-      if (t.wall) {
-        this.wallCells.push(t);
-        wallLayout =
-          (Math.imul(wallLayout, 16777619) ^ ((t.x + 1) * 73471 + (t.y + 1))) | 0;
-      }
-      if (t.store && t.id !== 55)
-        takeLamp(t.x - 0.2, 1.25, t.y + 0.75);
+      if (t.wall) this.wallCells.push(t);
+      if (t.store && t.id !== 55) takeLamp(t.x - 0.2, 1.25, t.y + 0.75);
       if (t.id === 55) takeLamp(t.x, 0.5, t.y);
-      if (t.wall && noise(t.x, t.y) > 0.87)
-        takeLamp(t.x, 1.45, t.y);
+      if (t.wall && noise(t.x, t.y) > 0.87) takeLamp(t.x, 1.45, t.y);
       // Empty floors and walls are already InstancedMeshes. A Group per
       // HAVESEEN tile made large dungeon rooms walk like molasses.
       if (t.wall || t.id === 0) {
@@ -932,7 +1017,13 @@ export class World {
       g.position.set(t.x, 0, t.y);
       g.userData.tile = { x: t.x, y: t.y };
       const art = itemSprite(t, () => this.invalidate());
-      const model = art || itemModel({ ...t, draining: t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced });
+      const model =
+        art ||
+        itemModel({
+          ...t,
+          draining:
+            t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced,
+        });
       g.add(model);
       if (art) {
         g.userData.itemArt = art;
@@ -952,15 +1043,20 @@ export class World {
         g.position.set(t.x, 0, t.y);
       }
       if (t.store || t.id === 93) {
-        g.userData.landmarkLabel = t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
+        g.userData.landmarkLabel =
+          t.id === 56 ? "SURFACE SHAFT" : LANDMARK_NAMES[t.id] || "LANDMARK";
         const text = label(g.userData.landmarkLabel);
-        text.position.y = t.id === 56 || t.id === 93 ? 1.2 : [10, 16].includes(t.id) ? 3.5 : 2.7;
+        text.position.y =
+          t.id === 56 || t.id === 93
+            ? 1.2
+            : [10, 16].includes(t.id)
+              ? 3.5
+              : 2.7;
         g.add(text);
       }
       this.props.add(g);
       this.objects.set(key, { sig, mesh: g });
     }
-    this.wallLayout = wallLayout ^ this.wallCells.length;
     const creatures = new Set();
     for (const tile of state.tiles) {
       const monster = tile.monster;
@@ -975,9 +1071,15 @@ export class World {
         actor = null;
       }
       if (!actor) {
-        const mesh = monsterSprite(monster, () => this.invalidate()) || monsterModel(monster);
+        const mesh =
+          monsterSprite(monster, () => this.invalidate()) ||
+          monsterModel(monster);
         mesh.position.set(tile.x, 0, tile.y);
-        actor = { mesh, species: monster.id, target: new THREE.Vector3(tile.x, 0, tile.y) };
+        actor = {
+          mesh,
+          species: monster.id,
+          target: new THREE.Vector3(tile.x, 0, tile.y),
+        };
         this.monsters.set(uid, actor);
         this.actors.add(mesh);
       }
@@ -986,11 +1088,12 @@ export class World {
       actor.mesh.userData.tile = { x: tile.x, y: tile.y };
       faceMonster(actor.mesh, monster.facing, this.camera);
     }
-    for (const [uid, actor] of this.monsters) if (!creatures.has(uid)) {
-      actor.mesh.removeFromParent();
-      destroy(actor.mesh);
-      this.monsters.delete(uid);
-    }
+    for (const [uid, actor] of this.monsters)
+      if (!creatures.has(uid)) {
+        actor.mesh.removeFromParent();
+        destroy(actor.mesh);
+        this.monsters.delete(uid);
+      }
     if (rebuildFloors) {
       for (const [m, count] of [
         [this.floor, floorIndex],
@@ -1014,12 +1117,19 @@ export class World {
       if (mesh.userData.itemArt) this.billboards.push(mesh.userData.itemArt);
       let fountain = mesh.userData.fountainMesh;
       if (!fountain) {
-        fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
+        fountain = mesh.children.find(
+          (child) => child.userData.drainAge !== undefined,
+        );
         if (fountain) mesh.userData.fountainMesh = fountain;
       }
       if (fountain?.userData.drainStartedAt) this.draining.push(fountain);
     }
     this.walls.count = this.caps.count = this.wallCells.length;
+    this.syncMovers(state, old);
+    if (isNew) this.markShadowUpdate();
+    this.invalidate();
+  }
+  syncMovers(state, old) {
     this.player.visible = true;
     if (!this.playerTarget) this.playerTarget = new THREE.Vector3();
     const target = this.playerTarget.set(state.x, 0, state.y);
@@ -1046,8 +1156,10 @@ export class World {
             t.monster &&
             Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
         )
-      )
-        { this.attackAge = 0; this.attackStartedAt = performance.now(); }
+      ) {
+        this.attackAge = 0;
+        this.attackStartedAt = performance.now();
+      }
     }
     if (
       old &&
@@ -1062,8 +1174,25 @@ export class World {
     }
     this.lastPlayer = { x: state.x, y: state.y };
     this.syncPlayerLight();
-    this.sun.position.set(state.x - 12, 24, state.y + 8);
-    this.sun.target.position.copy(target);
+    // Balanced keeps the sun over the map center so the shadow map does not
+    // chase the hero every step. Cinematic still follows the player.
+    if (this.quality === "cinematic") {
+      this.sun.position.set(state.x - 12, 24, state.y + 8);
+      this.sun.target.position.copy(target);
+    } else {
+      const cx = (state.width - 1) / 2;
+      const cz = (state.height - 1) / 2;
+      this.sun.position.set(cx - 12, 24, cz + 8);
+      this.sun.target.position.set(cx, 0, cz);
+      const extent = Math.max(state.width, state.height) * 0.55 + 8;
+      Object.assign(this.sun.shadow.camera, {
+        left: -extent,
+        right: extent,
+        top: extent,
+        bottom: -extent,
+      });
+      this.sun.shadow.camera.updateProjectionMatrix();
+    }
     this.dust.position.set(state.x, 0, state.y);
     this.lamps.sort(
       (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
@@ -1076,8 +1205,6 @@ export class World {
       if (lamp) light.position.copy(lamp);
     }
     this.updateWalls();
-    if (isNew) this.renderer.shadowMap.needsUpdate = true;
-    this.invalidate();
   }
   updateWalls() {
     if (!this.state) return;
@@ -1135,7 +1262,7 @@ export class World {
       mesh.instanceMatrix.needsUpdate = true;
       if (layoutChanged) mesh.computeBoundingSphere();
     }
-    if (layoutChanged) this.renderer.shadowMap.needsUpdate = true;
+    if (layoutChanged) this.markShadowUpdate();
   }
   pick(e) {
     if (!this.state || !this.state.maze || this.state.over || this.lost)
@@ -1272,11 +1399,12 @@ export class World {
       if (this.burstAge > 0.55) this.burst.visible = false;
     }
     if (
+      this.quality === "cinematic" &&
       this.playerTarget &&
       this.player.position.distanceToSquared(this.playerTarget) > 0.0001 &&
       this.tick - (this.shadowTime || 0) > 0.08
     ) {
-      this.renderer.shadowMap.needsUpdate = true;
+      this.markShadowUpdate();
       this.shadowTime = this.tick;
     }
     this.renderer.info.reset();
