@@ -3,6 +3,7 @@ import "./hud.css";
 import { GameAudio } from "./audio.js";
 import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
+import { groundHoverInfo } from "./item-tooltips.js";
 mountIcons();
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
@@ -146,13 +147,29 @@ try {
     (tile) => travel(tile),
     (tile, event) => {
       const label = $("tile-label");
-      label.hidden = !tile;
-      if (tile) {
-        label.textContent = tile.monster ? tile.monster.name : tile.name;
+      const info = groundHoverInfo(tile);
+      label.hidden = !info;
+      label.classList.toggle("tile-label-special", info?.kind === "special");
+      if (!info) return;
+      if (info.kind === "special") {
+        label.replaceChildren();
+        const title = document.createElement("strong");
+        title.className = "tile-label-title";
+        title.textContent = info.title;
+        const body = document.createElement("div");
+        body.className = "tile-label-body";
+        body.textContent = info.body;
+        label.append(title, body);
         label.style.left =
-          Math.min(innerWidth - 200, event.clientX + 15) + "px";
-        label.style.top = Math.min(innerHeight - 50, event.clientY + 18) + "px";
+          Math.min(innerWidth - 340, event.clientX + 15) + "px";
+        label.style.top =
+          Math.min(innerHeight - 160, event.clientY + 18) + "px";
+        return;
       }
+      label.textContent = info.text;
+      label.style.left =
+        Math.min(innerWidth - 200, event.clientX + 15) + "px";
+      label.style.top = Math.min(innerHeight - 50, event.clientY + 18) + "px";
     },
   );
   $("graphics-quality").value = world.quality;

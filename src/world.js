@@ -480,13 +480,15 @@ export class World {
         }];
       }),
       landmarks: () => [...this.objects.values()].flatMap(({ mesh }) => [mesh, ...mesh.children]
-        .filter((child) => child.userData.fountain || child.userData.stairDirection)
+        .filter((child) => child.userData.fountain || child.userData.stairDirection || child.userData.trapKind)
         .map((child) => ({
           tile: { ...mesh.userData.tile },
           fountain: child.userData.fountain,
           waterVisible: !!child.getObjectByName("fountain-water")?.visible,
           stairDirection: child.userData.stairDirection,
           stairBlocked: child.userData.stairBlocked,
+          trapKind: child.userData.trapKind,
+          elevatorDirection: child.userData.elevatorDirection,
           label: mesh.userData.landmarkLabel,
         }))),
       walls: () => {

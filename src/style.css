@@ -711,6 +711,25 @@ select {
   border-radius: 3px;
   font-size: 11px;
   color: var(--gold);
+  max-width: min(340px, calc(100vw - 24px));
+}
+#tile-label.tile-label-special {
+  padding: 11px 14px;
+  line-height: 1.45;
+}
+#tile-label .tile-label-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+#tile-label .tile-label-body {
+  margin-top: 7px;
+  font-size: 10px;
+  color: #c5d0c4;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 #interaction {
   position: absolute;
