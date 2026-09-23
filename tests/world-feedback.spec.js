@@ -240,6 +240,8 @@ test("zoom and walking request display-synced frames then return to idle", async
   expect(zooming.triangles).toBeLessThan(18000);
   expect(zooming.lights).toBeLessThanOrEqual(6);
   expect(zooming.environment).toBe(false);
+  expect(zooming.bloom).toBe(false);
+  expect(zooming.composer).toBe(false);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(before);
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().frameLimit)).toBe(60);
@@ -274,6 +276,11 @@ test("town plaza walls stay full height while walking past them", async ({ page 
   const walls = await page.evaluate(() => ularnGraphics.walls());
   expect(walls.length).toBeGreaterThan(8);
   expect(walls.every((w) => w.height > 1)).toBe(true);
+  const lit = await page.evaluate(() => ularnGraphics.metrics());
+  expect(lit.bloom).toBe(false);
+  expect(lit.composer).toBe(false);
+  expect(lit.playerLight).toBe(false);
+  expect(lit.ambient).toBeGreaterThanOrEqual(1.6);
 });
 
 test("balanced walking skips floor rebuilds and wall shadow casting", async ({ page }) => {
@@ -303,6 +310,11 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
       shadowAfter: after.shadowUpdates,
       propGroups: after.propGroups,
       lights: after.lights,
+      bloom: after.bloom,
+      composer: after.composer,
+      ambient: after.ambient,
+      sun: after.sun,
+      playerLight: after.playerLight,
     };
   });
   expect(stats.floorMaterial).toBe("MeshLambertMaterial");
@@ -312,6 +324,11 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
   expect(stats.shadowAfter).toBe(stats.shadowBefore);
   expect(stats.propGroups).toBe(0);
   expect(stats.lights).toBeLessThanOrEqual(5);
+  expect(stats.bloom).toBe(false);
+  expect(stats.composer).toBe(false);
+  expect(stats.playerLight).toBe(false);
+  expect(stats.ambient).toBeGreaterThanOrEqual(1.4);
+  expect(stats.sun).toBeGreaterThanOrEqual(2.4);
 });
 
 test("a revealed dungeon floor does not keep a scene node per empty tile", async ({ page }) => {

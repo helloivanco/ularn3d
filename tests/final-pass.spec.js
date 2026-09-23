@@ -95,6 +95,8 @@ test("title renderer batches buildings within its draw-call and triangle budget"
   expect(metrics.triangles).toBeLessThan(25000);
   expect(metrics.lights).toBeLessThanOrEqual(6);
   expect(metrics.environment).toBe(false);
+  expect(metrics.bloom).toBe(false);
+  expect(metrics.composer).toBe(false);
   expect(metrics.shadowMap).toBe(512);
   await page.screenshot({ path: "test-results/optimized-title.png" });
 });
@@ -110,6 +112,8 @@ test("town stays within a web GPU budget after the poly and light cuts", async (
   expect(metrics.triangles).toBeLessThan(30000);
   expect(metrics.lights).toBeLessThanOrEqual(6);
   expect(metrics.environment).toBe(false);
+  expect(metrics.bloom).toBe(false);
+  expect(metrics.composer).toBe(false);
 });
 
 test("all generated floors and changed inventory survive a save and reload", async ({

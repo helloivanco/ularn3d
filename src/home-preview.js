@@ -17,6 +17,7 @@ if (!mount || !hero) {
 } else {
   try {
     const world = new World(mount, null, null);
+    world.setQuality("balanced", false);
     if (reduced) world.controls.autoRotate = false;
     if (loading) loading.hidden = true;
 
