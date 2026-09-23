@@ -76,6 +76,7 @@ test("trap landmarks and special-item ground hover work in play", async ({ page 
 
   expect(hover.eye).toMatchObject({ kind: "special", title: "Eye of Larn" });
   expect(hover.eye.body).toContain("God of Hellfire");
+  expect(hover.eye.guide).toBe("guide-relics");
   expect(hover.slash).toMatchObject({
     kind: "special",
     title: "Sword of Slashing",
@@ -84,6 +85,23 @@ test("trap landmarks and special-item ground hover work in play", async ({ page 
   expect(hover.scroll).toBeNull();
   expect(hover.armor).toBeNull();
   expect(hover.dagger).toBeNull();
+
+  const hazards = await page.evaluate(async () => {
+    const { groundHoverInfo } = await import("/src/item-tooltips.js");
+    const tiles = ularn.snapshot().tiles;
+    const at = (x, y) => tiles.find((tile) => tile.x === x && tile.y === y);
+    return {
+      pit: groundHoverInfo(at(8, 7)),
+      dart: groundHoverInfo(at(9, 7)),
+      up: groundHoverInfo(at(10, 7)),
+    };
+  });
+  expect(hazards.pit).toMatchObject({ kind: "hazard", title: "Pit", guide: "guide-hazards" });
+  expect(hazards.dart.title).toBe("Dart trap");
+  expect(hazards.up.title).toBe("Express elevator (up)");
+
+  await expect(page.locator("#guide-hazards")).toContainText(/Express elevators/);
+  await expect(page.locator("#guide-relics")).toContainText(/Unique artifacts/);
 
   // Drive the live hover UI over the Eye and a quiet potion.
   await page.locator("#camera-reset").click();

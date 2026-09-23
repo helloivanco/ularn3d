@@ -5,6 +5,21 @@ import {
   groundHoverInfo,
 } from "../src/item-tooltips.js";
 
+test("known pits darts and elevators offer short hazard tips", () => {
+  const pit = groundHoverInfo({ id: 4, name: "a pit" });
+  assert.equal(pit.kind, "hazard");
+  assert.equal(pit.title, "Pit");
+  assert.equal(pit.guide, "guide-hazards");
+  assert.match(pit.body, /wand of wonder/i);
+
+  const dart = groundHoverInfo({ id: 74, name: "a dart trap" });
+  assert.equal(dart.kind, "hazard");
+  assert.match(dart.body, /strength/i);
+
+  assert.equal(groundHoverInfo({ id: 6, name: "elevator" }).title, "Express elevator (up)");
+  assert.equal(groundHoverInfo({ id: 14, name: "elevator" }).guide, "guide-hazards");
+});
+
 test("special artifacts expose the canonical ground info blurbs", () => {
   const expected = [
     22, 26, 27, 3, 46, 47, 45, 48, 49, 86, 87, 88, 89, 91, 92, 85,

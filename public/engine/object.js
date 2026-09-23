@@ -750,7 +750,7 @@ function lookforobject(do_ident, do_pickup) {
   }
   //
   else if (item.matches(OPIT)) {
-    updateLog(`You're standing at the top of a pit${period}`);
+    updateLog(`You're standing at the top of a pit${period} Watch your step!`);
     opit();
   }
   //
@@ -839,13 +839,14 @@ function lookforobject(do_ident, do_pickup) {
       return;
     setItem(player.x, player.y, ODARTRAP);
     setKnow(player.x, player.y, KNOWALL);
+    updateLog(`You spring a dart trap!`);
     /* fall through to ODARTRAP case below!!! */
     lookforobject(do_ident, do_pickup);
     return;
   }
   //
   else if (item.matches(ODARTRAP)) {
-    updateLog(`You are hit by a dart!`);
+    updateLog(`A dart trap! You are hit by a dart!`);
     lastnum = DIED_DART; /* hit by a dart */
     player.losehp(rnd(5));
     player.setStrength(player.STRENGTH - 1);
@@ -908,12 +909,12 @@ function lookforobject(do_ident, do_pickup) {
   }
   //
   else if (item.matches(OELEVATORUP)) {
-    updateLog(`You have found ${item}`);
+    updateLog(`You step onto an express elevator going up!`);
     oelevator(1);
   }
   //
   else if (item.matches(OELEVATORDOWN)) {
-    updateLog(`You have found ${item}`);
+    updateLog(`You step onto an express elevator going down!`);
     oelevator(-1);
   }
   //
@@ -1042,9 +1043,10 @@ function oelevator(direction) {
   // going up
   if (direction == 1) {
     if (level == 0) {
-      appendLog(`, unfortunately it is out of order${period}`);
+      appendLog(` Unfortunately it is out of order${period}`);
       return;
     }
+    appendLog(` The cage rattles and the world blurs${period}`);
     player.x = rnd(MAXX - 2);
     player.y = rnd(MAXY - 2);
     //nap(2000);
@@ -1065,12 +1067,13 @@ function oelevator(direction) {
   else {
     if (level == DBOTTOM || level == (VBOTTOM)) {
       //nap(2000);
-      updateLog(`  and it leads straight to HELL!`);
+      appendLog(` It leads straight to HELL!`);
       beep();
       //nap(3000);
       died(DIED_BOTTOMLESS_ELEVATOR, false);
       return;
     }
+    appendLog(` The cage rattles and the world blurs${period}`);
     player.x = rnd(MAXX - 2);
     player.y = rnd(MAXY - 2);
     //nap(2000);
