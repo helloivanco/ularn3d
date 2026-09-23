@@ -49,7 +49,7 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
         "href",
         "https://github.com/helloivanco/ularn3d/releases",
       );
-      await expect(page.getByRole("link", { name: /GitHub repository/i })).toHaveAttribute(
+      await expect(page.getByRole("link", { name: /GitHub repository/i }).first()).toHaveAttribute(
         "href",
         "https://github.com/helloivanco/ularn3d",
       );
