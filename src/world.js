@@ -300,16 +300,10 @@ export class World {
     this.burst.visible = false;
     this.scene.add(this.burst);
     this.burstAge = 1;
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight),
-      0.18,
-      0.55,
-      1.5,
-    );
-    this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    // Balanced never allocates UnrealBloomPass. Typical machines hitch on the
+    // extra fullscreen passes even when the pass is flagged disabled.
+    this.composer = null;
+    this.bloom = null;
     this.ray = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.ground = new THREE.Plane(UP, 0);
@@ -426,6 +420,12 @@ export class World {
         environment: !!this.scene.environment,
         shadowMap: this.sun.shadow.mapSize.x,
         antialias: this.quality === "cinematic",
+        bloom: !!(this.bloom && this.bloom.enabled && this.composer),
+        composer: !!this.composer,
+        ambient: this.ambient.intensity,
+        sun: this.sun.intensity,
+        fill: this.fill.intensity,
+        playerLight: !!(this.playerLight.visible && this.playerLight.intensity),
         contextLost: this.lost,
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
@@ -572,8 +572,7 @@ export class World {
     releaseMonsterArtResources(clearArtCache);
     releaseItemArtResources(clearArtCache);
     this.sun.shadow.dispose();
-    this.composer.passes.forEach((pass) => pass.dispose());
-    this.composer.dispose();
+    this.disposeComposer();
     this.environment?.dispose();
     this.environment = null;
     this.scene.environment = null;
@@ -593,6 +592,56 @@ export class World {
     environment.dispose();
     pmrem.dispose();
   }
+  disposeComposer() {
+    if (!this.composer) {
+      this.bloom = null;
+      return;
+    }
+    this.composer.passes.forEach((pass) => pass.dispose());
+    this.composer.dispose();
+    this.composer = null;
+    this.bloom = null;
+  }
+  ensureComposer() {
+    if (this.composer) return;
+    const width = this.container.clientWidth || innerWidth;
+    const height = this.container.clientHeight || innerHeight;
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // Half-res + weaker bloom: full-size UnrealBloomPass lags typical GPUs.
+    this.bloom = new UnrealBloomPass(
+      new THREE.Vector2(Math.max(1, width * 0.5), Math.max(1, height * 0.5)),
+      0.1,
+      0.4,
+      1.45,
+    );
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+  }
+  applyLevelLighting() {
+    const cinematic = this.quality === "cinematic";
+    const town = !this.state || this.state.level === 0;
+    const volcano = this.state?.level > 15;
+    if (town) {
+      this.ambient.intensity = 1.75;
+      this.sun.intensity = 4.15;
+      this.fill.intensity = 1.25;
+      if (this.scene.fog) this.scene.fog.density = 0.02;
+    } else if (cinematic) {
+      this.ambient.intensity = 0.72;
+      this.sun.intensity = 0.85;
+      this.fill.intensity = 0.5;
+      if (this.scene.fog) this.scene.fog.density = 0.044;
+    } else {
+      // Balanced has no hero lantern or extra torches. Keep caves readable.
+      this.ambient.intensity = 1.55;
+      this.sun.intensity = 2.7;
+      this.fill.intensity = 1.2;
+      if (this.scene.fog) this.scene.fog.density = 0.022;
+    }
+    if (this.state)
+      this.fill.color.set(volcano ? 0xb54c35 : town ? 0x78b9cf : 0x8eb8c9);
+  }
   applyGpuQuality() {
     const cinematic = this.quality === "cinematic";
     // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
@@ -602,7 +651,10 @@ export class World {
     this.sun.shadow.mapSize.set(cinematic ? 2048 : 512, cinematic ? 2048 : 512);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
-    this.bloom.enabled = cinematic;
+    if (cinematic) {
+      this.ensureComposer();
+      this.bloom.enabled = true;
+    } else this.disposeComposer();
     this.torchBudget = cinematic ? this.torchLights.length : 2;
     this.torchLights.forEach((light, i) => {
       if (i >= this.torchBudget) {
@@ -627,7 +679,8 @@ export class World {
     this.walls.receiveShadow = cinematic;
     this.caps.receiveShadow = cinematic;
     this.applyFloorMaterials();
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.applyLevelLighting();
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     this.syncPlayerLight();
     this.markShadowUpdate();
   }
@@ -683,7 +736,7 @@ export class World {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
-    this.composer.setSize(width, height);
+    this.composer?.setSize(width, height);
     this.invalidate();
   }
   mountains(width, height, offsetX = 0, offsetY = 0) {
@@ -834,11 +887,7 @@ export class World {
         town ? 0x112c32 : volcano ? 0x261b1a : 0x0b1821,
       );
       this.scene.fog.color.copy(this.scene.background);
-      this.scene.fog.density = town ? 0.022 : 0.044;
-      this.ambient.intensity = town ? 1.65 : 0.72;
-      this.sun.intensity = town ? 3.9 : 0.85;
-      this.fill.intensity = town ? 1.1 : 0.5;
-      this.fill.color.set(volcano ? 0xb54c35 : 0x659bbf);
+      this.applyLevelLighting();
       this.floor.material = this.floorSurface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
       this.water.visible = town;
       this.paths = this.townPaths(state.tiles);
@@ -1441,7 +1490,7 @@ export class World {
       }
     }
     if (this.wallCells.length) this.updateWalls();
-    if (this.quality === "cinematic") this.composer.render(dt);
+    if (this.quality === "cinematic" && this.composer) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     this.renderedFrames++;
     this.animating = false;

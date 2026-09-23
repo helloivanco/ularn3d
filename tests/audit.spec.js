@@ -205,6 +205,7 @@ test("quality switching, WebGL loss and restoration preserve gameplay", async ({
   expect(await page.evaluate(() => ularnGraphics.metrics().quality)).toBe(
     "cinematic",
   );
+  expect(await page.evaluate(() => ularnGraphics.metrics().bloom)).toBe(true);
   await page.locator("#resume-game").click();
   await page.screenshot({ path: "test-results/cinematic-town.png" });
   await page.evaluate(() => {
