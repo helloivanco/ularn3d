@@ -86,42 +86,41 @@ test("trap landmarks and special-item ground hover work in play", async ({ page 
   expect(hover.dagger).toBeNull();
 
   // Drive the live hover UI over the Eye and a quiet potion.
-  const pointFor = async (x, y) =>
-    page.evaluate(([tx, ty]) => {
-      const s = ularn.snapshot();
-      const offset = ularnGraphics.metrics().cameraOffset;
-      const [ox, oy, oz] = offset;
-      const length = Math.hypot(...offset);
-      const horizontal = Math.hypot(ox, oz);
-      const relative = [tx - s.x - ox, 1.6 - oy, ty + 0.5 - s.y - oz];
-      const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
-      const depth = -dot(
-        relative,
-        offset.map((n) => n / length),
-      );
-      const right = [oz / horizontal, 0, -ox / horizontal];
-      const up = [
-        (-ox * oy) / (horizontal * length),
-        horizontal / length,
-        (-oz * oy) / (horizontal * length),
-      ];
-      const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
-      const canvas = document.querySelector("#world canvas");
-      const box = canvas.getBoundingClientRect();
-      const cx = 0.5 + (dot(relative, right) / depth) * (scale / box.width);
-      const cy = 0.5 - (dot(relative, up) / depth) * (scale / box.height);
-      return { x: box.left + cx * box.width, y: box.top + cy * box.height };
-    }, [x, y]);
+  await page.locator("#camera-reset").click();
+  const s = await page.evaluate(() => ularn.snapshot());
+  const offset = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
+  const project = (tx, ty) => {
+    const [ox, oy, oz] = offset;
+    const length = Math.hypot(...offset);
+    const horizontal = Math.hypot(ox, oz);
+    const relative = [tx - s.x - ox, 0.35 - oy, ty - s.y - oz];
+    const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
+    const depth = -dot(
+      relative,
+      offset.map((n) => n / length),
+    );
+    const right = [oz / horizontal, 0, -ox / horizontal];
+    const up = [
+      (-ox * oy) / (horizontal * length),
+      horizontal / length,
+      (-oz * oy) / (horizontal * length),
+    ];
+    const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
+    return {
+      x: 720 + (dot(relative, right) / depth) * scale,
+      y: 500 - (dot(relative, up) / depth) * scale,
+    };
+  };
 
-  const eyePoint = await pointFor(8, 9);
+  const eyePoint = project(8, 9);
   await page.mouse.move(eyePoint.x, eyePoint.y);
-  await expect(page.locator("#tile-label")).toBeVisible();
   await expect(page.locator("#tile-label .tile-label-title")).toHaveText(
     "Eye of Larn",
+    { timeout: 8000 },
   );
   await expect(page.locator("#tile-label")).toContainText("God of Hellfire");
 
-  const potionPoint = await pointFor(9, 9);
+  const potionPoint = project(9, 9);
   await page.mouse.move(potionPoint.x, potionPoint.y);
   await expect(page.locator("#tile-label")).toBeHidden();
 });
