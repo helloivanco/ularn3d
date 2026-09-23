@@ -9,7 +9,7 @@ import {
   versionGreater,
 } from "../scripts/check-release-version.mjs";
 
-const htmlSources = ["index.html", "play/index.html", "public/about/index.html", "public/credits/index.html"];
+const htmlSources = ["index.html", "play/index.html", "public/about/index.html"];
 const downloadSources = ["index.html", "play/index.html", "public/about/index.html"];
 
 test("npm version restamp keeps package.json, lockfile, and Vercel filename together", () => {
@@ -50,8 +50,14 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.match(play, /class="site-version"[^>]*>v__APP_VERSION__/);
   const about = readFileSync("public/about/index.html", "utf8");
   assert.match(about, /class="footer-version"[^>]*>v__APP_VERSION__/);
-  const credits = readFileSync("public/credits/index.html", "utf8");
-  assert.match(credits, /class="footer-version"[^>]*>v__APP_VERSION__/);
+  assert.match(about, /id="history"/);
+  assert.match(about, /Noah Morgan/);
+  assert.match(about, /Phil Cordier/);
+  assert.doesNotMatch(about, /href="\/credits\/?"/);
+  assert.doesNotMatch(home, /href="\/credits\/?"/);
+  assert.doesNotMatch(play, /href="\/credits\/?"/);
+  assert.match(home, /href="\/about\/#history"/);
+  assert.match(play, /href="\/about\/#history"/);
 });
 
 test("Electron artifact names read package.json version", () => {
