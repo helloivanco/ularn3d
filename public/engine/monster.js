@@ -1078,6 +1078,11 @@ function spattack(monster, attack, xx, yy) {
       return 0;
 
     case 4:
+      /* Giant centipede / giant ant: 20% chance to drain strength. */
+      if (rnd(100) >= 20) {
+        updateLog(`The ${monster} stung you!`);
+        break;
+      }
       if (player.STRENGTH > 3) {
         updateLog(`The ${monster} stung you! You feel weaker${period}`);
         player.setStrength(player.STRENGTH - 1);

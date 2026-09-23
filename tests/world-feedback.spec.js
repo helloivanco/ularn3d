@@ -182,13 +182,36 @@ test("weapons armor rings gems and consumable tables use unique art", async ({ p
   expect(byKey["18:50"] || byKey["18:0"]).toMatch(/\/art\/items\/gold-pile\.png/);
   expect(byKey["43:0"]).toBe("/art/items/book.png");
   expect(byKey["83:0"]).toBe("/art/items/cookie.png");
-  expect(byKey["42:0"]).toBe("/art/items/potion-sleep.png");
-  expect(byKey["42:1"]).toBe("/art/items/potion-healing.png");
-  expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.png");
+  // Undiscovered potions share one bottle; unique art appears after learning.
+  expect(byKey["42:0"]).toBe("/art/items/potion-unknown.png");
+  expect(byKey["42:1"]).toBe("/art/items/potion-unknown.png");
+  expect(byKey["42:21"]).toBe("/art/items/potion-unknown.png");
   expect(byKey["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
   expect(byKey["41:19"]).toBe("/art/items/scroll-identify.png");
   expect(byKey["41:21"]).toBe("/art/items/scroll-annihilation.png");
   await page.screenshot({ path: "test-results/item-art-catalog.png" });
+});
+
+test("discovered potions switch from the shared bottle to unique art", async ({ page }) => {
+  await room(page);
+  const result = await page.evaluate(() => {
+    const sleep = createObject(OPOTION, 0);
+    const heal = createObject(OPOTION, 1);
+    setItem(5, 9, sleep);
+    setItem(6, 9, heal);
+    paint();
+    const before = ularnGraphics.props().map((p) => ({ id: p.id, arg: p.arg, art: p.art }));
+    learnPotion(sleep);
+    paint();
+    const after = ularnGraphics.props().map((p) => ({ id: p.id, arg: p.arg, art: p.art }));
+    return { before, after };
+  });
+  const before = Object.fromEntries(result.before.map((p) => [`${p.id}:${p.arg}`, p.art]));
+  const after = Object.fromEntries(result.after.map((p) => [`${p.id}:${p.arg}`, p.art]));
+  expect(before["42:0"]).toBe("/art/items/potion-unknown.png");
+  expect(before["42:1"]).toBe("/art/items/potion-unknown.png");
+  expect(after["42:0"]).toBe("/art/items/potion-sleep.png");
+  expect(after["42:1"]).toBe("/art/items/potion-unknown.png");
 });
 
 test("floor loot art strips pale card backgrounds without shrinking the sprite plane", async ({ page }) => {

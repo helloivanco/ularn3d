@@ -979,6 +979,7 @@ export class World {
               (t.y + 1) * 17 +
               t.id * 997 +
               (t.arg ?? 0) * 13 +
+              (t.known === false ? 2 : 0) +
               (t.stair?.blocked ? 1 : 0))) |
           0;
       }
@@ -1024,7 +1025,7 @@ export class World {
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
-      const sig = `${t.id}:${t.arg ?? 0}${t.stair?.blocked ? ":blocked" : ""}`;
+      const sig = `${t.id}:${t.arg ?? 0}:${t.known === false ? "u" : "k"}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       if (rebuildFloors) {

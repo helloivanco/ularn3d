@@ -30,6 +30,22 @@ function checkHasSpells() {
 
 
 
+/*
+ * Self-cast spell buffs refresh instead of stacking. Potions and scrolls still
+ * accumulate via += / updateX(amount). Pass the fresh duration; if the effect
+ * is already active, remaining time is replaced rather than extended.
+ */
+function refreshSelfSpell(getCurrent, updateFn, amount) {
+  const current = getCurrent();
+  if (current <= 0) {
+    updateFn(amount);
+    return;
+  }
+  updateFn(amount - current);
+}
+
+
+
 function pre_cast() {
   nomove = NOMOVE;
   if (checkHasSpells()) {
@@ -164,7 +180,7 @@ function speldamage(x) {
 
     case 0:
       /* protection field +2 */
-      player.updateProtectionTime(250);
+      refreshSelfSpell(() => player.PROTECTIONTIME, (n) => player.updateProtectionTime(n), 250);
       return;
 
     case 1:
@@ -174,7 +190,7 @@ function speldamage(x) {
 
     case 2:
       /* dexterity   */
-      player.updateDexCount(400);
+      refreshSelfSpell(() => player.DEXCOUNT, (n) => player.updateDexCount(n), 400);
       return;
 
     case 3:
@@ -184,7 +200,7 @@ function speldamage(x) {
 
     case 4:
       /* charm monster */
-      player.updateCharmCount(player.CHARISMA << 1);
+      refreshSelfSpell(() => player.CHARMCOUNT, (n) => player.updateCharmCount(n), player.CHARISMA << 1);
       return;
 
     case 5:
@@ -201,7 +217,7 @@ function speldamage(x) {
 
     case 7:
       /* strength */
-      player.updateStrCount(150 + rnd(100));
+      refreshSelfSpell(() => player.STRCOUNT, (n) => player.updateStrCount(n), 150 + rnd(100));
       return;
 
     case 8: {
@@ -245,7 +261,11 @@ function speldamage(x) {
       if (amulet) {
         amuletmodifier += 1 + amulet.arg;
       }
-      player.updateInvisibility((amuletmodifier << 7) + 12);
+      refreshSelfSpell(
+        () => player.INVISIBILITY,
+        (n) => player.updateInvisibility(n),
+        (amuletmodifier << 7) + 12,
+      );
       return;
 
       /* ----- LEVEL 3 SPELLS ----- */
@@ -267,12 +287,12 @@ function speldamage(x) {
 
     case 17:
       /* cancellation */
-      player.updateCancellation(5 + playerLev);
+      refreshSelfSpell(() => player.CANCELLATION, (n) => player.updateCancellation(n), 5 + playerLev);
       return;
 
     case 18:
       /* haste self */
-      player.updateHasteSelf(7 + playerLev);
+      refreshSelfSpell(() => player.HASTESELF, (n) => player.updateHasteSelf(n), 7 + playerLev);
       return;
 
     case 19:
@@ -352,7 +372,8 @@ function speldamage(x) {
     case 24:
       /* globe of invulnerability */
       if (player.GLOBE == 0) player.setMoreDefenses(player.MOREDEFENSES + 10);
-      player.GLOBE += 200;
+      /* Refresh rather than stack overlapping globe casts. */
+      player.GLOBE = 200;
       loseint();
       return;
 
@@ -375,22 +396,22 @@ function speldamage(x) {
 
       /* ----- LEVEL 5 SPELLS ----- */
 
-    case 27:
+    case 27: {
       /* scare monster */
-      player.updateScareMonst(rnd(10) + playerLev);
-      if (isCarrying(OHANDofFEAR)) {
-        player.SCAREMONST *= 3;
-      }
+      let scareAmount = rnd(10) + playerLev;
+      if (isCarrying(OHANDofFEAR)) scareAmount *= 3;
+      refreshSelfSpell(() => player.SCAREMONST, (n) => player.updateScareMonst(n), scareAmount);
       return;
+    }
 
     case 28:
       /* hold monster */
-      player.updateHoldMonst(rnd(10) + playerLev);
+      refreshSelfSpell(() => player.HOLDMONST, (n) => player.updateHoldMonst(n), rnd(10) + playerLev);
       return;
 
     case 29:
       /* time stop */
-      player.updateTimeStop(rnd(20) + (playerLev << 1));
+      refreshSelfSpell(() => player.TIMESTOP, (n) => player.updateTimeStop(n), rnd(20) + (playerLev << 1));
       return;
 
     case 30:
@@ -450,7 +471,7 @@ function speldamage(x) {
 
     case 36:
       /* walk through walls */
-      player.updateWTW(rnd(10) + 5);
+      refreshSelfSpell(() => player.WTW, (n) => player.updateWTW(n), rnd(10) + 5);
       return;
 
     case 37: {
@@ -960,11 +981,12 @@ function godirect(spnum, x, y, dx, dy, dam, delay, cshow, stroverride) {
       setItem(x, y, OEMPTY);
     }
     dam = 0;
-  } else if (item.matches(OSTATUE)) {
+          } else if (item.matches(OSTATUE)) {
     updateLog(str(`statue`));
     if (dam > 44) {
       var doCrumble = getDifficulty() < 3;
-      if (ULARN) doCrumble = getDifficulty() <= 3 && rnd(60) < 30;
+      /* Slightly higher than the classic 50% Ularn roll (rnd(60) < 30). */
+      if (ULARN) doCrumble = getDifficulty() <= 3 && rnd(60) < 36;
       if (doCrumble) {
         updateLog(`  The statue crumbles${period}`);
         setItem(x, y, createObject(OBOOK, level));

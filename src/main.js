@@ -321,6 +321,17 @@ const MAP_GLYPHS = {
   93: "<",
 };
 
+const STAIR_UP_IDS = new Set([5, 93]);
+const STAIR_DOWN_IDS = new Set([13]);
+
+function mapGlyphColor(tile) {
+  if (tile.monster) return "#ffa590";
+  if (STAIR_DOWN_IDS.has(tile.id)) return "#e07070";
+  if (STAIR_UP_IDS.has(tile.id)) return "#6ecf7a";
+  if (tile.store) return "#c4d7ab";
+  return "#f0d7a0";
+}
+
 function mapExtent() {
   if (state.level === 0 && typeof townBounds === "function") {
     const b = townBounds();
@@ -440,7 +451,7 @@ function drawMap() {
         ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
+        ctx.fillStyle = mapGlyphColor(t);
         ctx.fillText(symbol, cx, cy);
       } else {
         const mark = Math.max(1, Math.round(cell * 0.14));
@@ -481,7 +492,7 @@ function drawMap() {
       MAP_GLYPHS[t.id] ||
       (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
     if (notable) {
-      ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#f0d7a0";
+      ctx.fillStyle = mapGlyphColor(t);
       ctx.fillText(symbol, cx, cy);
     } else {
       ctx.fillStyle = "#6d8a82";

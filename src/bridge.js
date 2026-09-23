@@ -517,11 +517,14 @@ window.ularn = {
           item.isInvisibleTrap() ||
           (monster && know & KNOWHERE && !seenMonster);
         const stair = masked ? null : stairView3D(item.id);
+        const potionKnown =
+          !masked && item.matches(OPOTION) ? isKnownPotion(item) : true;
         tiles.push({
           x,
           y,
           id: masked ? 0 : item.id,
           arg: masked ? 0 : item.arg ?? 0,
+          known: potionKnown,
           name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
           stair,
           symbol: masked
