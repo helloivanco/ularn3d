@@ -101,9 +101,15 @@
         <span class="brand-word">ULARN 3D<small>THE CAVES BELOW</small></span>
       </a>
       <nav class="site-nav" aria-label="Main">
-        <a href="/play/">Play</a>
         <a href="/about/">About</a>
         <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
+        <a
+          class="nav-cta nav-cta--secondary web-only"
+          href="/downloads/Ularn.windows.exe"
+          download="__DOWNLOAD_FILENAME__"
+          aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
+          >Download for Windows</a
+        >
       </nav>
     </header>
 
@@ -161,39 +167,27 @@
         <p class="support">
           Prepare among shops and landmarks, then descend floor by floor through stone halls and volcanic heat.
         </p>
-        <div class="gallery">
-          <figure class="gallery-feature">
+        <div class="gallery gallery--pair">
+          <figure>
             <img
               src="/screenshots/town.jpg"
-              width="1440"
-              height="610"
-              alt="Ularn 3D town view with adventurer near landmarks, symbol map, and adventure controls"
+              width="1600"
+              height="720"
+              alt="Ularn 3D town view with adventurer near home, trading post, caves, and volcano"
               loading="lazy"
             />
-            <figcaption>The surface town — stores, college, bank, and the cave mouth waiting beyond.</figcaption>
+            <figcaption>The surface town — shops, landmarks, and the cave mouth waiting beyond.</figcaption>
           </figure>
-          <div class="gallery-strip">
-            <figure>
-              <img
-                src="/screenshots/dungeon.jpg"
-                width="1440"
-                height="610"
-                alt="Ularn 3D cave combat with gnome, gold, and turn-based adventure bar"
-                loading="lazy"
-              />
-              <figcaption>Dungeon floors — fight one turn at a time.</figcaption>
-            </figure>
-            <figure>
-              <img
-                src="/screenshots/dungeon-alt.jpg"
-                width="1440"
-                height="610"
-                alt="Ularn 3D cave floor with loot, monster, and overhead journal"
-                loading="lazy"
-              />
-              <figcaption>Same rules as classic Ularn — new overhead presentation.</figcaption>
-            </figure>
-          </div>
+          <figure>
+            <img
+              src="/screenshots/dungeon.jpg"
+              width="1600"
+              height="720"
+              alt="Ularn 3D dungeon room with stairs, stone walls, and a waiting creature"
+              loading="lazy"
+            />
+            <figcaption>The caves below — stone halls, one turn at a time.</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -240,14 +234,14 @@
     <footer class="site-footer wrap">
       <a class="footer-brand" href="/">ULARN 3D</a>
       <p class="footer-copy">
-        Free single-player dungeon crawler. Original Ularn by Phil Cordier, descended from Noah Morgan’s Larn.
-        <a href="/engine/LICENSE">Engine license</a>.
+        Free dungeon crawler.
+        <a href="/engine/LICENSE">License</a>.
       </p>
       <p class="footer-version" aria-label="Ularn 3D version">v__APP_VERSION__</p>
       <nav aria-label="Footer">
         <a href="/play/">Play</a>
         <a href="/about/">About</a>
-        <a href="/about/#history">History</a>
+        <a href="https://github.com/helloivanco/ularn3d" rel="noopener noreferrer">GitHub</a>
         <a class="web-only" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__">Windows</a>
       </nav>
     </footer>
