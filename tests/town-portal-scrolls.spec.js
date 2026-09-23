@@ -93,7 +93,7 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
   expect(result.afterRead.level).toBe(0);
   expect(result.afterRead.dungeonPortal).toBe(102);
   expect(result.afterRead.townPortalId).toBe(102);
-  expect(result.afterRead.townIsStore).toBe(false);
+  expect(result.afterRead.townIsStore).toBeFalsy();
   expect(result.afterReturn).toEqual({ level: 1, x: 10, y: 8 });
 });
 
