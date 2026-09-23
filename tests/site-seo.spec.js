@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 
 const origin = "https://ularn-3d.vercel.app";
-const routes = ["/", "/play/", "/about/"];
+const routes = ["/", "/play/", "/about/", "/changelog/"];
 const { version } = JSON.parse(readFileSync("package.json", "utf8"));
 const downloadName = `Ularn-${version}.windows.exe`;
 test.use({ javaScriptEnabled: false });
@@ -43,6 +43,17 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
       expect([entity?.["@type"]].flat().includes("SoftwareApplication")).toBe(true);
       expect(entity?.softwareVersion).toBe(version);
     }
+    if (route === "/changelog/") {
+      expect(nodes.some((node) => node.about?.softwareVersion === version)).toBe(true);
+      await expect(page.getByRole("link", { name: /GitHub Releases/i }).first()).toHaveAttribute(
+        "href",
+        "https://github.com/helloivanco/ularn3d/releases",
+      );
+      await expect(page.getByRole("link", { name: /GitHub repository/i })).toHaveAttribute(
+        "href",
+        "https://github.com/helloivanco/ularn3d",
+      );
+    }
     expect(await page.locator("img:not([alt])").count()).toBe(0);
     await expect(page.locator('link[rel="icon"][href="/favicon.svg"]')).toHaveCount(1);
   }
@@ -52,17 +63,24 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}/`);
 });
 
-test("field guide, history, and optional Windows download are reachable through normal links", async ({ page }) => {
+test("field guide, history, changelog, and optional Windows download are reachable through normal links", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
   await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
-  await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
+  await expect(page.locator(".footer-version")).toContainText(`v${version}`);
+  await expect(page.locator(".footer-version a")).toHaveAttribute("href", "/changelog/");
+  await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /What’s New/i })).toHaveAttribute(
+    "href",
+    "/changelog/",
+  );
   await expect(page.getByRole("link", { name: /Play in your browser/i }).first()).toHaveAttribute("href", "/play/");
   await expect(page.getByRole("link", { name: /full history and creators/i })).toHaveAttribute("href", "/about/#history");
   await page.goto("/play/");
   await expect(page.locator("#about-game")).toHaveAttribute("href", "/about/");
+  await expect(page.getByRole("link", { name: /What’s new/i })).toHaveAttribute("href", "/changelog/");
   await expect(page.getByRole("link", { name: /History & creators/i })).toHaveAttribute("href", "/about/#history");
+  await expect(page.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
   await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
@@ -70,15 +88,24 @@ test("field guide, history, and optional Windows download are reachable through 
   await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
   await page.goto("/about/");
   await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/play/");
+  await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /What’s New/i })).toHaveAttribute(
+    "href",
+    "/changelog/",
+  );
   const aboutDownload = page.locator('#windows a[href="/downloads/Ularn.windows.exe"]');
   await expect(aboutDownload).toBeVisible();
   await expect(aboutDownload).toHaveAttribute("download", downloadName);
   await expect(aboutDownload).toContainText(new RegExp(`v${version}`));
   await expect(page.locator('a[href="/downloads/SHA256SUMS.txt"]')).toBeVisible();
-  await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
+  await expect(page.locator(".footer-version")).toContainText(`v${version}`);
+  await expect(page.locator(".footer-version a")).toHaveAttribute("href", "/changelog/");
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "GitHub" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d",
+  );
+  await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: /What’s New/i })).toHaveAttribute(
+    "href",
+    "/changelog/",
   );
   await expect(page.locator(".site-nav a[href='/play/']").filter({ hasText: /^Play$/ })).toHaveCount(0);
   await expect(page.locator(".site-nav .nav-cta[href='/play/']")).toContainText(/Play free/i);
@@ -92,6 +119,14 @@ test("field guide, history, and optional Windows download are reachable through 
   await expect(page.getByText("Phil Cordier", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Ultra-Larn/i).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Credits" })).toHaveCount(0);
+  await page.goto("/changelog/");
+  await expect(page.locator("h1")).toContainText(/What’s new/i);
+  await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
+  await expect(page.locator(".changelog-list > li")).toHaveCount(8);
+  await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
+    "href",
+    "https://github.com/helloivanco/ularn3d/releases",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -154,6 +189,8 @@ test("deployed utility pages stay out of search and unknown routes are real 404s
     ["/play/index.html", "/play/"],
     ["/about", "/about/"],
     ["/about/index.html", "/about/"],
+    ["/changelog", "/changelog/"],
+    ["/changelog/index.html", "/changelog/"],
   ]) {
     const redirect = await request.get(duplicate, { maxRedirects: 0 });
     expect(redirect.status()).toBe(308);

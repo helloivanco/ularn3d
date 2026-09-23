@@ -847,6 +847,77 @@ kbd {
   font-size: 13px;
 }
 
+.changelog-list {
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.changelog-list > li {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.changelog-list > li > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.changelog-version {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.changelog-list h3 {
+  margin: 0;
+  font: normal clamp(22px, 2.4vw, 28px) / 1.2 Georgia, serif;
+  color: #eee8d9;
+  letter-spacing: -0.3px;
+}
+
+.changelog-list ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: #b1bfba;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.changelog-list li li {
+  margin: 0.35rem 0;
+}
+
+.changelog-earlier {
+  margin: 20px 0 0;
+  padding-left: 1.15rem;
+  color: #b1bfba;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.changelog-earlier strong {
+  color: #dfddce;
+  font-weight: 600;
+}
+
+.footer-version a {
+  color: inherit;
+  text-decoration: none;
+  letter-spacing: inherit;
+  font-weight: inherit;
+}
+
+.footer-version a:hover {
+  color: #f8dc9c;
+}
+
 .site-footer {
   display: flex;
   flex-wrap: wrap;

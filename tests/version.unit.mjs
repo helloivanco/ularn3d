@@ -9,8 +9,8 @@ import {
   versionGreater,
 } from "../scripts/check-release-version.mjs";
 
-const htmlSources = ["index.html", "play/index.html", "public/about/index.html"];
-const downloadSources = ["index.html", "play/index.html", "public/about/index.html"];
+const htmlSources = ["index.html", "play/index.html", "public/about/index.html", "public/changelog/index.html"];
+const downloadSources = ["index.html", "play/index.html", "public/about/index.html", "public/changelog/index.html"];
 
 test("npm version restamp keeps package.json, lockfile, and Vercel filename together", () => {
   const version = checkStampedVersion();
@@ -38,7 +38,10 @@ test("play page and field guide stamp version from package.json placeholders", (
   for (const file of htmlSources) {
     const html = readFileSync(file, "utf8");
     assert.match(html, /__APP_VERSION__/);
-    assert.equal(html.includes(APP_VERSION), false, `${file} must not hardcode ${APP_VERSION}`);
+    // Changelog entries intentionally name past and current versions; stamped surfaces still use placeholders.
+    if (file !== "public/changelog/index.html") {
+      assert.equal(html.includes(APP_VERSION), false, `${file} must not hardcode ${APP_VERSION}`);
+    }
     assert.doesNotMatch(html, /Ularn-1\.\d+\.\d+\.windows\.exe/);
   }
   for (const file of downloadSources) {
@@ -46,20 +49,29 @@ test("play page and field guide stamp version from package.json placeholders", (
   }
   const home = readFileSync("index.html", "utf8");
   assert.match(home, /"softwareVersion": "__APP_VERSION__"/);
-  assert.match(home, /class="footer-version"[^>]*>v__APP_VERSION__/);
+  assert.match(home, /class="footer-version"[^>]*>\s*<a href="\/changelog\/"[^>]*>v__APP_VERSION__/);
+  assert.match(home, /href="\/changelog\/"/);
   const play = readFileSync("play/index.html", "utf8");
   assert.match(play, /"softwareVersion": "__APP_VERSION__"/);
   assert.match(play, /class="site-version"[^>]*>v__APP_VERSION__/);
+  assert.match(play, /href="\/changelog\/"/);
+  assert.match(play, /href="https:\/\/github\.com\/helloivanco\/ularn3d"/);
   const about = readFileSync("public/about/index.html", "utf8");
-  assert.match(about, /class="footer-version"[^>]*>v__APP_VERSION__/);
+  assert.match(about, /class="footer-version"[^>]*>\s*<a href="\/changelog\/"[^>]*>v__APP_VERSION__/);
   assert.match(about, /id="history"/);
   assert.match(about, /Noah Morgan/);
   assert.match(about, /Phil Cordier/);
+  assert.match(about, /href="\/changelog\/"/);
   assert.doesNotMatch(about, /href="\/credits\/?"/);
   assert.doesNotMatch(home, /href="\/credits\/?"/);
   assert.doesNotMatch(play, /href="\/credits\/?"/);
   assert.match(home, /href="\/about\/#history"/);
   assert.match(play, /href="\/about\/#history"/);
+  const changelog = readFileSync("public/changelog/index.html", "utf8");
+  assert.match(changelog, /class="changelog-list"/);
+  assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d\/releases"/);
+  assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d"/);
+  assert.match(readFileSync("CHANGELOG.md", "utf8"), /## 1\.3\.\d+/);
 });
 
 test("Electron artifact names read package.json version", () => {

@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 import { APP_VERSION, DOWNLOAD_FILENAME, stampVersion } from "./scripts/app-version.mjs";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
-const staticDirs = ["about"];
+const staticDirs = ["about", "changelog"];
 
 // Marketing pages live under public/; play and home are Vite HTML entries.
 const directoryIndex = (server) => {
