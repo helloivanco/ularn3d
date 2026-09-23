@@ -98,12 +98,17 @@
     },
     {
       "source": "/credits/index.html",
-      "destination": "/credits/",
+      "destination": "/about/#history",
+      "permanent": true
+    },
+    {
+      "source": "/credits/",
+      "destination": "/about/#history",
       "permanent": true
     },
     {
       "source": "/credits",
-      "destination": "/credits/",
+      "destination": "/about/#history",
       "permanent": true
     }
   ]

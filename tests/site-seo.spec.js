@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 
 const origin = "https://ularn-3d.vercel.app";
-const routes = ["/", "/play/", "/about/", "/credits/"];
+const routes = ["/", "/play/", "/about/"];
 const { version } = JSON.parse(readFileSync("package.json", "utf8"));
 const downloadName = `Ularn-${version}.windows.exe`;
 test.use({ javaScriptEnabled: false });
@@ -19,7 +19,7 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
     expect(descriptions.at(-1).length).toBeGreaterThan(40);
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator("h1")).toContainText(/Ularn/i);
-    if (route === "/" || route === "/about/" || route === "/credits/") {
+    if (route === "/" || route === "/about/") {
       await expect(page.locator("h1")).toContainText(/3D/i);
     }
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}${route}`);
@@ -52,15 +52,17 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}/`);
 });
 
-test("field guide and optional Windows download are reachable through normal links", async ({ page }) => {
+test("field guide, history, and optional Windows download are reachable through normal links", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
   await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
   await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
   await expect(page.getByRole("link", { name: /Play in your browser/i }).first()).toHaveAttribute("href", "/play/");
+  await expect(page.getByRole("link", { name: /full history and creators/i })).toHaveAttribute("href", "/about/#history");
   await page.goto("/play/");
   await expect(page.locator("#about-game")).toHaveAttribute("href", "/about/");
+  await expect(page.getByRole("link", { name: /History & creators/i })).toHaveAttribute("href", "/about/#history");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
   await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
@@ -78,12 +80,11 @@ test("field guide and optional Windows download are reachable through normal lin
   await expect(page.locator("#controls")).toContainText("F3");
   await expect(page.locator("#windows")).toContainText(/separate from browser saves/);
   await expect(page.locator("#windows")).toContainText(downloadName);
-  await page.goto("/credits/");
-  await expect(page.locator("h1")).toContainText(/Ularn/i);
+  await expect(page.locator("#history")).toBeVisible();
   await expect(page.getByText("Noah Morgan", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Phil Cordier", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Ultra-Larn/i).first()).toBeVisible();
-  await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
+  await expect(page.getByRole("link", { name: "Credits" })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -146,12 +147,17 @@ test("deployed utility pages stay out of search and unknown routes are real 404s
     ["/play/index.html", "/play/"],
     ["/about", "/about/"],
     ["/about/index.html", "/about/"],
-    ["/credits", "/credits/"],
-    ["/credits/index.html", "/credits/"],
   ]) {
     const redirect = await request.get(duplicate, { maxRedirects: 0 });
     expect(redirect.status()).toBe(308);
     expect(new URL(redirect.headers().location, origin).pathname).toBe(canonical);
+  }
+  for (const legacy of ["/credits", "/credits/", "/credits/index.html"]) {
+    const redirect = await request.get(legacy, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(308);
+    const location = new URL(redirect.headers().location, origin);
+    expect(location.pathname).toBe("/about/");
+    expect(location.hash).toBe("#history");
   }
   const utility = await request.get("/engine/larn_local.html");
   expect(utility.headers()["x-robots-tag"]).toContain("noindex");
@@ -171,4 +177,9 @@ test("vercel download points at the GitHub Release for this package version", as
   expect(exeRedirect?.permanent).toBe(false);
   const checksumRedirect = vercel.redirects.find((entry) => entry.source === "/downloads/SHA256SUMS.txt");
   expect(checksumRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/SHA256SUMS.txt`);
+  for (const source of ["/credits", "/credits/", "/credits/index.html"]) {
+    const creditsRedirect = vercel.redirects.find((entry) => entry.source === source);
+    expect(creditsRedirect?.destination).toBe("/about/#history");
+    expect(creditsRedirect?.permanent).toBe(true);
+  }
 });
