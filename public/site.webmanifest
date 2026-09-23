@@ -4,8 +4,8 @@
   "description": "A free turn-based dungeon crawler: play in your browser or download for Windows.",
   "start_url": "/play/",
   "display": "standalone",
-  "background_color": "#e6ebe7",
-  "theme_color": "#0f5c52",
+  "background_color": "#0c1417",
+  "theme_color": "#0c1417",
   "icons": [
     {
       "src": "/icons/icon-192.png",

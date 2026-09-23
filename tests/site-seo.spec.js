@@ -70,11 +70,18 @@ test("field guide, history, and optional Windows download are reachable through 
   await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
   await page.goto("/about/");
   await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/play/");
-  await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toBeVisible();
-  await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toHaveAttribute("download", downloadName);
-  await expect(page.locator('a[href="/downloads/Ularn.windows.exe"]')).toContainText(new RegExp(`v${version}`));
+  const aboutDownload = page.locator('#windows a[href="/downloads/Ularn.windows.exe"]');
+  await expect(aboutDownload).toBeVisible();
+  await expect(aboutDownload).toHaveAttribute("download", downloadName);
+  await expect(aboutDownload).toContainText(new RegExp(`v${version}`));
   await expect(page.locator('a[href="/downloads/SHA256SUMS.txt"]')).toBeVisible();
   await expect(page.locator(".footer-version")).toHaveText(`v${version}`);
+  await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/helloivanco/ularn3d",
+  );
+  await expect(page.locator(".site-nav a[href='/play/']").filter({ hasText: /^Play$/ })).toHaveCount(0);
+  await expect(page.locator(".site-nav .nav-cta[href='/play/']")).toContainText(/Play free/i);
   await expect(page.locator(".class-grid article")).toHaveCount(8);
   await expect(page.locator("#controls")).toContainText("F2");
   await expect(page.locator("#controls")).toContainText("F3");
