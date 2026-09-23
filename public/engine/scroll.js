@@ -255,6 +255,26 @@ function read_scroll(scroll) {
       if (printMessage) updateLog(`  You sense a benign presence${period}`);
       player.LIFEPROT++;
       break;
+
+    case 24: {
+      /* teleport to town — leave a return portal on the dungeon tile */
+      if (level === 0) {
+        updateLog(`  You're already in town${period}`);
+        break;
+      }
+      const here = itemAt(player.x, player.y);
+      if (here && here.isStore()) {
+        updateLog(`  The portal cannot open on a building${period}`);
+        break;
+      }
+      const dungeonLevel = level;
+      const dungeonX = player.x;
+      const dungeonY = player.y;
+      if (placeTownPortalPair(dungeonLevel, dungeonX, dungeonY)) {
+        updateLog(`  A shimmering portal opens as you return to town${period}`);
+      }
+      break;
+    }
   }
 }
 
@@ -272,4 +292,93 @@ function removecurse(printMessage) {
   if (player.CLUMSINESS > 0) player.CLUMSINESS = 1;
   if (player.INFEEBLEMENT > 0) player.INFEEBLEMENT = 1;
   if (player.HALFDAM > 0) player.HALFDAM = 1;
+}
+
+
+
+var townPortalLink = null;
+
+function clearTownPortals() {
+  if (!townPortalLink) return;
+  const clearAt = (lev, x, y) => {
+    if (lev == null || x == null || y == null) return;
+    const saved = level;
+    // Operate on the stored level grid without changing the player's depth mid-clear.
+    const grid = LEVELS[lev];
+    if (!grid) return;
+    const tile = grid.items[x]?.[y];
+    if (tile && tile.matches(OTOWNPORTAL)) grid.items[x][y] = createObject(OEMPTY);
+  };
+  clearAt(townPortalLink.dungeonLevel, townPortalLink.dungeonX, townPortalLink.dungeonY);
+  clearAt(0, townPortalLink.townX, townPortalLink.townY);
+  townPortalLink = null;
+}
+
+function findTownPortalSpot() {
+  const b = typeof townBounds === `function` ? townBounds() : { x0: 0, y0: 0, x1: MAXX - 1, y1: MAXY - 1 };
+  const spots = [];
+  for (let y = b.y0; y <= b.y1; y++) {
+    for (let x = b.x0; x <= b.x1; x++) {
+      const tile = itemAt(x, y);
+      if (!tile || !tile.matches(OEMPTY)) continue;
+      if (tile.isStore && tile.isStore()) continue;
+      spots.push({ x, y });
+    }
+  }
+  if (spots.length) return spots[rund(spots.length)];
+  // Fallback: any empty non-building tile on the home level.
+  for (let y = 1; y < MAXY - 1; y++) {
+    for (let x = 1; x < MAXX - 1; x++) {
+      const tile = itemAt(x, y);
+      if (tile && tile.matches(OEMPTY) && !(tile.isStore && tile.isStore())) return { x, y };
+    }
+  }
+  return { x: Math.floor(MAXX / 2), y: Math.floor(MAXY / 2) };
+}
+
+function placeTownPortalPair(dungeonLevel, dungeonX, dungeonY) {
+  clearTownPortals();
+  setItem(dungeonX, dungeonY, createObject(OTOWNPORTAL));
+  setKnow(dungeonX, dungeonY, KNOWALL);
+  const fromLevel = level;
+  newcavelevel(0);
+  const town = findTownPortalSpot();
+  // Never open a town portal on a building tile.
+  if (itemAt(town.x, town.y).isStore()) {
+    updateLog(`  The portal fizzles — no clear town landing${period}`);
+    newcavelevel(fromLevel);
+    positionplayer(dungeonX, dungeonY, true);
+    setItem(dungeonX, dungeonY, OEMPTY);
+    return false;
+  }
+  setItem(town.x, town.y, createObject(OTOWNPORTAL));
+  setKnow(town.x, town.y, KNOWALL);
+  townPortalLink = {
+    dungeonLevel,
+    dungeonX,
+    dungeonY,
+    townX: town.x,
+    townY: town.y,
+  };
+  positionplayer(town.x, town.y, false);
+  player.TELEFLAG = 0;
+  return true;
+}
+
+function activateTownPortal() {
+  if (!townPortalLink) {
+    updateLog(`  The portal has faded away${period}`);
+    setItem(player.x, player.y, OEMPTY);
+    return;
+  }
+  if (level === 0) {
+    newcavelevel(townPortalLink.dungeonLevel);
+    positionplayer(townPortalLink.dungeonX, townPortalLink.dungeonY, true);
+    updateLog(`  You step through the portal and return to the dungeon${period}`);
+  } else {
+    newcavelevel(0);
+    positionplayer(townPortalLink.townX, townPortalLink.townY, true);
+    updateLog(`  You step through the portal and return to town${period}`);
+  }
+  showcell(player.x, player.y);
 }

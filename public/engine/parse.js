@@ -297,6 +297,10 @@ async function parse(e, key) {
   //
   if (key == 'e') {
     if (player.TIMESTOP == 0) {
+      if (item.matches(OTOWNPORTAL)) {
+        activateTownPortal();
+        return;
+      }
       if (item.isStore()) {
         enter();
         return;

@@ -149,7 +149,8 @@ function loadState(state) {
   setMode(amiga_mode, getPref('retro_mode'), getPref('original_objects'));
 
   dnd_item = state.dnd_item;
-  genocide = state.genocide; 
+  genocide = state.genocide;
+  townPortalLink = state.townPortalLink || null;
 
   logname = state.logname;
   debug_used = state.debug_used;

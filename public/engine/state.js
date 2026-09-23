@@ -107,6 +107,7 @@ function GameState(save) {
   
   this.dnd_item = dnd_item;
   this.genocide = genocide;
+  this.townPortalLink = townPortalLink;
 
   this.logname = logname;
   this.debug_used = debug_used;

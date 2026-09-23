@@ -54,6 +54,10 @@ function enter() {
     opad();
     return;
   }
+  if (building.matches(OTOWNPORTAL)) {
+    activateTownPortal();
+    return;
+  }
 
   nomove = NOMOVE;
   debug(`enter(): no building here`);
@@ -190,15 +194,15 @@ function dnd_parse(key) {
     i += dndindex;
     if (i >= MAXITM) {
       storemessage(`Sorry, but we are out of that item${period}`, 700);
-    } else if (dnd_item[i].qty <= 0) {
+    } else if (dnd_item[i].qty <= 0 && !dnd_item[i].infinite) {
       storemessage(`Sorry, but we are out of that item${period}`, 700);
     } else if (pocketfull()) {
       storemessage(`You can't carry anything more!`, 700);
-    } else if (player.GOLD < dnd_item[i].price) {
+    } else if (player.GOLD < dndItemPrice(i)) {
       storemessage(`You don't have enough gold to pay for that!`, 700);
     } else {
-      player.setGold(player.GOLD - dnd_item[i].price);
-      dnd_item[i].qty--;
+      player.setGold(player.GOLD - dndItemPrice(i));
+      if (!dnd_item[i].infinite) dnd_item[i].qty--;
       var boughtItem = createObject(dnd_item[i].itemId, dnd_item[i].arg);
       take(boughtItem);
       var invindex = getCharFromIndex(player.inventory.indexOf(boughtItem));
@@ -237,6 +241,14 @@ function dnd_parse(key) {
 
 
 
+function dndItemPrice(i) {
+  if (i < 0 || i >= MAXITM || !dnd_item[i]) return 0;
+  const item = createObject(dnd_item[i].itemId, dnd_item[i].arg);
+  // Undiscovered scrolls share one shop price until the player learns them.
+  if (item.matches(OSCROLL) && !isKnownScroll(item)) return 100;
+  return dnd_item[i].price;
+}
+
 /*
     dnditem(index)
 
@@ -247,23 +259,26 @@ function dnditem(i) {
 
   cursor((i & 1) * 40 + 1, ((i % 26) >> 1) + 5);
 
-  if (dnd_item[i].qty == 0) {
+  if (dnd_item[i].qty == 0 && !dnd_item[i].infinite) {
     lprcat(' '.repeat(40));
     return;
   }
 
-  const price = dnd_item[i].price;
+  const price = dndItemPrice(i);
   const markup_start = player.GOLD < price ? START_DIM : ``;
   const markup_end = player.GOLD < price ? END_DIM : ``;
 
   // index
   const indexString = `${getCharFromIndex(i % 26)}) `;
   
-  // description
+  // description — unknown scrolls stay generic until discovered
   const item = createObject(dnd_item[i].itemId, dnd_item[i].arg);
   let itemString;
   if (item.matches(OPOTION)) itemString = item.toString(true).substring(8).padEnd(28);
-  else if (item.matches(OSCROLL)) itemString = item.toString(true).substring(8).padEnd(28);
+  else if (item.matches(OSCROLL)) {
+    const known = isKnownScroll(item);
+    itemString = (known ? item.toString(false).substring(8) : `magic scroll`).padEnd(28);
+  }
   else itemString = item.toString(true).padEnd(28);
   
   // price
@@ -1214,7 +1229,7 @@ function initpricelist() {
     dnd_item = [];
     for (var i = 0; i < STORE_INVENTORY.length; i++) {
       var tmp = STORE_INVENTORY[i];
-      dnd_item[i] = new DNDItem(tmp[0], tmp[1], tmp[2], tmp[3]);
+      dnd_item[i] = new DNDItem(tmp[0], tmp[1], tmp[2], tmp[3], tmp[4]);
     }
   }
 }

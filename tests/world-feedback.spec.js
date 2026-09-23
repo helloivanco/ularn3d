@@ -344,7 +344,7 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
   expect(stats.floorMaterial).toBe("MeshLambertMaterial");
   expect(stats.wallCastShadow).toBe(false);
   expect(stats.floorReceiveShadow).toBe(false);
-  expect(stats.pixelRatio).toBeLessThanOrEqual(0.85);
+  expect(stats.pixelRatio).toBeLessThanOrEqual(0.75);
   expect(stats.shadowAfter).toBe(stats.shadowBefore);
   expect(stats.propGroups).toBe(0);
   expect(stats.lights).toBeLessThanOrEqual(5);

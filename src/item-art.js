@@ -112,11 +112,13 @@ const SCROLL_ART = Object.freeze([
   "/art/items/scroll-annihilation.png",
   "/art/items/scroll-pulverization.png",
   "/art/items/scroll-life-protection.png",
+  "/art/items/scroll-teleport-to-town.png",
 ]);
 
 const OPOTION_ID = 42;
 const OSCROLL_ID = 41;
 const UNKNOWN_POTION_ART = "/art/items/potion-unknown.png";
+const UNKNOWN_SCROLL_ART = "/art/items/scroll-unknown.png";
 
 const textures = new Map();
 const materials = new Map();
@@ -132,7 +134,10 @@ export function itemArtPath(id, arg = 0, known = true) {
     if (!known) return UNKNOWN_POTION_ART;
     return POTION_ART[arg] || null;
   }
-  if (id === OSCROLL_ID) return SCROLL_ART[arg] || null;
+  if (id === OSCROLL_ID) {
+    if (!known) return UNKNOWN_SCROLL_ART;
+    return SCROLL_ART[arg] || null;
+  }
   return ITEM_ART[id] || null;
 }
 
@@ -264,7 +269,8 @@ export function itemArtCatalog() {
     potions: POTION_ART.length,
     scrolls: SCROLL_ART.length,
     unknownPotion: UNKNOWN_POTION_ART,
-    total: Object.keys(ITEM_ART).length + POTION_ART.length + SCROLL_ART.length + 1,
+    unknownScroll: UNKNOWN_SCROLL_ART,
+    total: Object.keys(ITEM_ART).length + POTION_ART.length + SCROLL_ART.length + 2,
   };
 }
 
