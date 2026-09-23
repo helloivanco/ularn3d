@@ -493,14 +493,14 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
  */
 function makeobject(depth) {
   if (depth == 0) {
-    fillroom(OENTRANCE, 0);  /*  entrance to dungeon         */
-    fillroom(ODNDSTORE, 0);  /*  the DND STORE               */
-    fillroom(OSCHOOL, 0);    /*  college of Larn             */
-    fillroom(OBANK, 0);      /*  1st national bank of larn   */
-    fillroom(OVOLDOWN, 0);   /*  volcano shaft to temple     */
-    fillroom(OHOME, 0);      /*  the players home & family   */
-    fillroom(OTRADEPOST, 0); /*  the trading post            */
-    fillroom(OLRS, 0);       /*  the larn revenue service    */
+    fillTownBuilding(OENTRANCE, 0);  /*  entrance to dungeon         */
+    fillTownBuilding(ODNDSTORE, 0);  /*  the DND STORE               */
+    fillTownBuilding(OSCHOOL, 0);    /*  college of Larn             */
+    fillTownBuilding(OBANK, 0);      /*  1st national bank of larn   */
+    fillTownBuilding(OVOLDOWN, 0);   /*  volcano shaft to temple     */
+    fillTownBuilding(OHOME, 0);      /*  the players home & family   */
+    fillTownBuilding(OTRADEPOST, 0); /*  the trading post            */
+    fillTownBuilding(OLRS, 0);       /*  the larn revenue service    */
     return;
   }
 
@@ -605,7 +605,8 @@ function makeobject(depth) {
   if (ULARN) {
     // only one of these per level
     var created = false;
-    created |= createArtifact(OBRASSLAMP,       player.LAMP,         !created && rnd(120) < 8);
+    /* Slightly higher than the classic rnd(120) < 8 (~6.7%) lamp roll. */
+    created |= createArtifact(OBRASSLAMP,       player.LAMP,         !created && rnd(120) < 10);
     created |= createArtifact(OWWAND,           player.WAND,         !created && rnd(120) < 8);
     created |= createArtifact(OORBOFDRAGON,     player.SLAYING,      !created && rnd(120) < 8);
     created |= createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, !created && rnd(120) < 8);
@@ -704,6 +705,45 @@ function froom(n, itm, arg) {
 }
 
 
+
+/*
+ * Town buildings need a full empty ring so 3D models never visually overlap.
+ * Chebyshev distance >= 2 between any two buildings (one empty square around).
+ */
+function townBuildingClearanceOk(x, y) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= MAXX || ny >= MAXY) return false;
+      const neighbor = itemAt(nx, ny);
+      if (!neighbor.matches(OEMPTY)) return false;
+    }
+  }
+  return true;
+}
+
+/*
+ * Place a town landmark with at least one empty square on every side.
+ */
+function fillTownBuilding(what, arg) {
+  const b = townBounds();
+  var safe = 400;
+  var x = b.x0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
+  var y = b.y0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
+  while (!(itemAt(x, y).matches(OEMPTY) && townBuildingClearanceOk(x, y))) {
+    x = b.x0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
+    y = b.y0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
+    if (safe-- == 0) {
+      debug(`fillTownBuilding: SAFETY! falling back to fillroom`);
+      return fillroom(what, arg);
+    }
+  }
+  var newItem = createObject(what, arg);
+  setItem(x, y, newItem);
+  return newItem;
+}
 
 /*
     subroutine to put an object into an empty room

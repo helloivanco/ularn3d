@@ -9,7 +9,9 @@ floor replacements for weapons, armor, rings, consumables, artifacts, and gems i
 shared. Camera-facing planes mirror left/right as the overhead camera orbits, matching
 the monster art convention (single view, not eight-direction sheets).
 
-Potions (`id` 42) and scrolls (`id` 41) select art by `arg` (the full potion/scroll tables).
+Potions (`id` 42) select art by `arg` only after the potion is discovered.
+Undiscovered potions share `/art/items/potion-unknown.png`. Scrolls (`id` 41)
+still select art by `arg` from the full scroll table.
 
 ## Shared generation prompt pattern
 

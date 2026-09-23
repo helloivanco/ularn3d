@@ -116,6 +116,7 @@ const SCROLL_ART = Object.freeze([
 
 const OPOTION_ID = 42;
 const OSCROLL_ID = 41;
+const UNKNOWN_POTION_ART = "/art/items/potion-unknown.png";
 
 const textures = new Map();
 const materials = new Map();
@@ -126,8 +127,11 @@ const loader = new THREE.TextureLoader();
 // mirroring as the overhead camera orbits, matching monster presentation.
 const DEFAULT_FACING = Object.freeze({ x: 1, y: 0 });
 
-export function itemArtPath(id, arg = 0) {
-  if (id === OPOTION_ID) return POTION_ART[arg] || null;
+export function itemArtPath(id, arg = 0, known = true) {
+  if (id === OPOTION_ID) {
+    if (!known) return UNKNOWN_POTION_ART;
+    return POTION_ART[arg] || null;
+  }
   if (id === OSCROLL_ID) return SCROLL_ART[arg] || null;
   return ITEM_ART[id] || null;
 }
@@ -202,7 +206,8 @@ function stripLoadedTexture(texture) {
 }
 
 export function itemSprite(tile, invalidate = () => {}) {
-  const path = itemArtPath(tile?.id, tile?.arg ?? 0);
+  const known = tile?.known !== false;
+  const path = itemArtPath(tile?.id, tile?.arg ?? 0, known);
   if (!path) return null;
   if (!textures.has(path)) {
     const texture = loader.load(path, (loaded) => {
@@ -258,7 +263,8 @@ export function itemArtCatalog() {
     items: Object.keys(ITEM_ART).length,
     potions: POTION_ART.length,
     scrolls: SCROLL_ART.length,
-    total: Object.keys(ITEM_ART).length + POTION_ART.length + SCROLL_ART.length,
+    unknownPotion: UNKNOWN_POTION_ART,
+    total: Object.keys(ITEM_ART).length + POTION_ART.length + SCROLL_ART.length + 1,
   };
 }
 
