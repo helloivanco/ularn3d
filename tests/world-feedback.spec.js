@@ -183,9 +183,10 @@ test("weapons armor rings gems and consumable tables use unique art", async ({ p
   expect(byKey["43:0"]).toBe("/art/items/book.png");
   expect(byKey["83:0"]).toBe("/art/items/cookie.png");
   // Undiscovered potions share one bottle; unique art appears after learning.
+  // Cure dianthroritis is known from the start of an expedition.
   expect(byKey["42:0"]).toBe("/art/items/potion-unknown.png");
   expect(byKey["42:1"]).toBe("/art/items/potion-unknown.png");
-  expect(byKey["42:21"]).toBe("/art/items/potion-unknown.png");
+  expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.png");
   expect(byKey["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
   expect(byKey["41:19"]).toBe("/art/items/scroll-identify.png");
   expect(byKey["41:21"]).toBe("/art/items/scroll-annihilation.png");
