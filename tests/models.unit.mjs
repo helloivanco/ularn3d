@@ -29,12 +29,12 @@ test("shared solids stay cheap enough for web GPU fill", () => {
   orb(group, 0xffffff, 0, 0, 0, 1);
   ring(group, 0xffffff);
   assert.equal(triangles(group.children[0]), 12);
-  assert.equal(triangles(group.children[1]), 80);
-  assert.equal(triangles(group.children[2]), 128);
+  assert.equal(triangles(group.children[1]), 20);
+  assert.equal(triangles(group.children[2]), 72);
 });
 
 test("the hero no longer pays rounded-box and dense-torus tax", () => {
-  assert.ok(triangles(hero()) < 1200);
+  assert.ok(triangles(hero()) < 900);
 });
 
 test("pits dart traps and express elevators use distinct graphics", () => {
@@ -51,7 +51,7 @@ test("pits dart traps and express elevators use distinct graphics", () => {
   assert.equal(arrow.userData.trapKind, "trap");
 
   assert.ok(pit.getObjectByName("pit-rim"));
-  assert.equal(dart.children.filter((c) => c.name === "dart-spike").length, 5);
+  assert.equal(dart.children.filter((c) => c.name === "dart-spike").length, 6);
   assert.ok(up.getObjectByName("elevator-up-arrow"));
   assert.ok(down.getObjectByName("elevator-down-arrow"));
   assert.equal(up.userData.elevatorDirection, "up");
@@ -62,4 +62,26 @@ test("pits dart traps and express elevators use distinct graphics", () => {
   assert.notEqual(meshCount(pit), meshCount(dart));
   assert.notEqual(meshCount(pit), meshCount(up));
   assert.notEqual(meshCount(dart), meshCount(up));
+  assert.notEqual(meshCount(up), meshCount(down), "elevator directions need unique topology");
+});
+
+test("wielded weapons rebuild into distinct attack grips", async () => {
+  const { fillWieldedWeapon } = await import("../src/models.js");
+  const grip = new THREE.Group();
+  fillWieldedWeapon(grip, { id: 31, type: "dagger" });
+  const daggerMeshes = meshCount(grip);
+  fillWieldedWeapon(grip, { id: 57, type: "axe" });
+  const axeMeshes = meshCount(grip);
+  fillWieldedWeapon(grip, { id: 27, type: "hammer" });
+  const hammerMeshes = meshCount(grip);
+  fillWieldedWeapon(grip, { id: null, type: "unarmed" });
+  assert.equal(meshCount(grip), 0);
+  assert.notEqual(daggerMeshes, axeMeshes);
+  assert.notEqual(axeMeshes, hammerMeshes);
+});
+
+test("town portal has its own landmark mesh", () => {
+  const portal = itemModel({ id: 102, name: "a town portal" });
+  assert.equal(portal.userData.portal, true);
+  assert.ok(meshCount(portal) >= 3);
 });

@@ -8,7 +8,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, surface, surfaceLambert, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
-import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
+import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources, itemArtPath } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight } from "./wall-cut.js";
 import {
@@ -22,6 +22,7 @@ import {
   itemModel,
   monsterModel,
   ring,
+  fillWieldedWeapon,
   LANDMARK_NAMES,
 } from "./models.js";
 
@@ -501,6 +502,12 @@ export class World {
           return { x: tile.x, y: tile.y, height: scale.y };
         });
       },
+      heroWeapon: () => ({
+        id: this.heroWeapon?.userData?.weaponId ?? null,
+        type: this.heroWeapon?.userData?.weaponType ?? null,
+        meshes: this.heroWeapon?.children?.length ?? 0,
+        hasArt: !!this.heroWeapon?.getObjectByName("weapon-art"),
+      }),
     });
   }
   invalidate() {
@@ -585,6 +592,28 @@ export class World {
     this.heroRightLeg = this.player.getObjectByName("right-leg");
     this.heroWeapon = this.player.getObjectByName("weapon");
     this.heroCape = this.player.getObjectByName("cape");
+    this.heroWeaponKey = null;
+  }
+  syncHeroWeapon(state) {
+    const grip = this.heroWeapon;
+    if (!grip) return;
+    const weapon = state?.weapon || { id: null, type: "unarmed", name: "bare hands" };
+    const key = `${weapon.id ?? "none"}:${weapon.type}`;
+    if (key === this.heroWeaponKey) return;
+    this.heroWeaponKey = key;
+    fillWieldedWeapon(grip, weapon);
+    // Overlay the floor artwork so the swung weapon matches ground loot.
+    const path = weapon.id != null ? itemArtPath(weapon.id, 0, true) : null;
+    if (!path) return;
+    const art = itemSprite({ id: weapon.id, arg: 0, known: true }, () => this.invalidate());
+    if (!art) return;
+    const plate = art.userData.artwork;
+    if (!plate) return;
+    plate.name = "weapon-art";
+    plate.position.set(0, 0.42, 0.04);
+    plate.scale.set(0.5, 0.5, 1);
+    plate.rotation.set(0, 0, 0);
+    grip.add(plate);
   }
   buildEnvironment() {
     const pmrem = new THREE.PMREMGenerator(this.renderer),
@@ -647,10 +676,10 @@ export class World {
   applyGpuQuality() {
     const cinematic = this.quality === "cinematic";
     // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.85));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = cinematic ? THREE.PCFShadowMap : THREE.BasicShadowMap;
-    this.sun.shadow.mapSize.set(cinematic ? 2048 : 512, cinematic ? 2048 : 512);
+    this.sun.shadow.mapSize.set(cinematic ? 2048 : 256, cinematic ? 2048 : 256);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
     if (cinematic) {
@@ -1227,6 +1256,7 @@ export class World {
       this.burst.children.forEach((p) => p.position.set(0, 0.5, 0));
     }
     this.lastPlayer = { x: state.x, y: state.y };
+    this.syncHeroWeapon(state);
     this.syncPlayerLight();
     // Balanced keeps the sun over the map center so the shadow map does not
     // chase the hero every step. Cinematic still follows the player.

@@ -95,7 +95,7 @@ class Item {
     else if (this.matches(OSCROLL)) {
       if (tempPlayer && !isKnownScroll(this, tempPlayer) && showAll) {
         description += ` (of ${SCROLL_NAMES[this.arg]})`; // special case for scoreboard
-      } else if (isKnownScroll(this) || inStore || showAll) {
+      } else if (isKnownScroll(this) || showAll) {
         description += ` of ` + SCROLL_NAMES[this.arg];
       }
     }
@@ -580,6 +580,7 @@ const OSPHTALISMAN = new DungeonObject(87, `.`, `.`, `.`, `skyblue`, BOLD, `The 
 const OWWAND = new DungeonObject(88, `/`, `/`, `/`, `mediumseagreen`, BOLD, `a wand of wonder`, CARRY);
 const OPSTAFF = new DungeonObject(89, `/`, `/`, `/`, `darkorange`, BOLD, `a staff of power`, CARRY);
 const OLIFEPRESERVER = new DungeonObject(101, `"`, `"`, `"`, `orange`, BOLD, `an amulet of life preservation`, CARRY);
+const OTOWNPORTAL = new DungeonObject(102, `0`, `^`, `0`, `mediumturquoise`, BOLD, `a town portal`, NO_CARRY);
 
 // ULARN drugs
 const OSPEED = new DungeonObject(95, `:`, `:`, `:`, `paleblue`, BOLD, `some speed`, CARRY);
@@ -916,6 +917,11 @@ function lookforobject(do_ident, do_pickup) {
   else if (item.matches(OELEVATORDOWN)) {
     updateLog(`You step onto an express elevator going down!`);
     oelevator(-1);
+  }
+  //
+  else if (item.matches(OTOWNPORTAL)) {
+    if (nearbymonst()) return;
+    if (do_ident) updateLog(`There is a shimmering town portal here${period}`, formatHint('e', 'to enter'));
   }
   //
   else if (item.matches(OBRASSLAMP)) {

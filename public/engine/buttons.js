@@ -443,8 +443,8 @@ function nonMazeButtons() {
 
       for (let key = `a`, i = 0; i < 26; i++, key = key.nextChar()) {
         let dnditem = dnd_item[dndindex + i];
-        let outofstock = dnditem ? dnditem?.qty === 0 : true;
-        let expensive = dnditem ? dnditem?.price > player.GOLD : true;
+        let outofstock = dnditem ? (!dnditem.infinite && dnditem?.qty === 0) : true;
+        let expensive = dnditem ? dndItemPrice(dndindex + i) > player.GOLD : true;
          getButton(`BUTTON_QWERTY_${key}`).disabled = outofstock || expensive;
       }
 

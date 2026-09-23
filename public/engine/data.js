@@ -217,7 +217,8 @@ const SCROLL_NAMES = [
   `spirit protection`, `undead protection`, `stealth`,
   `magic mapping`, `hold monsters`, `gem perfection`,
   `spell extension`, `identify`, `remove curse`,
-  `annihilation`, `pulverization`, `life protection`
+  `annihilation`, `pulverization`, `life protection`,
+  `teleport to town`
 ];
 
 

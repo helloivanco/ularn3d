@@ -13,21 +13,22 @@ const geometry = (key, create) => {
 // Box/orb/ring are the common solids. Rounded boxes and high-segment tori
 // cost ~9× the triangles at a distance where the extra silhouette is lost.
 const boxGeo = geometry("box", () => new THREE.BoxGeometry(1, 1, 1));
-const sphereGeo = geometry("orb", () => new THREE.IcosahedronGeometry(1, 1));
+// Detail 0 keeps spheres readable at dungeon scale with 1/4 the triangles.
+const sphereGeo = geometry("orb", () => new THREE.IcosahedronGeometry(1, 0));
 const letterMaps = new Map();
 function letterTexture(letter, ink, paper) {
   const key = `${letter}:${ink}:${paper}`;
   if (letterMaps.has(key)) return letterMaps.get(key);
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 128;
+  canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = paper;
-  ctx.fillRect(0, 0, 128, 128);
+  ctx.fillRect(0, 0, 64, 64);
   ctx.fillStyle = ink;
-  ctx.font = "bold 92px ui-monospace, SFMono-Regular, Consolas, monospace";
+  ctx.font = "bold 46px ui-monospace, SFMono-Regular, Consolas, monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(letter, 64, 70);
+  ctx.fillText(letter, 32, 35);
   const map = new THREE.CanvasTexture(canvas);
   map.colorSpace = THREE.SRGBColorSpace;
   map.userData.shared = true;
@@ -64,7 +65,7 @@ export function block(g, kind, color, x, y, z, w, h, d) {
 export function orb(g, color, x, y, z, r, extra) {
   return mesh(g, sphereGeo, mat(color, extra), x, y, z, r, r, r);
 }
-export function cone(g, color, x, y, z, r, h, n = 8) {
+export function cone(g, color, x, y, z, r, h, n = 6) {
   return mesh(
     g,
     geometry(`cone${n}`, () => new THREE.ConeGeometry(1, 1, n)),
@@ -77,7 +78,7 @@ export function cone(g, color, x, y, z, r, h, n = 8) {
     r,
   );
 }
-export function cylinder(g, color, x, y, z, r, h, n = 8) {
+export function cylinder(g, color, x, y, z, r, h, n = 6) {
   return mesh(
     g,
     geometry(`cylinder${n}`, () => new THREE.CylinderGeometry(1, 1, 1, n)),
@@ -93,7 +94,7 @@ export function cylinder(g, color, x, y, z, r, h, n = 8) {
 export function ring(g, color, r = 0.4, y = 0.025) {
   const m = mesh(
     g,
-    geometry("ring", () => new THREE.TorusGeometry(1, 0.026, 4, 16)),
+    geometry("ring", () => new THREE.TorusGeometry(1, 0.026, 3, 12)),
     mat(color, {
       emissive: color,
       emissiveIntensity: 0.65,
@@ -166,6 +167,108 @@ export function torch(g, x, y, z, scale = 1) {
   holder.userData.flame = true;
   return holder;
 }
+
+/** Clear grip meshes without disposing shared geometries/materials. */
+export function clearWieldedWeapon(grip) {
+  while (grip.children.length) grip.remove(grip.children[0]);
+}
+
+/**
+ * Build the in-hand weapon so attack swings show the same silhouette families
+ * as floor loot (blade, axe head, spear shaft, hammer, flail, staff, etc.).
+ */
+export function fillWieldedWeapon(grip, weapon = null) {
+  clearWieldedWeapon(grip);
+  const id = weapon?.id ?? null;
+  const type = weapon?.type || "unarmed";
+  grip.userData.weaponId = id;
+  grip.userData.weaponType = type;
+  if (!id || type === "unarmed") return grip;
+
+  const metal = { metalness: 0.92, roughness: 0.22 };
+  const haft = { metalness: 0.15, roughness: 0.75 };
+
+  if (type === "staff" || id === 89) {
+    cylinder(grip, 0x786249, 0, 0.12, 0, 0.032, 0.96, 6);
+    orb(grip, 0x9ed6e3, 0, 0.66, 0, 0.12, {
+      emissive: 0x66bee7,
+      emissiveIntensity: 2,
+    });
+    return grip;
+  }
+  if (type === "dagger" || id === 31) {
+    box(grip, 0xc5dedb, 0, 0.22, 0, 0.035, 0.42, 0.03, metal);
+    box(grip, 0xddba70, 0, 0.02, 0, 0.16, 0.035, 0.05, metal);
+    box(grip, 0x463e32, 0, -0.08, 0, 0.045, 0.14, 0.045, haft);
+    return grip;
+  }
+  if (type === "spear" || id === 30) {
+    cylinder(grip, 0x6b5538, 0, 0.2, 0, 0.028, 0.95, 6);
+    cone(grip, 0xc5dedb, 0, 0.72, 0, 0.055, 0.22, 5);
+    return grip;
+  }
+  if (type === "lance" || id === 65) {
+    cylinder(grip, 0x5a4a32, 0, 0.18, 0, 0.03, 1.05, 6);
+    cone(grip, 0xb8c8d0, 0, 0.78, 0, 0.07, 0.28, 5);
+    box(grip, 0x8a3030, 0, 0.55, 0, 0.08, 0.04, 0.08, metal);
+    return grip;
+  }
+  if (type === "axe" || id === 57) {
+    cylinder(grip, 0x5c4a32, 0, 0.15, 0, 0.03, 0.7, 6);
+    box(grip, 0xa8b4ae, 0.12, 0.48, 0, 0.28, 0.22, 0.05, metal);
+    box(grip, 0x8a9690, 0.22, 0.48, 0, 0.08, 0.28, 0.04, metal);
+    box(grip, 0x6a7670, -0.05, 0.48, 0, 0.1, 0.12, 0.04, metal);
+    return grip;
+  }
+  if (type === "flail" || id === 59) {
+    cylinder(grip, 0x5c4a32, 0, 0.05, 0, 0.03, 0.45, 6);
+    orb(grip, 0x9aa6a0, 0.18, 0.42, 0, 0.09, metal);
+    orb(grip, 0x9aa6a0, 0.28, 0.28, 0.08, 0.07, metal);
+    return grip;
+  }
+  if (type === "hammer" || id === 27) {
+    cylinder(grip, 0x5c4a32, 0, 0.1, 0, 0.035, 0.55, 6);
+    box(grip, 0xb0a070, 0, 0.42, 0, 0.28, 0.2, 0.2, metal);
+    box(grip, 0x8a7850, 0, 0.42, 0, 0.12, 0.28, 0.12, metal);
+    orb(grip, 0xc0b080, 0, 0.55, 0, 0.05, metal);
+    box(grip, 0xddba70, 0, -0.12, 0, 0.08, 0.08, 0.08, metal);
+    return grip;
+  }
+  if (id === 28) {
+    // Sunsword — bright blade with gold crossguard.
+    box(grip, 0xffe7a0, 0, 0.32, 0, 0.05, 0.72, 0.04, {
+      ...metal,
+      emissive: 0xffc050,
+      emissiveIntensity: 1.2,
+    });
+    box(grip, 0xddba70, 0, 0.02, 0, 0.26, 0.045, 0.07, metal);
+    box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
+    return grip;
+  }
+  if (id === 26 || id === 90 || id === 91) {
+    const blade =
+      id === 91 ? 0xc45a5a : id === 90 ? 0xe8a060 : 0xa8c4e0;
+    box(grip, blade, 0, 0.32, 0, 0.048, 0.7, 0.04, metal);
+    box(grip, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, metal);
+    box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
+    orb(grip, 0xdab26a, 0, -0.19, 0, 0.042, metal);
+    return grip;
+  }
+  if (id === 29) {
+    // Two-handed sword — longer, thicker blade.
+    box(grip, 0xc0cbc3, 0, 0.36, 0, 0.06, 0.85, 0.05, metal);
+    box(grip, 0xddba70, 0, 0.02, 0, 0.3, 0.05, 0.08, metal);
+    box(grip, 0x463e32, 0, -0.12, 0, 0.07, 0.22, 0.07, haft);
+    return grip;
+  }
+  // Default sword / longsword / blunt blade silhouette.
+  box(grip, 0xc5dedb, 0, 0.3, 0, 0.048, 0.68, 0.045, metal);
+  box(grip, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, metal);
+  box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
+  orb(grip, 0xdab26a, 0, -0.19, 0, 0.042, metal);
+  return grip;
+}
+
 export function hero(character = "Adventurer") {
   const g = new THREE.Group(),
     body = new THREE.Group();
@@ -223,23 +326,10 @@ export function hero(character = "Adventurer") {
   sword.name = "weapon";
   sword.position.set(0.31, 0.38, -0.11);
   body.add(sword);
-  box(sword, 0xc5dedb, 0, 0.3, 0, 0.048, 0.68, 0.045, {
-    metalness: 0.95,
-    roughness: 0.2,
-  });
-  box(sword, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, {
-    metalness: 0.8,
-    roughness: 0.3,
-  });
-  box(sword, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06);
-  orb(sword, 0xdab26a, 0, -0.19, 0, 0.042, { metalness: 0.8 });
+  // Default grip matches a longsword; world.sync replaces this with the wielded item.
+  fillWieldedWeapon(sword, { id: 58, type: "sword", name: "longsword" });
   if (character === "Wizard") {
-    sword.children.forEach((m) => (m.visible = false));
-    cylinder(sword, 0x786249, 0, 0.12, 0, 0.032, 0.96);
-    orb(sword, 0x9ed6e3, 0, 0.66, 0, 0.12, {
-      emissive: 0x66bee7,
-      emissiveIntensity: 2,
-    });
+    fillWieldedWeapon(sword, { id: 89, type: "staff", name: "staff of power" });
   }
   const lantern = new THREE.Group();
   lantern.position.set(-0.33, 0.24, 0);
@@ -611,23 +701,27 @@ export function itemModel(tile) {
   // Pits, dart traps, and express elevators each keep a distinct silhouette.
   if (id === 4) {
     g.userData.trapKind = "pit";
-    cylinder(g, 0x05090a, 0, -0.08, 0, 0.34, 0.2, 10);
-    cylinder(g, 0x091213, 0, 0.02, 0, 0.4, 0.04, 10);
-    const lip = ring(g, 0x8f7656, 0.42, 0.05);
+    // Deep well with cracked stone lip — reads as a hole, not a plate.
+    cylinder(g, 0x030608, 0, -0.12, 0, 0.3, 0.28, 8);
+    cylinder(g, 0x0c1416, 0, 0.01, 0, 0.38, 0.05, 8);
+    const lip = ring(g, 0x8f7656, 0.44, 0.05);
     lip.name = "pit-rim";
-    for (const [x, z] of [
-      [-0.28, 0.12],
-      [0.22, -0.18],
-      [0.08, 0.3],
+    for (const [x, z, w, d] of [
+      [-0.3, 0.1, 0.05, 0.22],
+      [0.24, -0.2, 0.04, 0.2],
+      [0.05, 0.32, 0.06, 0.14],
+      [-0.12, -0.28, 0.05, 0.16],
     ]) {
-      const crack = box(g, 0x5c5344, x, 0.04, z, 0.04, 0.02, 0.18);
+      const crack = box(g, 0x5c5344, x, 0.04, z, w, 0.02, d);
       crack.rotation.y = x + z;
     }
     return g;
   }
   if (id === 74) {
     g.userData.trapKind = "dart";
+    // Pressure plate with a ring of vertical darts — no pit silhouette.
     box(g, 0x6a735f, 0, 0.02, 0, 0.72, 0.035, 0.72);
+    box(g, 0x55604f, 0, 0.05, 0, 0.5, 0.02, 0.5);
     ring(g, 0x8fba7a, 0.38, 0.04);
     for (const [x, z] of [
       [-0.16, -0.12],
@@ -635,10 +729,11 @@ export function itemModel(tile) {
       [-0.02, 0.16],
       [0.18, 0.14],
       [-0.2, 0.06],
+      [0.08, -0.2],
     ]) {
-      const dart = cone(g, 0xc9d9b4, x, 0.16, z, 0.045, 0.22, 5);
+      const dart = cone(g, 0xc9d9b4, x, 0.16, z, 0.04, 0.22, 4);
       dart.name = "dart-spike";
-      dart.rotation.x = 0.15;
+      dart.rotation.x = 0.12;
     }
     return g;
   }
@@ -646,19 +741,49 @@ export function itemModel(tile) {
     const up = id === 6;
     g.userData.trapKind = up ? "elevator-up" : "elevator-down";
     g.userData.elevatorDirection = up ? "up" : "down";
-    const pad = up ? 0x7a9e5a : 0x9a7a52;
-    const frame = up ? 0x566b48 : 0x6a5a42;
-    box(g, 0x2a3230, 0, 0.02, 0, 0.88, 0.04, 0.88);
-    box(g, pad, 0, 0.08, 0, 0.7, 0.08, 0.7);
-    for (const x of [-0.4, 0.4]) {
-      box(g, frame, x, 0.42, 0, 0.08, 0.72, 0.08);
-      box(g, frame, 0, 0.42, x, 0.08, 0.72, 0.08);
+    if (up) {
+      // Open scaffold cab with rising green chevron.
+      box(g, 0x243028, 0, 0.02, 0, 0.9, 0.04, 0.9);
+      box(g, 0x7a9e5a, 0, 0.1, 0, 0.62, 0.1, 0.62);
+      for (const x of [-0.42, 0.42]) {
+        box(g, 0x566b48, x, 0.55, -0.4, 0.08, 0.95, 0.08);
+        box(g, 0x566b48, x, 0.55, 0.4, 0.08, 0.95, 0.08);
+      }
+      box(g, 0x6a8658, 0, 0.95, 0, 0.88, 0.06, 0.88);
+      // Twin rising rails unique to the up cab.
+      box(g, 0xb2e3b9, -0.2, 0.35, 0, 0.04, 0.4, 0.04);
+      box(g, 0xb2e3b9, 0.2, 0.35, 0, 0.04, 0.4, 0.04);
+      const arrow = cone(g, 0xb2e3b9, 0, 0.48, 0, 0.16, 0.28, 3);
+      arrow.rotation.z = 0;
+      arrow.name = "elevator-up-arrow";
+      ring(g, 0x7a9e5a, 0.5, 0.03);
+    } else {
+      // Recessed amber shaft with hanging cage and down chevron.
+      box(g, 0x1a1612, 0, 0.02, 0, 0.9, 0.04, 0.9);
+      cylinder(g, 0x3a2e22, 0, -0.05, 0, 0.35, 0.18, 8);
+      box(g, 0x9a7a52, 0, 0.08, 0, 0.55, 0.06, 0.55);
+      for (const a of [-0.38, 0.38]) {
+        box(g, 0x6a5a42, a, 0.35, a, 0.07, 0.55, 0.07);
+        box(g, 0x6a5a42, a, 0.35, -a, 0.07, 0.55, 0.07);
+      }
+      box(g, 0x7a6a48, 0, 0.62, 0, 0.7, 0.05, 0.7);
+      const arrow = cone(g, 0xefbb7d, 0, 0.32, 0, 0.14, 0.24, 3);
+      arrow.rotation.z = Math.PI;
+      arrow.name = "elevator-down-arrow";
+      ring(g, 0x9a7a52, 0.48, 0.03);
     }
-    box(g, frame, 0, 0.78, 0, 0.86, 0.06, 0.86);
-    const arrow = cone(g, up ? 0xb2e3b9 : 0xefbb7d, 0, up ? 0.55 : 0.35, 0, 0.14, 0.22, 3);
-    arrow.rotation.z = up ? 0 : Math.PI;
-    arrow.name = up ? "elevator-up-arrow" : "elevator-down-arrow";
-    ring(g, pad, 0.48, 0.03);
+    return g;
+  }
+  if (id === 102) {
+    // Town portal — twin rings with a cyan core, distinct from teleport traps.
+    g.userData.portal = true;
+    ring(g, 0x4ecdc4, 0.42, 0.04);
+    ring(g, 0x2a9d8f, 0.28, 0.12);
+    orb(g, 0x9ef0e8, 0, 0.35, 0, 0.12, {
+      emissive: 0x4ecdc4,
+      emissiveIntensity: 2.2,
+    });
+    cylinder(g, 0x1a4a48, 0, 0.08, 0, 0.08, 0.5, 6);
     return g;
   }
   if (/pit|trap/.test(n)) {

@@ -97,7 +97,7 @@ test("title renderer batches buildings within its draw-call and triangle budget"
   expect(metrics.environment).toBe(false);
   expect(metrics.bloom).toBe(false);
   expect(metrics.composer).toBe(false);
-  expect(metrics.shadowMap).toBe(512);
+  expect(metrics.shadowMap).toBe(256);
   await page.screenshot({ path: "test-results/optimized-title.png" });
 });
 

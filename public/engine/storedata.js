@@ -4,11 +4,12 @@
 /* never, ever, never use a code formatter here */
 /************************************************/
 
-var DNDItem = function DNDItem(price, itemId, arg, qty) {
+var DNDItem = function DNDItem(price, itemId, arg, qty, infinite) {
   this.price = price;
   this.itemId = itemId;
   this.arg = arg;
   this.qty = qty;
+  this.infinite = !!infinite;
 }
 
 var STORE_INVENTORY; // set in config.js
@@ -98,7 +99,8 @@ const LARN_STORE_INVENTORY = [
   [2200,   OSCROLL.id,          20, 3],
   [39000,  OSCROLL.id,          21, 0],
   [6100,   OSCROLL.id,          22, 1],
-  [30000,  OSCROLL.id,          23, 0]
+  [30000,  OSCROLL.id,          23, 0],
+  [2500,   OSCROLL.id,          24, 1, true]
 ];
 
 const ULARN_STORE_INVENTORY = [
@@ -191,6 +193,7 @@ const ULARN_STORE_INVENTORY = [
   [39000,  OSCROLL.id,          21, 0],
   [6100,   OSCROLL.id,          22, 1],
   [30000,  OSCROLL.id,          23, 0],
+  [2500,   OSCROLL.id,          24, 1, true],
   [3000,   OSPHTALISMAN.id,     0,  0],
   [1500,   OWWAND.id,           0,  0],
   [500,    OBRASSLAMP.id,       0,  0],

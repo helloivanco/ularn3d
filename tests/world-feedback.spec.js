@@ -127,7 +127,9 @@ test("notable artifacts use unique camera-facing art that mirrors with orbit", a
     expect(byId[id].art).toBe(paths[id]);
   }
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
-  expect(metrics.itemTextures).toBe(15);
+  // Floor props plus the wielded-weapon art overlay share the item texture cache.
+  expect(metrics.itemTextures).toBeGreaterThanOrEqual(15);
+  expect(metrics.itemTextures).toBeLessThanOrEqual(16);
   const before = await page.evaluate(() => ularnGraphics.props().find((p) => p.id === 26).mirrored);
   await page.locator("#rotate-left").click();
   await page.locator("#rotate-left").click();
@@ -187,9 +189,10 @@ test("weapons armor rings gems and consumable tables use unique art", async ({ p
   expect(byKey["42:0"]).toBe("/art/items/potion-unknown.png");
   expect(byKey["42:1"]).toBe("/art/items/potion-unknown.png");
   expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.png");
-  expect(byKey["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
-  expect(byKey["41:19"]).toBe("/art/items/scroll-identify.png");
-  expect(byKey["41:21"]).toBe("/art/items/scroll-annihilation.png");
+  // Undiscovered scrolls share one parchment until read or identified.
+  expect(byKey["41:0"]).toBe("/art/items/scroll-unknown.png");
+  expect(byKey["41:19"]).toBe("/art/items/scroll-unknown.png");
+  expect(byKey["41:21"]).toBe("/art/items/scroll-unknown.png");
   await page.screenshot({ path: "test-results/item-art-catalog.png" });
 });
 
@@ -213,6 +216,28 @@ test("discovered potions switch from the shared bottle to unique art", async ({ 
   expect(before["42:1"]).toBe("/art/items/potion-unknown.png");
   expect(after["42:0"]).toBe("/art/items/potion-sleep.png");
   expect(after["42:1"]).toBe("/art/items/potion-unknown.png");
+});
+
+test("discovered scrolls switch from the shared parchment to unique art", async ({ page }) => {
+  await room(page);
+  const result = await page.evaluate(() => {
+    const enchant = createObject(OSCROLL, 0);
+    const identify = createObject(OSCROLL, 19);
+    setItem(8, 9, enchant);
+    setItem(9, 9, identify);
+    paint();
+    const before = ularnGraphics.props().map((p) => ({ id: p.id, arg: p.arg, art: p.art }));
+    learnScroll(enchant);
+    paint();
+    const after = ularnGraphics.props().map((p) => ({ id: p.id, arg: p.arg, art: p.art }));
+    return { before, after };
+  });
+  const before = Object.fromEntries(result.before.map((p) => [`${p.id}:${p.arg}`, p.art]));
+  const after = Object.fromEntries(result.after.map((p) => [`${p.id}:${p.arg}`, p.art]));
+  expect(before["41:0"]).toBe("/art/items/scroll-unknown.png");
+  expect(before["41:19"]).toBe("/art/items/scroll-unknown.png");
+  expect(after["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
+  expect(after["41:19"]).toBe("/art/items/scroll-unknown.png");
 });
 
 test("floor loot art strips pale card backgrounds without shrinking the sprite plane", async ({ page }) => {
@@ -344,7 +369,7 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
   expect(stats.floorMaterial).toBe("MeshLambertMaterial");
   expect(stats.wallCastShadow).toBe(false);
   expect(stats.floorReceiveShadow).toBe(false);
-  expect(stats.pixelRatio).toBeLessThanOrEqual(0.85);
+  expect(stats.pixelRatio).toBeLessThanOrEqual(0.75);
   expect(stats.shadowAfter).toBe(stats.shadowBefore);
   expect(stats.propGroups).toBe(0);
   expect(stats.lights).toBeLessThanOrEqual(5);

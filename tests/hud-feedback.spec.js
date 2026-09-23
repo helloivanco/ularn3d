@@ -58,23 +58,35 @@ test("effect rail and persistent pack refresh from engine changes without openin
   await expect(page.locator("#inventory-list")).not.toContainText("potion");
 });
 
-test("every spell and weapon family has a distinct sound and voices are released", async ({ page }) => {
+test("every spell and weapon has a distinct sound and voices are released", async ({ page }) => {
   await page.locator("#sound").click();
   const result = await page.evaluate(async () => {
-    const { GameAudio, spellProfile, weaponProfile } = await import("/src/audio.js");
+    const { GameAudio, spellProfile, weaponProfile, weaponSoundKeys } = await import("/src/audio.js");
     const profiles = spelname.map((name, id) => JSON.stringify(spellProfile({name, id})));
-    const weapons = ["unarmed", "axe", "spear", "lance", "dagger", "flail", "hammer", "staff", "sword", "blunt"].map(type => JSON.stringify(weaponProfile(type)));
+    const weaponIds = [26, 27, 28, 29, 30, 31, 40, 57, 58, 59, 65, 89, 90, 91];
+    const weapons = [
+      JSON.stringify(weaponProfile("unarmed")),
+      ...weaponIds.map((id) => JSON.stringify(weaponProfile({ id, type: "sword" }))),
+    ];
     window.testAudio = new GameAudio();
     for (let i = 0; i < 60; i++) testAudio.play("spell", { spell: { id: i % 39, name: spelname[i % 39] } });
-    return { spells: new Set(profiles).size, count: spelname.length, weapons: new Set(weapons).size, voices: testAudio.voices.size, cap: testAudio.maxVoices };
+    return {
+      spells: new Set(profiles).size,
+      count: spelname.length,
+      weapons: new Set(weapons).size,
+      weaponKeys: weaponSoundKeys().length,
+      voices: testAudio.voices.size,
+      cap: testAudio.maxVoices,
+    };
   });
   expect(result.spells).toBe(result.count);
-  expect(result.weapons).toBe(10);
+  expect(result.weapons).toBe(15);
+  expect(result.weaponKeys).toBeGreaterThanOrEqual(15);
   expect(result.voices).toBeLessThanOrEqual(result.cap);
   await page.evaluate(async () => {
     await testAudio.suspend();
     if (testAudio.voices.size !== 0) throw new Error("Muted voices were not released");
-    testAudio.play("weapon", { weapon: { type: "sword" } });
+    testAudio.play("weapon", { weapon: { id: 58, type: "sword" } });
   });
   await expect.poll(() => page.evaluate(() => testAudio.context.state)).toBe("running");
   await expect.poll(() => page.evaluate(() => testAudio.voices.size)).toBe(0);
