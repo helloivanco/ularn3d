@@ -68,7 +68,7 @@ function secureWindow(window) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    title: "Ularn — The Caves Below",
+    title: "Ularn 3D — The Caves Below",
     width: 1440, height: 960, minWidth: 800, minHeight: 600,
     backgroundColor: "#101c20", show: false, autoHideMenuBar: true,
     webPreferences,

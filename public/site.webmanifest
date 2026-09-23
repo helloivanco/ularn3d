@@ -1,6 +1,6 @@
 {
-  "name": "Ularn — The Caves Below",
-  "short_name": "Ularn",
+  "name": "Ularn 3D — The Caves Below",
+  "short_name": "Ularn 3D",
   "description": "A free turn-based dungeon crawler: play in your browser or download for Windows.",
   "start_url": "/play/",
   "display": "standalone",

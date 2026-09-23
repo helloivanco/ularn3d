@@ -678,10 +678,12 @@ export class World {
     this.resize();
   }
   resize() {
-    this.camera.aspect = innerWidth / innerHeight;
+    const width = this.container.clientWidth || innerWidth;
+    const height = this.container.clientHeight || innerHeight;
+    this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(innerWidth, innerHeight);
-    this.composer.setSize(innerWidth, innerHeight);
+    this.renderer.setSize(width, height);
+    this.composer.setSize(width, height);
     this.invalidate();
   }
   mountains(width, height, offsetX = 0, offsetY = 0) {

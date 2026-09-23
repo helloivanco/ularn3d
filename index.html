@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0f5c52" />
-    <title>Ularn — The Caves Below | Free 3D Roguelike</title>
+    <meta name="theme-color" content="#0c1417" />
+    <title>Ularn 3D — The Caves Below | Free Roguelike</title>
     <meta
       name="description"
-      content="Ularn is a free turn-based dungeon crawler in an overhead 3D world. Descend twenty floors, choose among eight classes, play in your browser, or download for Windows."
+      content="Ularn 3D is a free turn-based dungeon crawler in an overhead 3D world. Descend twenty floors, choose among eight classes, play in your browser, or download for Windows."
     />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://ularn-3d.vercel.app/" />
@@ -15,18 +15,12 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Syne:wght@600;700;800&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/site/site.css" />
     <script src="/site-runtime.js" defer></script>
     <script src="/site/site.js" defer></script>
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Ularn — The Caves Below" />
-    <meta property="og:title" content="Ularn — The Caves Below | Free 3D Roguelike" />
+    <meta property="og:site_name" content="Ularn 3D — The Caves Below" />
+    <meta property="og:title" content="Ularn 3D — The Caves Below | Free Roguelike" />
     <meta
       property="og:description"
       content="A free turn-based dungeon crawler with eight classes and twenty floors. Play online or download the Windows edition."
@@ -37,10 +31,10 @@
     <meta property="og:image:height" content="1000" />
     <meta
       property="og:image:alt"
-      content="Ularn overhead town view with symbol map, inventory, and adventure controls"
+      content="Ularn 3D overhead town view with symbol map, inventory, and adventure controls"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Ularn — The Caves Below | Free 3D Roguelike" />
+    <meta name="twitter:title" content="Ularn 3D — The Caves Below | Free Roguelike" />
     <meta
       name="twitter:description"
       content="Explore twenty floors with eight classes in a free turn-based dungeon crawler. Play online or download for Windows."
@@ -48,7 +42,7 @@
     <meta name="twitter:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
     <meta
       name="twitter:image:alt"
-      content="Ularn overhead town view with symbol map, inventory, and adventure controls"
+      content="Ularn 3D overhead town view with symbol map, inventory, and adventure controls"
     />
     <script type="application/ld+json">
       {
@@ -58,7 +52,7 @@
             "@type": "WebSite",
             "@id": "https://ularn-3d.vercel.app/#website",
             "url": "https://ularn-3d.vercel.app/",
-            "name": "Ularn — The Caves Below",
+            "name": "Ularn 3D — The Caves Below",
             "description": "Free turn-based dungeon crawler with browser play and an optional Windows download.",
             "inLanguage": "en",
             "publisher": {
@@ -68,7 +62,8 @@
           {
             "@type": ["VideoGame", "SoftwareApplication"],
             "@id": "https://ularn-3d.vercel.app/#game",
-            "name": "Ularn — The Caves Below",
+            "name": "Ularn 3D — The Caves Below",
+            "alternateName": ["Ularn", "Ultra-Larn 3D"],
             "url": "https://ularn-3d.vercel.app/",
             "description": "A free, single-player turn-based dungeon crawler with eight character classes, 20 underground floors, and browser and offline Windows editions.",
             "applicationCategory": "GameApplication",
@@ -98,39 +93,54 @@
       }
     </script>
   </head>
-  <body>
+  <body class="page-home">
     <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Ularn home">
+    <header class="site-header site-header--hero">
+      <a class="brand" href="/" aria-label="Ularn 3D home">
         <img src="/favicon.svg" width="38" height="38" alt="" />
-        <span class="brand-word">ULARN<small>THE CAVES BELOW</small></span>
+        <span class="brand-word">ULARN 3D<small>THE CAVES BELOW</small></span>
       </a>
       <nav class="site-nav" aria-label="Main">
         <a href="/play/">Play</a>
         <a href="/about/">About</a>
-        <a href="/credits/">Credits</a>
         <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
       </nav>
     </header>
 
     <main id="main">
-      <section class="home-hero" aria-labelledby="home-brand">
-        <div class="home-hero-media" aria-hidden="true">
-          <img
-            src="/screenshots/town-wide.jpg"
-            width="2342"
-            height="1966"
-            alt=""
-            fetchpriority="high"
-          />
-          <div class="home-hero-veil"></div>
-        </div>
+      <section class="home-hero" id="home-hero" aria-labelledby="home-brand">
+        <div id="world" class="home-hero-world" aria-label="Interactive 3D town preview"></div>
+        <div class="home-hero-veil" aria-hidden="true"></div>
+        <div id="home-loading" class="home-loading" role="status">Preparing the caves…</div>
+
+        <aside class="hero-panel hero-panel--stats" aria-hidden="true">
+          <div class="hero-panel-heading"><span>Adventurer</span><span>LV 1 · Rogue</span></div>
+          <div class="hero-meters">
+            <div><span>HP</span><i style="--fill:100%"></i><strong>12/12</strong></div>
+            <div><span>POWER</span><i style="--fill:100%"></i><strong>1/1</strong></div>
+          </div>
+          <div class="hero-attrs">
+            <span>ARM 4</span><span>WPN 5</span><span>INT 12</span><span>WIS 10</span><span>DEX 16</span><span>CHA 11</span>
+          </div>
+        </aside>
+
+        <aside class="hero-panel hero-panel--map" aria-hidden="true">
+          <div class="hero-panel-heading"><span>Charted territory</span><span>SURFACE</span></div>
+          <div class="hero-minimap" aria-hidden="true"></div>
+          <div class="hero-map-legend"><span>You</span><span>Landmark</span><span>Creature</span></div>
+        </aside>
+
+        <aside class="hero-panel hero-panel--quest" aria-hidden="true">
+          <div class="hero-panel-heading"><span>Your expedition</span></div>
+          <p class="hero-quest-title">A cure for your child.</p>
+          <p>Seek the Eye of Larn in the deepest dungeon. Then brave the volcano for the cure.</p>
+          <p class="hero-quest-time">400 mobuls remain</p>
+        </aside>
+
         <div class="home-hero-copy">
-          <h1 class="home-brand" id="home-brand">ULARN<span>THE CAVES BELOW</span></h1>
+          <h1 class="home-brand" id="home-brand">ULARN <span class="edition">3D</span><span class="tagline">THE CAVES BELOW</span></h1>
           <p class="home-headline">A classic dungeon crawl, seen from above.</p>
-          <p class="lede">
-            Eight classes. Twenty floors. Time moves only when you do.
-          </p>
+          <p class="lede">Eight classes. Twenty floors. Time moves only when you do.</p>
           <div class="cta-row">
             <a class="button primary" href="/play/">Play in your browser <span aria-hidden="true">↗</span></a>
             <a
@@ -138,7 +148,7 @@
               id="download-windows"
               href="/downloads/Ularn.windows.exe"
               download="__DOWNLOAD_FILENAME__"
-              aria-label="Download Ularn for Windows, version __APP_VERSION__"
+              aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
               >Download for Windows <small>v__APP_VERSION__</small></a
             >
           </div>
@@ -156,8 +166,8 @@
             <img
               src="/screenshots/town.jpg"
               width="1440"
-              height="1000"
-              alt="Ularn town view showing the adventurer near landmarks with symbol map, inventory, and adventure controls"
+              height="610"
+              alt="Ularn 3D town view with adventurer near landmarks, symbol map, and adventure controls"
               loading="lazy"
             />
             <figcaption>The surface town — stores, college, bank, and the cave mouth waiting beyond.</figcaption>
@@ -167,18 +177,18 @@
               <img
                 src="/screenshots/dungeon.jpg"
                 width="1440"
-                height="1000"
-                alt="Ularn dungeon corridor with torch-lit stone walls, minimap, and turn-based adventure bar"
+                height="610"
+                alt="Ularn 3D cave combat with gnome, gold, and turn-based adventure bar"
                 loading="lazy"
               />
-              <figcaption>Dungeon floors — explore one turn at a time.</figcaption>
+              <figcaption>Dungeon floors — fight one turn at a time.</figcaption>
             </figure>
             <figure>
               <img
                 src="/screenshots/dungeon-alt.jpg"
                 width="1440"
-                height="1000"
-                alt="Another Ularn dungeon scene with overhead camera, journal, and movement pad"
+                height="610"
+                alt="Ularn 3D cave floor with loot, monster, and overhead journal"
                 loading="lazy"
               />
               <figcaption>Same rules as classic Ularn — new overhead presentation.</figcaption>
@@ -219,27 +229,40 @@
             <strong>Ultra-Larn</strong>, better known as <strong>Ularn</strong>, was created by <strong>Phil Cordier</strong> (copyright 1987; first posted widely in 1989). It added true character classes, deeper dungeons and volcano levels, and new artifacts. Later maintainers including David Richerby, Josh Brandt, and Josh Bressers kept the tradition alive.
           </p>
           <p>
-            This 3D edition presents that Ularn through an overhead world, built on
+            <strong>Ularn 3D</strong> presents that Ularn through an overhead world, built on
             <a href="https://github.com/primeau/Larn">Jason Primeau’s JavaScript Larn / Ularn engine</a>.
-            <a href="/credits/">Read the full credits and history</a>.
+            <a href="/about/#history">Read the full history and creators</a>.
           </p>
         </div>
       </section>
     </main>
 
     <footer class="site-footer wrap">
-      <a class="footer-brand" href="/">ULARN</a>
+      <a class="footer-brand" href="/">ULARN 3D</a>
       <p class="footer-copy">
         Free single-player dungeon crawler. Original Ularn by Phil Cordier, descended from Noah Morgan’s Larn.
         <a href="/engine/LICENSE">Engine license</a>.
       </p>
-      <p class="footer-version" aria-label="Ularn version">v__APP_VERSION__</p>
+      <p class="footer-version" aria-label="Ularn 3D version">v__APP_VERSION__</p>
       <nav aria-label="Footer">
         <a href="/play/">Play</a>
         <a href="/about/">About</a>
-        <a href="/credits/">Credits</a>
+        <a href="/about/#history">History</a>
         <a class="web-only" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__">Windows</a>
       </nav>
     </footer>
+    <noscript>
+      <div class="no-script wrap">
+        <h2>Play Ularn 3D online or on Windows</h2>
+        <p>
+          The interactive town preview needs JavaScript and WebGL2. You can still
+          <a href="/play/">open the play page</a>,
+          <a href="/downloads/Ularn.windows.exe">download for Windows</a>,
+          or read the <a href="/about/">field guide</a>.
+        </p>
+        <img src="/screenshots/town-wide.jpg" width="1881" height="1200" alt="Ularn 3D town preview screenshot" />
+      </div>
+    </noscript>
+    <script type="module" src="/src/home-preview.js"></script>
   </body>
 </html>
