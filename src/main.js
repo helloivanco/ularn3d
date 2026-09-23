@@ -3,6 +3,7 @@ import "./hud.css";
 import { GameAudio } from "./audio.js";
 import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
+import { groundHoverInfo } from "./item-tooltips.js";
 mountIcons();
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
@@ -146,13 +147,42 @@ try {
     (tile) => travel(tile),
     (tile, event) => {
       const label = $("tile-label");
-      label.hidden = !tile;
-      if (tile) {
-        label.textContent = tile.monster ? tile.monster.name : tile.name;
+      const info = groundHoverInfo(tile);
+      label.hidden = !info;
+      label.classList.toggle("tile-label-special", info?.kind === "special");
+      label.classList.toggle("tile-label-hazard", info?.kind === "hazard");
+      if (!info) return;
+      if (info.kind === "special" || info.kind === "hazard") {
+        label.replaceChildren();
+        const title = document.createElement("strong");
+        title.className = "tile-label-title";
+        title.textContent = info.title;
+        const body = document.createElement("div");
+        body.className = "tile-label-body";
+        if (info.kind === "special" && info.title === "Eye of Larn")
+          body.classList.add("tile-label-mono");
+        body.textContent = info.body;
+        label.append(title, body);
+        if (info.guide) {
+          const guide = document.createElement("button");
+          guide.type = "button";
+          guide.className = "tile-label-guide";
+          guide.dataset.guide = info.guide;
+          guide.textContent = "Field Guide";
+          guide.setAttribute("aria-label", `Open Field Guide: ${info.title}`);
+          guide.tabIndex = 0;
+          label.append(guide);
+        }
         label.style.left =
-          Math.min(innerWidth - 200, event.clientX + 15) + "px";
-        label.style.top = Math.min(innerHeight - 50, event.clientY + 18) + "px";
+          Math.min(innerWidth - 360, Math.max(8, event.clientX + 15)) + "px";
+        label.style.top =
+          Math.min(innerHeight - 200, Math.max(8, event.clientY + 18)) + "px";
+        return;
       }
+      label.textContent = info.text;
+      label.style.left =
+        Math.min(innerWidth - 200, event.clientX + 15) + "px";
+      label.style.top = Math.min(innerHeight - 50, event.clientY + 18) + "px";
     },
   );
   $("graphics-quality").value = world.quality;
@@ -748,9 +778,27 @@ $("sound").addEventListener("click", () => {
   if (soundOn) sound("open");
   else audio.suspend();
 });
-$("guide").addEventListener("click", () => {
+const openFieldGuide = (sectionId) => {
   stopTravel();
-  $("guide-dialog").showModal();
+  const dialog = $("guide-dialog");
+  dialog.showModal();
+  if (!sectionId) return;
+  const section = dialog.querySelector(`#${sectionId}`);
+  if (section) section.scrollIntoView({ block: "nearest", behavior: "smooth" });
+};
+$("guide").addEventListener("click", () => openFieldGuide());
+$("tile-label").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-guide]");
+  if (!button) return;
+  event.preventDefault();
+  openFieldGuide(button.getAttribute("data-guide"));
+});
+$("tile-label").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const button = event.target.closest("[data-guide]");
+  if (!button) return;
+  event.preventDefault();
+  openFieldGuide(button.getAttribute("data-guide"));
 });
 $("pause").addEventListener("click", () => {
   stopTravel();

@@ -608,7 +608,61 @@ export function itemModel(tile) {
     orb(g, 0x739990, 0, 1.08, 0.15, 0.09);
     return g;
   }
+  // Pits, dart traps, and express elevators each keep a distinct silhouette.
+  if (id === 4) {
+    g.userData.trapKind = "pit";
+    cylinder(g, 0x05090a, 0, -0.08, 0, 0.34, 0.2, 10);
+    cylinder(g, 0x091213, 0, 0.02, 0, 0.4, 0.04, 10);
+    const lip = ring(g, 0x8f7656, 0.42, 0.05);
+    lip.name = "pit-rim";
+    for (const [x, z] of [
+      [-0.28, 0.12],
+      [0.22, -0.18],
+      [0.08, 0.3],
+    ]) {
+      const crack = box(g, 0x5c5344, x, 0.04, z, 0.04, 0.02, 0.18);
+      crack.rotation.y = x + z;
+    }
+    return g;
+  }
+  if (id === 74) {
+    g.userData.trapKind = "dart";
+    box(g, 0x6a735f, 0, 0.02, 0, 0.72, 0.035, 0.72);
+    ring(g, 0x8fba7a, 0.38, 0.04);
+    for (const [x, z] of [
+      [-0.16, -0.12],
+      [0.14, -0.08],
+      [-0.02, 0.16],
+      [0.18, 0.14],
+      [-0.2, 0.06],
+    ]) {
+      const dart = cone(g, 0xc9d9b4, x, 0.16, z, 0.045, 0.22, 5);
+      dart.name = "dart-spike";
+      dart.rotation.x = 0.15;
+    }
+    return g;
+  }
+  if (id === 6 || id === 14) {
+    const up = id === 6;
+    g.userData.trapKind = up ? "elevator-up" : "elevator-down";
+    g.userData.elevatorDirection = up ? "up" : "down";
+    const pad = up ? 0x7a9e5a : 0x9a7a52;
+    const frame = up ? 0x566b48 : 0x6a5a42;
+    box(g, 0x2a3230, 0, 0.02, 0, 0.88, 0.04, 0.88);
+    box(g, pad, 0, 0.08, 0, 0.7, 0.08, 0.7);
+    for (const x of [-0.4, 0.4]) {
+      box(g, frame, x, 0.42, 0, 0.08, 0.72, 0.08);
+      box(g, frame, 0, 0.42, x, 0.08, 0.72, 0.08);
+    }
+    box(g, frame, 0, 0.78, 0, 0.86, 0.06, 0.86);
+    const arrow = cone(g, up ? 0xb2e3b9 : 0xefbb7d, 0, up ? 0.55 : 0.35, 0, 0.14, 0.22, 3);
+    arrow.rotation.z = up ? 0 : Math.PI;
+    arrow.name = up ? "elevator-up-arrow" : "elevator-down-arrow";
+    ring(g, pad, 0.48, 0.03);
+    return g;
+  }
   if (/pit|trap/.test(n)) {
+    g.userData.trapKind = "trap";
     cylinder(g, 0x091213, 0, 0.015, 0, 0.4, 0.025);
     ring(g, 0x8f7656, 0.4);
     return g;

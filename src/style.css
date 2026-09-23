@@ -711,6 +711,59 @@ select {
   border-radius: 3px;
   font-size: 11px;
   color: var(--gold);
+  max-width: min(360px, calc(100vw - 24px));
+}
+#tile-label.tile-label-special,
+#tile-label.tile-label-hazard {
+  padding: 12px 14px 10px;
+  line-height: 1.5;
+  box-shadow: 0 8px 24px #04101466;
+}
+#tile-label.tile-label-hazard {
+  border-color: #8f765688;
+}
+#tile-label .tile-label-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+#tile-label .tile-label-body {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #d2ddd1;
+  white-space: pre-wrap;
+  max-height: min(42vh, 280px);
+  overflow: auto;
+  font-family: Georgia, "Times New Roman", serif;
+}
+#tile-label .tile-label-body.tile-label-mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #c5d0c4;
+}
+#tile-label .tile-label-guide {
+  pointer-events: auto;
+  display: inline-block;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9eb8a8;
+  font: 10px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#tile-label .tile-label-guide:hover,
+#tile-label .tile-label-guide:focus-visible {
+  color: var(--gold);
+  outline: none;
 }
 #interaction {
   position: absolute;
