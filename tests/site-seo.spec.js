@@ -15,9 +15,13 @@ test("indexable pages expose unique metadata, headings and canonical URLs withou
     titles.push(await page.title());
     descriptions.push(await page.locator('meta[name="description"]').getAttribute("content"));
     expect(titles.at(-1)).toContain("Ularn");
+    expect(titles.at(-1)).toMatch(/3D/);
     expect(descriptions.at(-1).length).toBeGreaterThan(40);
     await expect(page.locator("h1")).toHaveCount(1);
     await expect(page.locator("h1")).toContainText(/Ularn/i);
+    if (route === "/" || route === "/about/" || route === "/credits/") {
+      await expect(page.locator("h1")).toContainText(/3D/i);
+    }
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `${origin}${route}`);
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", `${origin}${route}`);
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", `${origin}/social/ularn.png`);
