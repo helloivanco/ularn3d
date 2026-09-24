@@ -1068,7 +1068,7 @@ export class World {
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
-      const sig = `${t.id}:${t.arg ?? 0}:${t.known === false ? "u" : "k"}${t.stair?.blocked ? ":blocked" : ""}`;
+      const sig = `${t.id}:${t.arg ?? 0}:${t.known === false ? "u" : "k"}${t.stair?.blocked ? ":blocked" : ""}${t.doorFacing != null ? `:df${t.doorFacing}` : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       if (rebuildFloors) {
@@ -1119,6 +1119,9 @@ export class World {
           draining:
             t.id === 17 && prev?.sig?.startsWith("7:") && !this.reduced,
         });
+      if ((t.id === 19 || t.id === 20) && t.doorFacing != null) {
+        model.rotation.y = t.doorFacing;
+      }
       g.add(model);
       if (art) {
         g.userData.itemArt = art;

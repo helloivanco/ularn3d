@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.18 — Classic caverns, reachable stairs, remembered name
+
+- Restored classic Ularn `eat()` cavern generation (with the proven 57×20 spine) instead of the short-lived room-corridor rewrite
+- Every dungeon floor keeps reachable stairs on the walkable maze graph — no more rock-enclosed stair pockets
+- Cave 1 always has a town entrance connected to the maze; doors only appear at real hall/room junctions and face the passage
+- Adventurer name is remembered on this device for the next expedition
+- Classic floor loot amounts unchanged
+
 ## 1.3.17 — Maze floors, portals, and rare treasure rooms
 
 - Dungeon floors are maze-like again (rooms and corridors); doors only connect spaces — no blank halls with doors to nowhere

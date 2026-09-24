@@ -137,6 +137,22 @@ function stairView3D(id) {
   return null;
 }
 
+/* Door slab faces the passage: EW halls keep default facing; NS halls rotate. */
+function doorPassageFacing3D(x, y) {
+  const openFloor = (xx, yy) => {
+    if (!inBounds(xx, yy)) return false;
+    const it = itemAt(xx, yy);
+    return (
+      it &&
+      !it.matches(OWALL) &&
+      !it.matches(OCLOSEDDOOR) &&
+      !it.matches(OOPENDOOR)
+    );
+  };
+  if (openFloor(x, y - 1) && openFloor(x, y + 1)) return Math.PI / 2;
+  return 0;
+}
+
 function weaponView3D(item = player.WIELD) {
   const name = item ? plainText3D(item.shortName()) : "bare hands";
   let type = "unarmed";
@@ -439,6 +455,11 @@ window.ularn = {
         .replace(/[^\p{L}\p{N} _'-]/gu, "")
         .trim()
         .slice(0, 24) || "Adventurer";
+    try {
+      localStorageSetObject("logname", logname);
+    } catch {
+      /* ignore quota — name still applies to this session */
+    }
     player = new Player();
     setGameDifficulty(Math.max(0, Math.min(128, Number(difficulty) || 0)));
     setclass(
@@ -531,6 +552,8 @@ window.ularn = {
             : item.matches(OSCROLL)
               ? isKnownScroll(item)
               : true;
+        const isDoor =
+          !masked && (item.matches(OCLOSEDDOOR) || item.matches(OOPENDOOR));
         tiles.push({
           x,
           y,
@@ -539,6 +562,8 @@ window.ularn = {
           known: knownConsumable,
           name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
           stair,
+          /* Passage axis so the 3D door slab faces the hall the adventurer opens. */
+          doorFacing: isDoor ? doorPassageFacing3D(x, y) : null,
           symbol: masked
             ? plainText3D(itemlist[0].ularnchar)
             : item.matches(OHOMEENTRANCE)

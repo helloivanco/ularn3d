@@ -44,14 +44,16 @@ test("loot goblin flees, despawns, and drops equal-chance loot", () => {
   assert.match(create, /fillmonst\(LOOTGOBLIN/);
 });
 
-test("canned mazes are 57x20 maze-like with sparse loot and rare treasure rooms", () => {
+test("canned mazes are 57x20 maze-like with classic 1% treasure maps", () => {
   const mazesSrc = readFileSync("public/engine/mazes.js", "utf8");
   assert.match(mazesSrc, /const TREASURE_MAZES/);
-  assert.match(create, /rnd\(1000\) === 1/);
-  assert.match(create, /placeRareTreasureRoom/);
-  assert.match(create, /function buildRoomCorridorMaze/);
+  assert.match(create, /rnd\(100\) === 1/);
+  assert.match(create, /function eat\(/);
+  assert.match(create, /eat\(1, 1\)/);
+  assert.match(create, /function ensureLevelStairs/);
   assert.match(create, /function createDepthLoot/);
-  assert.doesNotMatch(create, /rnd\(100\) === 1/);
+  assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
+  assert.doesNotMatch(create, /function placeRareTreasureRoom/);
   const vm = require("node:vm");
   const sandbox = {};
   vm.runInNewContext(
@@ -97,6 +99,12 @@ test("canned mazes are 57x20 maze-like with sparse loot and rare treasure rooms"
     const loot = m.split("-").length - 1;
     assert.ok(gold > loot, `treasure map should favor gold (${gold} vs ${loot})`);
   }
+});
+
+test("adventurer name is remembered across sessions", () => {
+  assert.match(main, /ularn3d\.heroName/);
+  assert.match(main, /readRememberedHeroName/);
+  assert.match(main, /rememberHeroName/);
 });
 
 test("makeobject keeps classic potion/scroll/gold counts", () => {

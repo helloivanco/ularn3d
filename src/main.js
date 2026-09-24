@@ -36,6 +36,42 @@ let character = "Adventurer",
   graphicsLost = false;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
+const HERO_NAME_KEY = "ularn3d.heroName";
+const readRememberedHeroName = () => {
+  try {
+    const dedicated = localStorage.getItem(HERO_NAME_KEY);
+    if (dedicated && dedicated.trim()) return dedicated.trim().slice(0, 24);
+    /* Classic engine key (ULARN builds append _ularn and JSON-encode). */
+    for (const key of ["logname_ularn", "logname"]) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === "string" && parsed.trim())
+          return parsed.trim().slice(0, 24);
+      } catch {
+        const plain = String(raw).replace(/^"|"$/g, "").trim();
+        if (plain) return plain.slice(0, 24);
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+const rememberHeroName = (name) => {
+  const clean = String(name || "")
+    .trim()
+    .slice(0, 24);
+  if (!clean) return;
+  try {
+    localStorage.setItem(HERO_NAME_KEY, clean);
+  } catch {
+    /* ignore quota */
+  }
+};
+const rememberedName = readRememberedHeroName();
+if (rememberedName && $("hero-name")) $("hero-name").value = rememberedName;
 function toast(message) {
   $("toast").textContent = message;
   $("toast").hidden = false;
@@ -197,8 +233,10 @@ async function start(resume) {
   $("begin").disabled = true;
   $("continue").disabled = true;
   try {
+    const heroName = $("hero-name").value;
+    rememberHeroName(heroName);
     await engine.start({
-      name: $("hero-name").value,
+      name: heroName,
       character,
       difficulty: $("difficulty").value,
       resume,

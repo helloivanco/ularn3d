@@ -1,18 +1,16 @@
 /**
- * Headless checks: maze-like floors, classic loot counts, no orphan doors.
- * Run via: node --experimental-vm-modules tests/maze-generation.unit.mjs
- * (also loaded by node:test through the file itself)
+ * Headless checks: classic eat()-era mazes, no orphan doors, sparse canned loot.
+ * Run via: node --test tests/maze-generation.unit.mjs
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
-import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
-test("regenerated mazes have no orphan doors and sparse canned loot", () => {
+test("canned mazes have no orphan doors and sparse canned loot", () => {
   const mazesSrc = readFileSync("public/engine/mazes.js", "utf8");
   const sandbox = {};
   vm.runInNewContext(
@@ -51,14 +49,19 @@ test("regenerated mazes have no orphan doors and sparse canned loot", () => {
   sandbox.T.forEach((m) => check(m, true));
 });
 
-test("create.js uses room-corridor mazes and classic makeobject loot loops", () => {
+test("create.js restores classic eat() maze and hard stair/door invariants", () => {
   const create = readFileSync("public/engine/create.js", "utf8");
-  assert.match(create, /function buildRoomCorridorMaze/);
-  assert.match(create, /placeRareTreasureRoom/);
-  assert.match(create, /rnd\(1000\) === 1/);
+  /* Classic Ularn caverns — not the short-lived room-corridor rewrite. */
+  assert.match(create, /function eat\(/);
+  assert.match(create, /eat\(1, 1\)/);
+  assert.match(create, /Classic connectivity spine/);
+  assert.match(create, /function ensureMazeConnectivity/);
+  assert.match(create, /function ensureLevelStairs/);
+  assert.match(create, /function sanitizeMazeDoors/);
+  assert.match(create, /function levelTraversalOk/);
   assert.match(create, /rnd\(4\) \+ 3/);
   assert.match(create, /rnd\(5\) \+ 3/);
   assert.match(create, /rnd\(12\) \+ 11/);
-  /* No full-width trench carve. */
-  assert.doesNotMatch(create, /full-width east-west run/);
+  assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
+  assert.doesNotMatch(create, /function placeRareTreasureRoom/);
 });
