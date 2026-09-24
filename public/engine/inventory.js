@@ -229,6 +229,11 @@ function take(item) {
       }
       if (item.matches(OPOTION) && item.arg == 21) player.hasPickedUpPotion = true;
       if (item.matches(OLARNEYE)) player.hasPickedUpEye = true;
+      // Buying or finding naturally discovers consumables for the player.
+      if (mazeMode) {
+        if (item.matches(OSCROLL)) learnScroll(item);
+        if (item.matches(OPOTION)) learnPotion(item);
+      }
       debug(`take(): ` + item);
       player.adjustcvalues(item, true);
       player.inventory[i] = item;

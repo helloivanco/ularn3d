@@ -65,11 +65,13 @@ test("pits dart traps and express elevators use distinct graphics", () => {
   assert.notEqual(meshCount(up), meshCount(down), "elevator directions need unique topology");
 });
 
-test("wielded weapons rebuild into distinct attack grips", async () => {
+test("wielded weapons rebuild into distinct larger attack grips", async () => {
   const { fillWieldedWeapon } = await import("../src/models.js");
   const grip = new THREE.Group();
   fillWieldedWeapon(grip, { id: 31, type: "dagger" });
   const daggerMeshes = meshCount(grip);
+  const daggerBox = new THREE.Box3().setFromObject(grip);
+  const daggerSize = daggerBox.getSize(new THREE.Vector3());
   fillWieldedWeapon(grip, { id: 57, type: "axe" });
   const axeMeshes = meshCount(grip);
   fillWieldedWeapon(grip, { id: 27, type: "hammer" });
@@ -78,6 +80,7 @@ test("wielded weapons rebuild into distinct attack grips", async () => {
   assert.equal(meshCount(grip), 0);
   assert.notEqual(daggerMeshes, axeMeshes);
   assert.notEqual(axeMeshes, hammerMeshes);
+  assert.ok(daggerSize.y > 0.6, `swing dagger should be larger than a ground icon, got ${daggerSize.y}`);
 });
 
 test("town portal has its own landmark mesh", () => {

@@ -139,6 +139,7 @@ function getdirectioninput(key, code) {
     appendLog(` cancelled${period}`);
     nomove = NOMOVE;
     keyboard_input_callback = null;
+    if (typeof clearSpellAimAssist3D === "function") clearSpellAimAssist3D();
     return 1;
   }
   var direction = parseDirectionKeys(key, code);

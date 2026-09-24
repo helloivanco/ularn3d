@@ -192,6 +192,10 @@ hitmonster = function (x, y) {
 let acceptedSpell3D = null;
 let projectileSpell3D = null;
 let nextCastID3D = 1;
+let spellAimAssist3D = false;
+function clearSpellAimAssist3D() {
+  spellAimAssist3D = false;
+}
 function spellAccepted3D(id) {
   acceptedSpell3D = {
     kind: "spell", level, castId: nextCastID3D++,
@@ -210,15 +214,18 @@ function emitSpellCast3D(spell, direction) {
 const originalSpellDamage3D = speldamage;
 speldamage = function (id) {
   acceptedSpell3D = null;
+  spellAimAssist3D = false;
   const result = originalSpellDamage3D(id);
   const spell = acceptedSpell3D;
   acceptedSpell3D = null;
   if (!spell) return result;
   if (blocking_callback === getdirectioninput && keyboard_input_callback) {
+    spellAimAssist3D = true;
     const resolveDirection = keyboard_input_callback;
     keyboard_input_callback = function (direction) {
       const confused = !!player.CONFUSE;
       const value = resolveDirection(direction);
+      spellAimAssist3D = false;
       if (projectileSpell3D) projectileSpell3D.castId = spell.castId;
       if (!confused) emitSpellCast3D(spell, direction);
       return value;
@@ -568,6 +575,13 @@ window.ularn = {
       over: GAMEOVER,
       busy: napping,
       prompt: !!blocking_callback,
+      aimAssist: (() => {
+        const active =
+          !!spellAimAssist3D && blocking_callback === getdirectioninput;
+        if (spellAimAssist3D && blocking_callback !== getdirectioninput)
+          spellAimAssist3D = false;
+        return active;
+      })(),
       name: logname,
       character: player.char_picked,
       x: player.x,

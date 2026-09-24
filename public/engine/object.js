@@ -95,7 +95,7 @@ class Item {
     else if (this.matches(OSCROLL)) {
       if (tempPlayer && !isKnownScroll(this, tempPlayer) && showAll) {
         description += ` (of ${SCROLL_NAMES[this.arg]})`; // special case for scoreboard
-      } else if (isKnownScroll(this) || showAll) {
+      } else if (isKnownScroll(this) || inStore || showAll) {
         description += ` of ` + SCROLL_NAMES[this.arg];
       }
     }

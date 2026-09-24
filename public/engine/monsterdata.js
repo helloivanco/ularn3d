@@ -175,7 +175,9 @@ const ULARN_monsterlist = [
   new Monster(`6`, `type VI demon lord`,           17,  -65,  45, 13,  30,    0,   400,  175000, 62),
   new Monster(`7`, `type VII demon lord`,          18,  -70,  50,  6,  32,    0,   450,  200000, 63),
   new Monster(`9`, `demon prince`,                 19, -100,  80,  6,  40,    0,  1000,  500000, 64),
-  new Monster(`0`, `God of Hellfire`,              20, -127, 127,  6, 100,    0, 32767, 1000000, 65)
+  new Monster(`0`, `God of Hellfire`,              20, -127, 127,  6, 100,    0, 32767, 1000000, 65),
+  /* Unique: rare any-floor spawn; flees; equal-chance loot; 200-turn despawn */
+  new Monster(`?`, `loot goblin`,                   4,    2,   0,  0,  14,  500,    45,     200, 66)
 ];
 
 /* defines for the monsters as objects */
@@ -241,3 +243,4 @@ const REDDRAGON = 56;
 const DEMONLORD = 57;
 const DEMONPRINCE = 64;
 const LUCIFER = 65;
+const LOOTGOBLIN = 66;

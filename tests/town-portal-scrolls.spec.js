@@ -22,11 +22,12 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
     initpricelist();
     player.setGold(10000);
     player.knownScrolls = [];
-    // Unknown town-portal scroll costs 100; known costs 2500.
+    // Shop stock is always catalog-priced (2500), even before the player learns it.
     const townIdx = dnd_item.findIndex((d) => d.itemId === OSCROLL.id && d.arg === 24);
-    const unknownPrice = dndItemPrice(townIdx);
-    learnScroll(createObject(OSCROLL, 24));
-    const knownPrice = dndItemPrice(townIdx);
+    const shopPrice = dndItemPrice(townIdx);
+    const beforeKnown = player.knownScrolls[24];
+    // Simulate browsing: price must not depend on discovery.
+    const browsed = createObject(OSCROLL, 24).toString(true);
     const beforeQty = dnd_item[townIdx].qty;
     // Simulate a buy without going through UI — infinite stock must not deplete.
     if (!dnd_item[townIdx].infinite) dnd_item[townIdx].qty--;
@@ -75,8 +76,9 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
     };
     return {
       townIdx,
-      unknownPrice,
-      knownPrice,
+      shopPrice,
+      beforeKnown: !!beforeKnown,
+      browsed,
       beforeQty,
       afterQty,
       infinite: !!dnd_item[townIdx].infinite,
@@ -86,8 +88,9 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
   });
 
   expect(result.townIdx).toBeGreaterThanOrEqual(0);
-  expect(result.unknownPrice).toBe(100);
-  expect(result.knownPrice).toBe(2500);
+  expect(result.shopPrice).toBe(2500);
+  expect(result.beforeKnown).toBe(false);
+  expect(result.browsed).toContain("teleport to town");
   expect(result.infinite).toBe(true);
   expect(result.afterQty).toBe(result.beforeQty);
   expect(result.afterRead.level).toBe(0);
@@ -97,7 +100,7 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
   expect(result.afterReturn).toEqual({ level: 1, x: 10, y: 8 });
 });
 
-test("undiscovered floor scrolls share art and shop listing stays generic", async ({ page }) => {
+test("undiscovered floor scrolls share art; shop lists identified stock", async ({ page }) => {
   const art = await page.evaluate(async () => {
     const { itemArtPath } = await import("/src/item-art.js");
     player.knownScrolls = [];
@@ -107,14 +110,17 @@ test("undiscovered floor scrolls share art and shop listing stays generic", asyn
     initpricelist();
     const idx = dnd_item.findIndex((d) => d.itemId === OSCROLL.id && d.arg === 0);
     const price = dndItemPrice(idx);
-    const sample = createObject(OSCROLL, 0).toString(false);
-    return { a, b, c, price, sample };
+    const shopName = createObject(OSCROLL, 0).toString(true);
+    const floorName = createObject(OSCROLL, 0).toString(false);
+    return { a, b, c, price, shopName, floorName, knownAfterBrowse: !!player.knownScrolls[0] };
   });
   expect(art.a).toBe("/art/items/scroll-unknown.png");
   expect(art.b).toBe(art.a);
   expect(art.c).toBe("/art/items/scroll-enchant-armor.png");
-  expect(art.price).toBe(100);
-  expect(art.sample).not.toContain("enchant armor");
+  expect(art.price).toBe(1000);
+  expect(art.shopName).toContain("enchant armor");
+  expect(art.floorName).not.toContain("enchant armor");
+  expect(art.knownAfterBrowse).toBe(false);
 });
 
 test("wielded weapon mesh follows the carried weapon into the attack grip", async ({ page }) => {
@@ -134,6 +140,6 @@ test("wielded weapon mesh follows the carried weapon into the attack grip", asyn
   expect(result.afterDagger.id).toBe(31);
   expect(result.afterAxe.id).toBe(57);
   expect(result.afterAxe.meshes).toBeGreaterThan(0);
-  expect(result.afterAxe.hasArt).toBe(true);
+  expect(result.afterAxe.hasArt).toBe(false);
   expect(result.snapshot.type).toBe("axe");
 });

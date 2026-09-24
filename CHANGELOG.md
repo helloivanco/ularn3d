@@ -4,6 +4,16 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.16 — Loot goblin, shop clarity, and more maps
+
+- DnD shop always shows proper scroll names, graphics, and catalog prices (Town Portal stays 2500g on the last page); buying or finding discovers items
+- Undiscovered dungeon scrolls still share one unknown graphic
+- Rare **Loot Goblin** (`?` on the minimap) flees, drops any item equally, and vanishes after 200 turns
+- Slight independent boosts to special weapon find rates
+- 100 more unique canned maps; 1% chance of a treasure map packed with gold and valuables
+- Larger unique weapon swing models (no tiny floor icon stuck on a default blade)
+- Thin spell-aim grid lines while choosing a cast direction
+
 ## 1.3.15 — What’s New on the site
 
 - New **What’s New** page with curated version notes for players

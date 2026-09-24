@@ -159,6 +159,18 @@ function movemt(x, y) {
   }
 
   /* Call the appropriate move routine */
+  if (ULARN && monster.matches(LOOTGOBLIN)) {
+    monster.lootGoblinTurns = (monster.lootGoblinTurns || 0) + 1;
+    if (monster.lootGoblinTurns >= 200) {
+      if (player.BLINDCOUNT === 0 && (getKnow(x, y) & KNOWHERE)) {
+        updateLog(`The loot goblin vanishes in a puff of glitter!`);
+      }
+      killMonster(x, y);
+      return;
+    }
+    flee_move(x, y);
+    return;
+  }
   if (scared) {
     scared_move(x, y);
   } else if (monster.intelligence > 10 - getDifficulty()) {
@@ -285,6 +297,36 @@ function scared_move(x, y) {
     /* This is a valid place to move, so move there */
     mmove(x, y, nx, ny);
   }
+}
+
+
+
+/*
+ * Move away from the player. Used by the loot goblin (never attacks).
+ */
+function flee_move(x, y) {
+  let monster = monsterAt(x, y);
+  if (!monster) return;
+
+  let bestDist = -1;
+  let options = [];
+  for (let z = 1; z < 9; z++) {
+    const nx = x + diroffx[z];
+    const ny = y + diroffy[z];
+    if (!valid_monst_move(nx, ny, monster)) continue;
+    if (monsterAt(nx, ny)) continue;
+    if (nx === player.x && ny === player.y) continue;
+    const dist = Math.abs(nx - player.x) + Math.abs(ny - player.y);
+    if (dist > bestDist) {
+      bestDist = dist;
+      options = [{ nx, ny }];
+    } else if (dist === bestDist) {
+      options.push({ nx, ny });
+    }
+  }
+  if (options.length === 0) return;
+  const pick = options[rund(options.length)];
+  mmove(x, y, pick.nx, pick.ny);
 }
 
 
@@ -536,7 +578,7 @@ function mmove(sx, sy, dx, dy) {
   if (item.matches(OANNIHILATION)) {
     /* demons dispel spheres */
     const spherelevel = ULARN ? 0 : 3;
-    if (monster.arg >= DEMONLORD + spherelevel) { 
+    if (monster.isDemon() && monster.arg >= DEMONLORD + spherelevel) { 
       let have_talisman = isCarrying(OSPHTALISMAN);
       if ((!have_talisman) ||
         // lucifer can't dispels 30% of the time if talisman

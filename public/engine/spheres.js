@@ -36,7 +36,7 @@ function newsphere(x, y, dir, life, lev) {
 
   if (!isCarrying(OSPHTALISMAN)) { // talisman of the sphere negates many things
     const spherelevel = ULARN ? 0 : 4;
-    if (monster && monster.arg >= DEMONLORD + spherelevel) /* demons dispel spheres */ {
+    if (monster && monster.isDemon() && monster.arg >= DEMONLORD + spherelevel) /* demons dispel spheres */ {
       show1cell(x, y); /* show the demon (ha ha) */
       cursors();
       updateLog(`The ${monster} dispels the sphere!`);

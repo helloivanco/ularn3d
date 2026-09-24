@@ -206,6 +206,40 @@ function createRandomItem(lev) {
 
 
 /*
+ * Equal-weight pick across every carryable item type (scroll args, potion
+ * args, weapons, armor, rings, gems, gold, artifacts). Used by the loot goblin.
+ */
+function createEqualChanceItem() {
+  const choices = [];
+  for (let a = 0; a < SCROLL_NAMES.length; a++) choices.push([OSCROLL, a]);
+  for (let a = 0; a < POTION_NAMES.length; a++) choices.push([OPOTION, a]);
+  const singles = [
+    ODAGGER, OSPEAR, OFLAIL, OBATTLEAXE, OLONGSWORD, O2SWORD, OSWORD, OLANCE,
+    OSWORDofSLASHING, OHAMMER, OVORPAL, OSLAYER,
+    OLEATHER, OSTUDLEATHER, ORING, OCHAIN, OSPLINT, OPLATE, OPLATEARMOR, OSSPLATE,
+    OSHIELD, OELVENCHAIN, OBELT,
+    OPROTRING, OSTRRING, ODEXRING, OCLEVERRING, OENERGYRING, ODAMRING, OREGENRING,
+    ORINGOFEXTRA, OAMULET, OORBOFDRAGON, OSPIRITSCARAB, OCUBEofUNDEAD, ONOTHEFT,
+    OORB, OBRASSLAMP, OHANDofFEAR, OSPHTALISMAN, OWWAND, OPSTAFF, OLIFEPRESERVER,
+    OLARNEYE, OBOOK, OCHEST, OCOOKIE,
+    ODIAMOND, ORUBY, OEMERALD, OSAPPHIRE,
+  ];
+  for (let i = 0; i < singles.length; i++) {
+    if (singles[i]) choices.push([singles[i], 0]);
+  }
+  choices.push([OGOLDPILE, 100 + rnd(400)]);
+  const pick = choices[rund(choices.length)];
+  const tmpl = pick[0];
+  const arg = pick[1];
+  if (tmpl.matches(OBOOK)) return createObject(OBOOK, Math.max(1, level || 1) * 100 + rund(9));
+  if (tmpl.matches(OCHEST)) return createObject(OCHEST, Math.max(1, level || 1));
+  if (tmpl.isGem()) return createObject(tmpl, 10 + rnd(40));
+  return createObject(tmpl, arg);
+}
+
+
+
+/*
  * function to ask --more--. If the user enters a space, returns 0.  If user
  * enters Escape, returns 1.  If user enters alphabetic, then returns that
  *  value.

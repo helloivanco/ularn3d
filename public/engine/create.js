@@ -97,18 +97,25 @@ function initNewLevel(depth) {
 function loadcanned() {
   var mazeindex;
 
+  // 1% chance of a treasure map (gold + high-value loot scattered on the floor).
+  if (TREASURE_MAZES && TREASURE_MAZES.length && rnd(100) === 1) {
+    const ti = rund(TREASURE_MAZES.length);
+    return { maze: TREASURE_MAZES[ti], treasure: true };
+  }
+
   do {
     mazeindex = rund(MAZES.length);
   } while (USED_MAZES.indexOf(mazeindex) > -1);
   USED_MAZES.push(mazeindex);
   //debug(`loadcanned: used: ` + USED_MAZES);
-  return MAZES[mazeindex];
+  return { maze: MAZES[mazeindex], treasure: false };
 }
 
 
 
 function cannedMazeFits(canned) {
-  return canned && canned.length === MAXX * MAXY;
+  const maze = canned && canned.maze ? canned.maze : canned;
+  return maze && maze.length === MAXX * MAXY;
 }
 
 function townBounds() {
@@ -245,8 +252,10 @@ function ensureSpecialLevelArtifacts(depth) {
 
 function cannedlevel(depth) {
 
-  var canned = loadcanned();
-  if (!cannedMazeFits(canned)) return false;
+  var loaded = loadcanned();
+  if (!cannedMazeFits(loaded)) return false;
+  var canned = loaded.maze;
+  var isTreasure = !!loaded.treasure;
 
   var pt = 0;
   for (var y = 0; y < MAXY; y++) {
@@ -260,7 +269,12 @@ function cannedlevel(depth) {
           setItem(x, y, createObject(OCLOSEDDOOR, rnd(30)));
           break;
         case '-':
-          setItem(x, y, createRandomItem(depth + 1));
+          setItem(x, y, isTreasure
+            ? createTreasureMapLoot(depth)
+            : createRandomItem(depth + 1));
+          break;
+        case '$':
+          setItem(x, y, createGold(50 + rnd(40) * (depth + 1)));
           break;
         case '.':
           if (depth < (ULARN ? MAXLEVEL - 6: MAXLEVEL)) break;
@@ -279,7 +293,31 @@ function cannedlevel(depth) {
       } // switch
     } // for
   } // for
+  if (isTreasure) scatterTreasureMapExtras(depth);
   return true;
+}
+
+/* High-value loot for treasure-map floors. */
+function createTreasureMapLoot(depth) {
+  const roll = rnd(100);
+  if (roll < 35) return createGold(80 + rnd(60) * (depth + 1));
+  if (roll < 50) return createObject(ODIAMOND, 20 + rnd(30) + depth * 2);
+  if (roll < 62) return createObject(ORUBY, 15 + rnd(20) + depth);
+  if (roll < 72) return createObject(OEMERALD, 12 + rnd(15) + depth);
+  if (roll < 80) return createObject(OSAPPHIRE, 10 + rnd(12) + depth);
+  if (roll < 88) return createObject(OSCROLL, newscroll());
+  if (roll < 94) return createObject(OPOTION, newpotion());
+  if (ULARN && roll < 97) return createObject(OLONGSWORD, rund(4));
+  return createObject(OCHEST, Math.max(1, depth));
+}
+
+function scatterTreasureMapExtras(depth) {
+  for (let i = 0; i < 8 + rnd(6); i++) {
+    fillroom(OGOLDPILE, 100 + rnd(80) * (depth + 1));
+  }
+  for (let i = 0; i < 3 + rnd(3); i++) {
+    fillroom(createTreasureMapLoot(depth));
+  }
 }
 
 
@@ -612,14 +650,14 @@ function makeobject(depth) {
     created |= createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, !created && rnd(120) < 8);
     created |= createArtifact(OCUBEofUNDEAD,    player.CUBEofUNDEAD, !created && rnd(120) < 8);
     created |= createArtifact(ONOTHEFT,         player.NOTHEFT,      !created && rnd(120) < 8);
-    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(120) < 8);
-    created |= createArtifact(OHAMMER,          player.BESSMANN,     !created && rnd(120) < 8);
+    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(120) < 11);
+    created |= createArtifact(OHAMMER,          player.BESSMANN,     !created && rnd(120) < 13);
     created |= createArtifact(OSPHTALISMAN,     player.TALISMAN,     !created && rnd(120) < 8);
     created |= createArtifact(OHANDofFEAR,      player.HAND,         !created && rnd(120) < 8);
     created |= createArtifact(OORB,             player.ORB,          !created && rnd(120) < 8);
     created |= createArtifact(OELVENCHAIN,      player.ELVEN,        !created && rnd(120) < 8);
-    created |= createArtifact(OSLAYER,          player.SLAY,         !created && depth >= 10 && rnd(100) > (85 - (depth - 10)));
-    created |= createArtifact(OVORPAL,          player.VORPAL,       !created && rnd(120) < 8);
+    created |= createArtifact(OSLAYER,          player.SLAY,         !created && depth >= 10 && rnd(100) > (82 - (depth - 10)));
+    created |= createArtifact(OVORPAL,          player.VORPAL,       !created && rnd(120) < 10);
     created |= createArtifact(OPSTAFF,          player.STAFF,        !created && depth >= 8 && rnd(100) > (85 - (depth - 10)));
     created |= createArtifact(OLIFEPRESERVER,   player.PRESERVER,    !created && depth >= 5 && rnd(120) < 8); // different than Ularn 1.6
   }
@@ -628,8 +666,8 @@ function makeobject(depth) {
     createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, rnd(151) < 4);
     createArtifact(OCUBEofUNDEAD,    player.CUBEofUNDEAD, rnd(151) < 4);
     createArtifact(ONOTHEFT,         player.NOTHEFT,      rnd(151) < 3);
-    createArtifact(OSWORDofSLASHING, player.SLASH,        rnd(151) < 2);
-    createArtifact(OHAMMER,          player.BESSMANN,     rnd(151) < 4);
+    createArtifact(OSWORDofSLASHING, player.SLASH,        rnd(151) < 3);
+    createArtifact(OHAMMER,          player.BESSMANN,     rnd(151) < 6);
   }
 
   if (getDifficulty() < 3 || (rnd(4) == 3)) {
@@ -641,6 +679,12 @@ function makeobject(depth) {
       froom(4, OPLATE, rund(8)); /* platemail */
       if (!ULARN) froom(3, OCLEVERRING, 1 + rnd(2)); /* ring of cleverness */
     }
+  }
+
+  /* Rare loot goblin — any dungeon floor, flees, equal-chance drop. */
+  if (ULARN && depth >= 1 && rnd(200) < 3) {
+    const goblin = fillmonst(LOOTGOBLIN, true);
+    if (goblin) goblin.lootGoblinTurns = 0;
   }
 
   if (depth == 1) placeHomeEntrance();
