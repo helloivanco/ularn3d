@@ -174,8 +174,8 @@ export function clearWieldedWeapon(grip) {
 }
 
 /**
- * Build the in-hand weapon so attack swings show the same silhouette families
- * as floor loot (blade, axe head, spear shaft, hammer, flail, staff, etc.).
+ * Build the in-hand weapon so attack swings show larger unique silhouettes
+ * per weapon type — not tiny floor icons stuck on a default dagger blade.
  */
 export function fillWieldedWeapon(grip, weapon = null) {
   clearWieldedWeapon(grip);
@@ -187,85 +187,87 @@ export function fillWieldedWeapon(grip, weapon = null) {
 
   const metal = { metalness: 0.92, roughness: 0.22 };
   const haft = { metalness: 0.15, roughness: 0.75 };
+  // Swing models are intentionally larger than ground loot icons.
+  const S = 1.55;
 
   if (type === "staff" || id === 89) {
-    cylinder(grip, 0x786249, 0, 0.12, 0, 0.032, 0.96, 6);
-    orb(grip, 0x9ed6e3, 0, 0.66, 0, 0.12, {
+    cylinder(grip, 0x786249, 0, 0.12 * S, 0, 0.032 * S, 0.96 * S, 6);
+    orb(grip, 0x9ed6e3, 0, 0.66 * S, 0, 0.12 * S, {
       emissive: 0x66bee7,
       emissiveIntensity: 2,
     });
     return grip;
   }
   if (type === "dagger" || id === 31) {
-    box(grip, 0xc5dedb, 0, 0.22, 0, 0.035, 0.42, 0.03, metal);
-    box(grip, 0xddba70, 0, 0.02, 0, 0.16, 0.035, 0.05, metal);
-    box(grip, 0x463e32, 0, -0.08, 0, 0.045, 0.14, 0.045, haft);
+    box(grip, 0xc5dedb, 0, 0.28 * S, 0, 0.04 * S, 0.5 * S, 0.035 * S, metal);
+    box(grip, 0xddba70, 0, 0.02 * S, 0, 0.18 * S, 0.04 * S, 0.055 * S, metal);
+    box(grip, 0x463e32, 0, -0.1 * S, 0, 0.05 * S, 0.16 * S, 0.05 * S, haft);
     return grip;
   }
   if (type === "spear" || id === 30) {
-    cylinder(grip, 0x6b5538, 0, 0.2, 0, 0.028, 0.95, 6);
-    cone(grip, 0xc5dedb, 0, 0.72, 0, 0.055, 0.22, 5);
+    cylinder(grip, 0x6b5538, 0, 0.22 * S, 0, 0.03 * S, 1.05 * S, 6);
+    cone(grip, 0xc5dedb, 0, 0.78 * S, 0, 0.06 * S, 0.26 * S, 5);
     return grip;
   }
   if (type === "lance" || id === 65) {
-    cylinder(grip, 0x5a4a32, 0, 0.18, 0, 0.03, 1.05, 6);
-    cone(grip, 0xb8c8d0, 0, 0.78, 0, 0.07, 0.28, 5);
-    box(grip, 0x8a3030, 0, 0.55, 0, 0.08, 0.04, 0.08, metal);
+    cylinder(grip, 0x5a4a32, 0, 0.2 * S, 0, 0.032 * S, 1.15 * S, 6);
+    cone(grip, 0xb8c8d0, 0, 0.85 * S, 0, 0.075 * S, 0.32 * S, 5);
+    box(grip, 0x8a3030, 0, 0.58 * S, 0, 0.09 * S, 0.045 * S, 0.09 * S, metal);
     return grip;
   }
   if (type === "axe" || id === 57) {
-    cylinder(grip, 0x5c4a32, 0, 0.15, 0, 0.03, 0.7, 6);
-    box(grip, 0xa8b4ae, 0.12, 0.48, 0, 0.28, 0.22, 0.05, metal);
-    box(grip, 0x8a9690, 0.22, 0.48, 0, 0.08, 0.28, 0.04, metal);
-    box(grip, 0x6a7670, -0.05, 0.48, 0, 0.1, 0.12, 0.04, metal);
+    cylinder(grip, 0x5c4a32, 0, 0.16 * S, 0, 0.032 * S, 0.78 * S, 6);
+    box(grip, 0xa8b4ae, 0.14 * S, 0.52 * S, 0, 0.32 * S, 0.26 * S, 0.055 * S, metal);
+    box(grip, 0x8a9690, 0.26 * S, 0.52 * S, 0, 0.1 * S, 0.32 * S, 0.045 * S, metal);
+    box(grip, 0x6a7670, -0.06 * S, 0.52 * S, 0, 0.12 * S, 0.14 * S, 0.045 * S, metal);
     return grip;
   }
   if (type === "flail" || id === 59) {
-    cylinder(grip, 0x5c4a32, 0, 0.05, 0, 0.03, 0.45, 6);
-    orb(grip, 0x9aa6a0, 0.18, 0.42, 0, 0.09, metal);
-    orb(grip, 0x9aa6a0, 0.28, 0.28, 0.08, 0.07, metal);
+    cylinder(grip, 0x5c4a32, 0, 0.06 * S, 0, 0.032 * S, 0.52 * S, 6);
+    orb(grip, 0x9aa6a0, 0.2 * S, 0.48 * S, 0, 0.11 * S, metal);
+    orb(grip, 0x9aa6a0, 0.32 * S, 0.32 * S, 0.09 * S, 0.085 * S, metal);
     return grip;
   }
   if (type === "hammer" || id === 27) {
-    cylinder(grip, 0x5c4a32, 0, 0.1, 0, 0.035, 0.55, 6);
-    box(grip, 0xb0a070, 0, 0.42, 0, 0.28, 0.2, 0.2, metal);
-    box(grip, 0x8a7850, 0, 0.42, 0, 0.12, 0.28, 0.12, metal);
-    orb(grip, 0xc0b080, 0, 0.55, 0, 0.05, metal);
-    box(grip, 0xddba70, 0, -0.12, 0, 0.08, 0.08, 0.08, metal);
+    cylinder(grip, 0x5c4a32, 0, 0.12 * S, 0, 0.04 * S, 0.62 * S, 6);
+    box(grip, 0xb0a070, 0, 0.48 * S, 0, 0.34 * S, 0.24 * S, 0.24 * S, metal);
+    box(grip, 0x8a7850, 0, 0.48 * S, 0, 0.14 * S, 0.32 * S, 0.14 * S, metal);
+    orb(grip, 0xc0b080, 0, 0.62 * S, 0, 0.06 * S, metal);
+    box(grip, 0xddba70, 0, -0.14 * S, 0, 0.09 * S, 0.09 * S, 0.09 * S, metal);
     return grip;
   }
   if (id === 28) {
     // Sunsword — bright blade with gold crossguard.
-    box(grip, 0xffe7a0, 0, 0.32, 0, 0.05, 0.72, 0.04, {
+    box(grip, 0xffe7a0, 0, 0.36 * S, 0, 0.055 * S, 0.82 * S, 0.045 * S, {
       ...metal,
       emissive: 0xffc050,
       emissiveIntensity: 1.2,
     });
-    box(grip, 0xddba70, 0, 0.02, 0, 0.26, 0.045, 0.07, metal);
-    box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
+    box(grip, 0xddba70, 0, 0.02 * S, 0, 0.3 * S, 0.05 * S, 0.08 * S, metal);
+    box(grip, 0x463e32, 0, -0.1 * S, 0, 0.07 * S, 0.2 * S, 0.07 * S, haft);
     return grip;
   }
   if (id === 26 || id === 90 || id === 91) {
     const blade =
       id === 91 ? 0xc45a5a : id === 90 ? 0xe8a060 : 0xa8c4e0;
-    box(grip, blade, 0, 0.32, 0, 0.048, 0.7, 0.04, metal);
-    box(grip, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, metal);
-    box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
-    orb(grip, 0xdab26a, 0, -0.19, 0, 0.042, metal);
+    box(grip, blade, 0, 0.36 * S, 0, 0.055 * S, 0.8 * S, 0.045 * S, metal);
+    box(grip, 0xddba70, 0, 0.02 * S, 0, 0.28 * S, 0.05 * S, 0.08 * S, metal);
+    box(grip, 0x463e32, 0, -0.1 * S, 0, 0.07 * S, 0.2 * S, 0.07 * S, haft);
+    orb(grip, 0xdab26a, 0, -0.22 * S, 0, 0.05 * S, metal);
     return grip;
   }
   if (id === 29) {
     // Two-handed sword — longer, thicker blade.
-    box(grip, 0xc0cbc3, 0, 0.36, 0, 0.06, 0.85, 0.05, metal);
-    box(grip, 0xddba70, 0, 0.02, 0, 0.3, 0.05, 0.08, metal);
-    box(grip, 0x463e32, 0, -0.12, 0, 0.07, 0.22, 0.07, haft);
+    box(grip, 0xc0cbc3, 0, 0.4 * S, 0, 0.07 * S, 0.95 * S, 0.055 * S, metal);
+    box(grip, 0xddba70, 0, 0.02 * S, 0, 0.34 * S, 0.055 * S, 0.09 * S, metal);
+    box(grip, 0x463e32, 0, -0.14 * S, 0, 0.08 * S, 0.26 * S, 0.08 * S, haft);
     return grip;
   }
   // Default sword / longsword / blunt blade silhouette.
-  box(grip, 0xc5dedb, 0, 0.3, 0, 0.048, 0.68, 0.045, metal);
-  box(grip, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, metal);
-  box(grip, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06, haft);
-  orb(grip, 0xdab26a, 0, -0.19, 0, 0.042, metal);
+  box(grip, 0xc5dedb, 0, 0.34 * S, 0, 0.055 * S, 0.78 * S, 0.05 * S, metal);
+  box(grip, 0xddba70, 0, 0.02 * S, 0, 0.28 * S, 0.05 * S, 0.08 * S, metal);
+  box(grip, 0x463e32, 0, -0.1 * S, 0, 0.07 * S, 0.2 * S, 0.07 * S, haft);
+  orb(grip, 0xdab26a, 0, -0.22 * S, 0, 0.05 * S, metal);
   return grip;
 }
 

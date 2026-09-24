@@ -243,9 +243,8 @@ function dnd_parse(key) {
 
 function dndItemPrice(i) {
   if (i < 0 || i >= MAXITM || !dnd_item[i]) return 0;
-  const item = createObject(dnd_item[i].itemId, dnd_item[i].arg);
-  // Undiscovered scrolls share one shop price until the player learns them.
-  if (item.matches(OSCROLL) && !isKnownScroll(item)) return 100;
+  // Shop stock always uses the catalog price. Browsing does not depend on
+  // whether the player has already discovered the scroll in the dungeon.
   return dnd_item[i].price;
 }
 
@@ -271,14 +270,12 @@ function dnditem(i) {
   // index
   const indexString = `${getCharFromIndex(i % 26)}) `;
   
-  // description — unknown scrolls stay generic until discovered
+  // Shop stock is always shown identified (names + proper prices). Buying
+  // still calls learnScroll/learnPotion so the player discovers the item.
   const item = createObject(dnd_item[i].itemId, dnd_item[i].arg);
   let itemString;
   if (item.matches(OPOTION)) itemString = item.toString(true).substring(8).padEnd(28);
-  else if (item.matches(OSCROLL)) {
-    const known = isKnownScroll(item);
-    itemString = (known ? item.toString(false).substring(8) : `magic scroll`).padEnd(28);
-  }
+  else if (item.matches(OSCROLL)) itemString = item.toString(true).substring(8).padEnd(28);
   else itemString = item.toString(true).padEnd(28);
   
   // price

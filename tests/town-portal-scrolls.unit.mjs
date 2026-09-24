@@ -40,9 +40,12 @@ test("engine defines teleport-to-town scroll and infinite DnD stock", () => {
   assert.match(scroll, /activateTownPortal/);
 });
 
-test("undiscovered scrolls sell for 100 gold in the DnD store", () => {
+test("shop scrolls always use catalog prices and identified names", () => {
   const store = readFileSync("public/engine/store.js", "utf8");
+  const object = readFileSync("public/engine/object.js", "utf8");
   assert.match(store, /function dndItemPrice/);
-  assert.match(store, /return 100/);
-  assert.match(store, /isKnownScroll\(item\)\) return 100/);
+  assert.match(store, /return dnd_item\[i\]\.price/);
+  assert.doesNotMatch(store, /isKnownScroll\(item\)\) return 100/);
+  assert.match(store, /item\.matches\(OSCROLL\)\) itemString = item\.toString\(true\)/);
+  assert.match(object, /isKnownScroll\(this\) \|\| inStore \|\| showAll/);
 });

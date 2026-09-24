@@ -8,7 +8,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, surface, surfaceLambert, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
-import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources, itemArtPath } from "./item-art.js";
+import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight } from "./wall-cut.js";
 import {
@@ -192,6 +192,29 @@ export class World {
     this.actors = new THREE.Group();
     this.scene.add(this.terrain, this.props, this.actors);
     this.effects = new CombatEffects(this.scene);
+    // Thin aim-assist spokes shown while a spell waits for a direction.
+    const aimPositions = new Float32Array(8 * 2 * 3);
+    const dirs = [
+      [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1],
+    ];
+    for (let i = 0; i < 8; i++) {
+      const [dx, dy] = dirs[i];
+      aimPositions.set([0, 0.04, 0, dx * 3.2, 0.04, dy * 3.2], i * 6);
+    }
+    const aimGeo = new THREE.BufferGeometry();
+    aimGeo.setAttribute("position", new THREE.BufferAttribute(aimPositions, 3));
+    this.aimGrid = new THREE.LineSegments(
+      aimGeo,
+      new THREE.LineBasicMaterial({
+        color: 0xd8e6ef,
+        transparent: true,
+        opacity: 0.35,
+        depthWrite: false,
+      }),
+    );
+    this.aimGrid.visible = false;
+    this.aimGrid.frustumCulled = false;
+    this.scene.add(this.aimGrid);
     const floorGeo = new THREE.BoxGeometry(0.993, 0.18, 0.993);
     this.floor = new THREE.InstancedMesh(
       floorGeo,
@@ -602,18 +625,7 @@ export class World {
     if (key === this.heroWeaponKey) return;
     this.heroWeaponKey = key;
     fillWieldedWeapon(grip, weapon);
-    // Overlay the floor artwork so the swung weapon matches ground loot.
-    const path = weapon.id != null ? itemArtPath(weapon.id, 0, true) : null;
-    if (!path) return;
-    const art = itemSprite({ id: weapon.id, arg: 0, known: true }, () => this.invalidate());
-    if (!art) return;
-    const plate = art.userData.artwork;
-    if (!plate) return;
-    plate.name = "weapon-art";
-    plate.position.set(0, 0.42, 0.04);
-    plate.scale.set(0.5, 0.5, 1);
-    plate.rotation.set(0, 0, 0);
-    grip.add(plate);
+    // Unique 3D grip meshes only — no tiny floor-art plate stuck on the blade.
   }
   buildEnvironment() {
     const pmrem = new THREE.PMREMGenerator(this.renderer),
@@ -1258,6 +1270,11 @@ export class World {
     this.lastPlayer = { x: state.x, y: state.y };
     this.syncHeroWeapon(state);
     this.syncPlayerLight();
+    if (this.aimGrid) {
+      const show = !!state.aimAssist && state.maze && !state.over;
+      this.aimGrid.visible = show;
+      if (show) this.aimGrid.position.set(state.x, 0, state.y);
+    }
     // Balanced keeps the sun over the map center so the shadow map does not
     // chase the hero every step. Cinematic still follows the player.
     if (this.quality === "cinematic") {
@@ -1536,6 +1553,12 @@ export class World {
     this.events.abort();
     this.controls.dispose();
     this.effects.dispose();
+    if (this.aimGrid) {
+      this.aimGrid.geometry.dispose();
+      this.aimGrid.material.dispose();
+      this.aimGrid.removeFromParent();
+      this.aimGrid = null;
+    }
     this.releaseLostResources(true);
     destroy(this.scene);
     this.renderer.dispose();

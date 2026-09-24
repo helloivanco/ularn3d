@@ -188,7 +188,7 @@ Monster.prototype = {
   },
 
   isDemon: function() {
-    return this.arg >= DEMONLORD;
+    return this.arg >= DEMONLORD && this.arg <= LUCIFER;
   },
 
   initInventory: function() {
@@ -217,6 +217,10 @@ Monster.prototype = {
       case LEPRECHAUN:
         if (rnd(101) >= 75) this.pickup(createGem());
         if (rnd(5) == 1) this.addInventory();
+        return;
+      case LOOTGOBLIN:
+        /* Equal chance at any carryable item in the game. */
+        this.pickup(createEqualChanceItem());
         return;
     }
   },
@@ -688,6 +692,11 @@ function hitplayer(x, y) {
   ifblind(x, y);
 
   if (ULARN && monster.matches(LEMMING)) {
+    return;
+  }
+
+  if (ULARN && monster.matches(LOOTGOBLIN)) {
+    /* Loot goblins never attack — they only flee. */
     return;
   }
 
