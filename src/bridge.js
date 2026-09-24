@@ -193,6 +193,9 @@ let acceptedSpell3D = null;
 let projectileSpell3D = null;
 let nextCastID3D = 1;
 let spellAimAssist3D = false;
+function clearSpellAimAssist3D() {
+  spellAimAssist3D = false;
+}
 function spellAccepted3D(id) {
   acceptedSpell3D = {
     kind: "spell", level, castId: nextCastID3D++,
