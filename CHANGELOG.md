@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.17 — Maze floors, portals, and rare treasure rooms
+
+- Dungeon floors are maze-like again (rooms and corridors); doors only connect spaces — no blank halls with doors to nowhere
+- Floor loot amount matches classic Ularn budgets; item *types* scale with depth
+- Town portals: only one active at a time (new replaces old); using the town portal to return consumes it
+- Rare **treasure rooms** (0.10%) with real room structure, more gold than items, and monsters 3 levels above the floor
+
 ## 1.3.16 — Loot goblin, shop clarity, and more maps
 
 - DnD shop always shows proper scroll names, graphics, and catalog prices (Town Portal stays 2500g on the last page); buying or finding discovers items
