@@ -44,11 +44,14 @@ test("loot goblin flees, despawns, and drops equal-chance loot", () => {
   assert.match(create, /fillmonst\(LOOTGOBLIN/);
 });
 
-test("canned mazes are 57x20 with 100+ Ularn maps and treasure maps", () => {
+test("canned mazes are 57x20 maze-like with sparse loot and rare treasure rooms", () => {
   const mazesSrc = readFileSync("public/engine/mazes.js", "utf8");
   assert.match(mazesSrc, /const TREASURE_MAZES/);
-  assert.match(create, /rnd\(100\) === 1/);
-  assert.match(create, /scatterTreasureMapExtras/);
+  assert.match(create, /rnd\(1000\) === 1/);
+  assert.match(create, /placeRareTreasureRoom/);
+  assert.match(create, /function buildRoomCorridorMaze/);
+  assert.match(create, /function createDepthLoot/);
+  assert.doesNotMatch(create, /rnd\(100\) === 1/);
   const vm = require("node:vm");
   const sandbox = {};
   vm.runInNewContext(
@@ -61,6 +64,53 @@ test("canned mazes are 57x20 with 100+ Ularn maps and treasure maps", () => {
   assert.ok(sandbox.ULARN.every((m) => m.length === 57 * 20));
   assert.ok(sandbox.TREASURE.every((m) => m.length === 57 * 20));
   assert.ok(sandbox.COMMON.every((m) => m.length === 57 * 20));
+
+  const W = 57;
+  const H = 20;
+  const orphanDoors = (m) => {
+    let bad = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (m[y * W + x] !== "D") continue;
+        const floor = (xx, yy) => {
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false;
+          const c = m[yy * W + xx];
+          return c !== "#" && c !== "D";
+        };
+        if (!(floor(x - 1, y) && floor(x + 1, y)) && !(floor(x, y - 1) && floor(x, y + 1)))
+          bad++;
+      }
+    }
+    return bad;
+  };
+  for (const m of [...sandbox.COMMON, ...sandbox.ULARN.slice(0, 20), ...sandbox.TREASURE]) {
+    assert.equal(orphanDoors(m), 0, "doors must connect floor tiles");
+    const walls = (m.match(/#/g) || []).length;
+    const open = m.length - walls;
+    assert.ok(open >= 300 && open <= 700, `open cells out of range: ${open}`);
+    const dash = m.split("-").length - 1;
+    assert.ok(dash <= 8, `too many canned loot markers: ${dash}`);
+  }
+  /* Treasure floors: more gold markers than item markers. */
+  for (const m of sandbox.TREASURE) {
+    const gold = m.split("$").length - 1;
+    const loot = m.split("-").length - 1;
+    assert.ok(gold > loot, `treasure map should favor gold (${gold} vs ${loot})`);
+  }
+});
+
+test("makeobject keeps classic potion/scroll/gold counts", () => {
+  assert.match(create, /for \(i = 0; i < rnd\(4\) \+ 3; i\+\+\)/);
+  assert.match(create, /for \(i = 0; i < rnd\(5\) \+ 3; i\+\+\)/);
+  assert.match(create, /for \(i = 0; i < rnd\(12\) \+ 11; i\+\+\)/);
+});
+
+test("town portal from town consumes the portal pair", () => {
+  assert.match(scroll, /Town → dungeon consumes the portal pair/);
+  assert.match(scroll, /clearTownPortals\(\)/);
+  assert.match(scroll, /function placeTownPortalPair/);
+  /* New portal replaces any existing one. */
+  assert.match(scroll, /placeTownPortalPair[\s\S]*clearTownPortals/);
 });
 
 test("town buildings require one empty square of clearance", () => {

@@ -55,7 +55,7 @@
         },
         {
           "key": "Content-Disposition",
-          "value": "attachment; filename=\"Ularn-1.3.16.windows.exe\""
+          "value": "attachment; filename=\"Ularn-1.3.17.windows.exe\""
         }
       ]
     }
@@ -63,12 +63,12 @@
   "redirects": [
     {
       "source": "/downloads/SHA256SUMS.txt",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.16/SHA256SUMS.txt",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.17/SHA256SUMS.txt",
       "permanent": false
     },
     {
       "source": "/downloads/Ularn.windows.exe",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.16/Ularn-1.3.16.windows.exe",
+      "destination": "https://github.com/helloivanco/ularn3d/releases/download/v1.3.17/Ularn-1.3.17.windows.exe",
       "permanent": false
     },
     {

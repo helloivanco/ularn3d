@@ -372,8 +372,14 @@ function activateTownPortal() {
     return;
   }
   if (level === 0) {
-    newcavelevel(townPortalLink.dungeonLevel);
-    positionplayer(townPortalLink.dungeonX, townPortalLink.dungeonY, true);
+    /* Town → dungeon consumes the portal pair (one active portal at a time). */
+    const destLevel = townPortalLink.dungeonLevel;
+    const destX = townPortalLink.dungeonX;
+    const destY = townPortalLink.dungeonY;
+    clearTownPortals();
+    newcavelevel(destLevel);
+    positionplayer(destX, destY, true);
+    setItem(destX, destY, OEMPTY);
     updateLog(`  You step through the portal and return to the dungeon${period}`);
   } else {
     newcavelevel(0);

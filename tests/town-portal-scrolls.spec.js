@@ -63,7 +63,7 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
         ? itemAt(townPortalLink.townX, townPortalLink.townY).isStore()
         : null,
     };
-    // Stand on town portal and press e to return.
+    // Stand on town portal and press e to return — portal is consumed.
     if (townPortalLink) {
       player.x = townPortalLink.townX;
       player.y = townPortalLink.townY;
@@ -73,7 +73,15 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
       level,
       x: player.x,
       y: player.y,
+      linkGone: townPortalLink == null,
+      dungeonPortalGone: LEVELS[1]?.items[10][8]?.id !== 102,
+      townPortalGone: resultTownPortalCleared(),
     };
+    function resultTownPortalCleared() {
+      const t = afterRead.portalLink;
+      if (!t) return true;
+      return LEVELS[0]?.items[t.townX][t.townY]?.id !== 102;
+    }
     return {
       townIdx,
       shopPrice,
@@ -97,7 +105,9 @@ test("teleport-to-town scroll leaves a portal activated with e", async ({ page }
   expect(result.afterRead.dungeonPortal).toBe(102);
   expect(result.afterRead.townPortalId).toBe(102);
   expect(result.afterRead.townIsStore).toBeFalsy();
-  expect(result.afterReturn).toEqual({ level: 1, x: 10, y: 8 });
+  expect(result.afterReturn).toMatchObject({ level: 1, x: 10, y: 8, linkGone: true });
+  expect(result.afterReturn.dungeonPortalGone).toBe(true);
+  expect(result.afterReturn.townPortalGone).toBe(true);
 });
 
 test("undiscovered floor scrolls share art; shop lists identified stock", async ({ page }) => {

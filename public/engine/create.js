@@ -97,15 +97,18 @@ function initNewLevel(depth) {
 function loadcanned() {
   var mazeindex;
 
-  // 1% chance of a treasure map (gold + high-value loot scattered on the floor).
-  if (TREASURE_MAZES && TREASURE_MAZES.length && rnd(100) === 1) {
+  /*
+   * Rare structured treasure-room floors (0.10%). Maze-like layout with more
+   * gold than items — not the old blank open treasure maps.
+   */
+  if (TREASURE_MAZES && TREASURE_MAZES.length && rnd(1000) === 1) {
     const ti = rund(TREASURE_MAZES.length);
     return { maze: TREASURE_MAZES[ti], treasure: true };
   }
 
   do {
     mazeindex = rund(MAZES.length);
-  } while (USED_MAZES.indexOf(mazeindex) > -1);
+  } while (USED_MAZES.indexOf(mazeindex) > -1 && USED_MAZES.length < MAZES.length);
   USED_MAZES.push(mazeindex);
   //debug(`loadcanned: used: ` + USED_MAZES);
   return { maze: MAZES[mazeindex], treasure: false };
@@ -256,6 +259,7 @@ function cannedlevel(depth) {
   if (!cannedMazeFits(loaded)) return false;
   var canned = loaded.maze;
   var isTreasure = !!loaded.treasure;
+  beginLevelLootSet();
 
   var pt = 0;
   for (var y = 0; y < MAXY; y++) {
@@ -271,7 +275,7 @@ function cannedlevel(depth) {
         case '-':
           setItem(x, y, isTreasure
             ? createTreasureMapLoot(depth)
-            : createRandomItem(depth + 1));
+            : createDepthLoot(depth + 1));
           break;
         case '$':
           setItem(x, y, createGold(50 + rnd(40) * (depth + 1)));
@@ -297,27 +301,105 @@ function cannedlevel(depth) {
   return true;
 }
 
-/* High-value loot for treasure-map floors. */
+/* High-value loot for rare treasure-room floors — gold-biased. */
 function createTreasureMapLoot(depth) {
   const roll = rnd(100);
-  if (roll < 35) return createGold(80 + rnd(60) * (depth + 1));
-  if (roll < 50) return createObject(ODIAMOND, 20 + rnd(30) + depth * 2);
-  if (roll < 62) return createObject(ORUBY, 15 + rnd(20) + depth);
-  if (roll < 72) return createObject(OEMERALD, 12 + rnd(15) + depth);
-  if (roll < 80) return createObject(OSAPPHIRE, 10 + rnd(12) + depth);
-  if (roll < 88) return createObject(OSCROLL, newscroll());
-  if (roll < 94) return createObject(OPOTION, newpotion());
-  if (ULARN && roll < 97) return createObject(OLONGSWORD, rund(4));
+  if (roll < 55) return createGold(80 + rnd(60) * (depth + 1));
+  if (roll < 68) return createObject(ODIAMOND, 20 + rnd(30) + depth * 2);
+  if (roll < 78) return createObject(ORUBY, 15 + rnd(20) + depth);
+  if (roll < 86) return createObject(OEMERALD, 12 + rnd(15) + depth);
+  if (roll < 92) return createObject(OSAPPHIRE, 10 + rnd(12) + depth);
+  if (roll < 96) return createObject(OSCROLL, newscroll());
+  if (roll < 98) return createObject(OPOTION, newpotion());
+  if (ULARN && roll < 99) return createDepthLoot(depth + 2);
   return createObject(OCHEST, Math.max(1, depth));
 }
 
 function scatterTreasureMapExtras(depth) {
-  for (let i = 0; i < 8 + rnd(6); i++) {
+  /* Modest extras only — more gold than items; do not carpet the floor. */
+  for (let i = 0; i < 4 + rnd(3); i++) {
     fillroom(OGOLDPILE, 100 + rnd(80) * (depth + 1));
   }
-  for (let i = 0; i < 3 + rnd(3); i++) {
+  for (let i = 0; i < 1 + rnd(2); i++) {
     fillroom(createTreasureMapLoot(depth));
   }
+}
+
+/*
+ * Depth-scaled floor loot. Prefer higher-tier gear on deeper floors and avoid
+ * repeating the same item type on one level when possible.
+ */
+let levelLootKeys = null;
+
+function beginLevelLootSet() {
+  levelLootKeys = new Set();
+}
+
+function lootTypeKey(item) {
+  if (!item) return ``;
+  if (item.matches(OGOLDPILE)) return `gold`;
+  if (item.matches(OSCROLL)) return `scroll:${item.arg}`;
+  if (item.matches(OPOTION)) return `potion:${item.arg}`;
+  return `${item.id}`;
+}
+
+function createDepthLoot(depth) {
+  const lev = Math.max(1, depth);
+  const tries = 12;
+  for (let t = 0; t < tries; t++) {
+    let item;
+    const roll = rnd(100);
+    if (lev <= 3) {
+      if (roll < 28) item = createObject(OSCROLL, newscroll());
+      else if (roll < 50) item = createObject(OPOTION, newpotion());
+      else if (roll < 68) item = createGold(12 * rnd(lev + 1) + (lev << 3) + 10);
+      else if (roll < 78) item = createObject(OBOOK, lev);
+      else if (roll < 86) item = createObject(ODAGGER, rund(lev / 3 + 1));
+      else if (roll < 92) item = createObject(OLEATHER, rund(lev / 3 + 1));
+      else if (roll < 96) item = createObject(OSPEAR, rund(lev / 2 + 1));
+      else item = createObject(OCOOKIE, 0);
+    } else if (lev <= 7) {
+      if (roll < 22) item = createObject(OSCROLL, newscroll());
+      else if (roll < 40) item = createObject(OPOTION, newpotion());
+      else if (roll < 55) item = createGold(12 * rnd(lev + 1) + (lev << 3) + 20);
+      else if (roll < 65) item = createObject(OBOOK, lev);
+      else if (roll < 73) item = createObject(OLONGSWORD, rund(lev / 3 + 1));
+      else if (roll < 80) item = createObject(OCHAIN, rund(lev / 3 + 1));
+      else if (roll < 86) item = createObject(OBATTLEAXE, rund(lev / 3 + 1));
+      else if (roll < 91) item = createObject(OSHIELD, rund(lev / 3 + 1));
+      else if (roll < 95) item = createObject(ORING, rund(lev / 2 + 1));
+      else item = createObject(OCHEST, lev);
+    } else if (lev <= 12) {
+      if (roll < 18) item = createObject(OSCROLL, newscroll());
+      else if (roll < 34) item = createObject(OPOTION, newpotion());
+      else if (roll < 48) item = createGold(20 * rnd(lev + 1) + (lev << 4));
+      else if (roll < 56) item = createObject(OBOOK, lev);
+      else if (roll < 64) item = createObject(O2SWORD, rund(lev / 3 + 1));
+      else if (roll < 72) item = createObject(OPLATE, rund(lev / 3 + 1));
+      else if (roll < 78) item = createObject(OSWORD, rund(lev / 3 + 1));
+      else if (roll < 84) item = createObject(OSPLINT, rund(lev / 2 + 1));
+      else if (roll < 90) item = createObject(ODIAMOND, rnd(10 * lev + 1) + 10);
+      else if (roll < 95) item = createObject(OSTRRING, 1 + rnd(3));
+      else item = createObject(OCHEST, lev);
+    } else {
+      if (roll < 15) item = createObject(OSCROLL, newscroll());
+      else if (roll < 28) item = createObject(OPOTION, newpotion());
+      else if (roll < 42) item = createGold(30 * rnd(lev + 1) + (lev << 4));
+      else if (roll < 50) item = createObject(OBOOK, lev);
+      else if (roll < 58) item = createObject(OPLATEARMOR, rund(lev / 3 + 1));
+      else if (roll < 66) item = createObject(O2SWORD, rund(lev / 2 + 1));
+      else if (roll < 74) item = createObject(ODIAMOND, rnd(12 * lev + 1) + 20);
+      else if (roll < 82) item = createObject(ORUBY, rnd(8 * lev + 1) + 10);
+      else if (roll < 90) item = createObject(OENERGYRING, rund(lev / 4 + 1));
+      else item = createObject(OCHEST, lev);
+    }
+    const key = lootTypeKey(item);
+    if (!levelLootKeys || !levelLootKeys.has(key) || key === `gold`) {
+      if (levelLootKeys && key !== `gold`) levelLootKeys.add(key);
+      return item;
+    }
+  }
+  return createRandomItem(lev);
 }
 
 
@@ -337,48 +419,165 @@ function makemaze(k) {
     }
   }
 
-  if (useCanned && COMMON_MAZES[0]?.length === MAXX * MAXY && cannedlevel(k)) return;
+  if (useCanned && COMMON_MAZES[0]?.length === MAXX * MAXY && cannedlevel(k)) {
+    /* 0.10% rare treasure room even on canned floors (structured room, +3 monsters). */
+    if (!LEVELS[k]?.treasureFloor && rnd(1000) === 1) placeRareTreasureRoom(k);
+    if (k == 1) placeHomeEntrance();
+    return;
+  }
 
   if (k == 0) {
     layoutTown();
     return;
   }
 
-  for (let i = 0; i < MAXY; i++) {
-    for (let j = 0; j < MAXX; j++) {
-      setItem(j, i, OWALL);
-    }
-  }
+  buildRoomCorridorMaze(k);
 
-  eat(1, 1);
-
-  /* Wide, short rooms that fill a 57×20 floor. */
-  let tmp2 = rnd(3) + 3;
-  for (let tmp = 0; tmp < tmp2; tmp++) {
-    const xspan = rnd(8) + 6;
-    const yspan = rnd(3) + 3;
-    const mx = rnd(Math.max(4, MAXX - xspan - 3)) + 2;
-    const my = rnd(Math.max(3, MAXY - yspan - 3)) + 2;
-    const mon = k >= MAXLEVEL ? makemonst(k) : null;
-    for (let i = mx; i < mx + xspan && i < MAXX - 1; i++)
-      for (let j = my; j < my + yspan && j < MAXY - 1; j++) {
-        setItem(i, j, OEMPTY);
-        setMonster(i, j, mon);
-      }
-  }
-
-  /* A full-width east-west run plus a north-south crossing so stairs stay reachable. */
-  const cy = rnd(Math.max(4, MAXY - 6)) + 3;
-  for (let i = 1; i < MAXX - 1; i++) setItem(i, cy, OEMPTY);
-  const cx = rnd(MAXX - 6) + 3;
-  for (let j = 1; j < MAXY - 1; j++) setItem(cx, j, OEMPTY);
-
-  if (k > (ULARN ? 4 : 1)) {
-    treasureroom(k);
-  }
+  /* 0.10% chance of a gold-heavy treasure room with depth+3 monsters. */
+  if (rnd(1000) === 1) placeRareTreasureRoom(k);
 
   if (k == 1) placeHomeEntrance();
 
+}
+
+/*
+ * Room-and-corridor dungeon: closed rooms linked by 1-wide halls.
+ * Doors only appear in walls that separate two floor tiles (never decorative).
+ */
+function buildRoomCorridorMaze(k) {
+  for (let i = 0; i < MAXY; i++)
+    for (let j = 0; j < MAXX; j++)
+      setItem(j, i, OWALL);
+
+  const rooms = [];
+  const overlaps = (rx, ry, rw, rh) => {
+    for (let i = 0; i < rooms.length; i++) {
+      const r = rooms[i];
+      if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y)
+        return true;
+    }
+    return false;
+  };
+
+  const target = 7 + rund(4);
+  for (let attempt = 0; attempt < 500 && rooms.length < target; attempt++) {
+    const rw = 5 + rund(6);
+    const rh = 3 + rund(4);
+    const rx = 1 + rund(Math.max(1, MAXX - rw - 2));
+    const ry = 1 + rund(Math.max(1, MAXY - rh - 2));
+    if (overlaps(rx, ry, rw, rh)) continue;
+    rooms.push({ x: rx, y: ry, w: rw, h: rh, cx: rx + (rw >> 1), cy: ry + (rh >> 1) });
+  }
+  if (rooms.length < 5) {
+    const presets = [
+      [2, 2, 7, 4], [14, 2, 8, 4], [28, 2, 7, 4], [42, 2, 8, 4],
+      [2, 9, 8, 4], [16, 10, 7, 4], [30, 9, 8, 5], [44, 10, 7, 4],
+      [10, 15, 10, 3], [32, 15, 10, 3],
+    ];
+    for (let p = 0; p < presets.length && rooms.length < 6; p++) {
+      const [x, y, w, h] = presets[p];
+      if (x + w >= MAXX - 1 || y + h >= MAXY - 1) continue;
+      if (overlaps(x, y, w, h)) continue;
+      rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
+    }
+  }
+
+  for (let ri = 0; ri < rooms.length; ri++) {
+    const r = rooms[ri];
+    const mon = k >= MAXLEVEL ? makemonst(k) : null;
+    for (let y = r.y; y < r.y + r.h; y++)
+      for (let x = r.x; x < r.x + r.w; x++) {
+        setItem(x, y, OEMPTY);
+        if (mon) setMonster(x, y, mon);
+      }
+  }
+
+  const inRoom = (x, y, r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+
+  const carveCorridor = (a, b) => {
+    let x = a.cx;
+    let y = a.cy;
+    const path = [];
+    const horizFirst = rnd(2) === 1;
+    let guard = 200;
+    while ((x !== b.cx || y !== b.cy) && guard-- > 0) {
+      path.push([x, y]);
+      if (horizFirst) {
+        if (x !== b.cx) x += Math.sign(b.cx - x);
+        else if (y !== b.cy) y += Math.sign(b.cy - y);
+      } else {
+        if (y !== b.cy) y += Math.sign(b.cy - y);
+        else if (x !== b.cx) x += Math.sign(b.cx - x);
+      }
+    }
+    path.push([b.cx, b.cy]);
+
+    let doorPlaced = false;
+    for (let i = 0; i < path.length; i++) {
+      const px = path[i][0];
+      const py = path[i][1];
+      if (px <= 0 || py <= 0 || px >= MAXX - 1 || py >= MAXY - 1) continue;
+      const here = itemAt(px, py);
+      const wasWall = here && here.matches(OWALL);
+      const entersB = wasWall && (
+        inRoom(px - 1, py, b) || inRoom(px + 1, py, b) ||
+        inRoom(px, py - 1, b) || inRoom(px, py + 1, b)
+      );
+      if (entersB && !doorPlaced && rnd(10) <= 7) {
+        setItem(px, py, createObject(OCLOSEDDOOR, rnd(30)));
+        doorPlaced = true;
+      } else if (!here.matches(OCLOSEDDOOR)) {
+        setItem(px, py, OEMPTY);
+      }
+    }
+  };
+
+  const order = rooms.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rund(i + 1);
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  for (let i = 1; i < order.length; i++) carveCorridor(rooms[order[i - 1]], rooms[order[i]]);
+  const extras = 1 + rund(3);
+  for (let e = 0; e < extras && rooms.length > 2; e++) {
+    carveCorridor(rooms[rund(rooms.length)], rooms[rund(rooms.length)]);
+  }
+
+  /* Extra doors only at true choke-points (floor on opposite sides). */
+  const candidates = [];
+  for (let y = 1; y < MAXY - 1; y++) {
+    for (let x = 1; x < MAXX - 1; x++) {
+      if (!itemAt(x, y).matches(OWALL)) continue;
+      const floor = (xx, yy) => {
+        const it = itemAt(xx, yy);
+        return it && !it.matches(OWALL) && !it.matches(OCLOSEDDOOR);
+      };
+      if ((floor(x - 1, y) && floor(x + 1, y)) || (floor(x, y - 1) && floor(x, y + 1)))
+        candidates.push([x, y]);
+    }
+  }
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = rund(i + 1);
+    const t = candidates[i];
+    candidates[i] = candidates[j];
+    candidates[j] = t;
+  }
+  const want = Math.min(candidates.length, 3 + rund(5));
+  for (let i = 0; i < want; i++) {
+    setItem(candidates[i][0], candidates[i][1], createObject(OCLOSEDDOOR, rnd(30)));
+  }
+
+  /* Keep border solid. */
+  for (let x = 0; x < MAXX; x++) {
+    setItem(x, 0, OWALL);
+    setItem(x, MAXY - 1, OWALL);
+  }
+  for (let y = 0; y < MAXY; y++) {
+    setItem(0, y, OWALL);
+    setItem(MAXX - 1, y, OWALL);
+  }
 }
 
 
@@ -453,14 +652,110 @@ function eat(xx, yy) {
 
 
 /*
- *  function to make a treasure room on a level
+ *  Rare treasure room (0.10% of floors): enclosed room structure, more gold
+ *  than items, monsters scaled to depth+3 for this floor's room only.
+ */
+function placeRareTreasureRoom(lv) {
+  const xsize = rnd(4) + 6; /* 6–9 */
+  const ysize = rnd(3) + 5; /* 5–7 */
+  const tx = rnd(Math.max(4, MAXX - xsize - 3)) + 1;
+  const ty = rnd(Math.max(3, MAXY - ysize - 3)) + 1;
+  rareTreasureRoom(lv, xsize, ysize, tx, ty, rnd(9));
+  if (LEVELS[lv]) LEVELS[lv].treasureFloor = true;
+}
+
+function rareTreasureRoom(lv, xsize, ysize, tx, ty, glyph) {
+  var i, j;
+
+  for (j = ty - 1; j <= ty + ysize; j++)
+    for (i = tx - 1; i <= tx + xsize; i++)
+      if (i > 0 && j > 0 && i < MAXX - 1 && j < MAXY - 1)
+        setItem(i, j, OEMPTY);
+
+  for (j = ty; j < ty + ysize; j++)
+    for (i = tx; i < tx + xsize; i++) {
+      setItem(i, j, OWALL);
+      setMonster(i, j, null);
+    }
+
+  for (j = ty + 1; j < ty + ysize - 1; j++)
+    for (i = tx + 1; i < tx + xsize - 1; i++)
+      setItem(i, j, OEMPTY);
+
+  /* Door must sit on a wall between the room interior and outside floor. */
+  switch (rnd(2)) {
+    case 1:
+      i = tx + 1 + rund(Math.max(1, xsize - 2));
+      j = ty + (ysize - 1) * rund(2);
+      setItem(i, j, createObject(OCLOSEDDOOR, glyph));
+      break;
+    case 2:
+      i = tx + (xsize - 1) * rund(2);
+      j = ty + 1 + rund(Math.max(1, ysize - 2));
+      setItem(i, j, createObject(OCLOSEDDOOR, glyph));
+      break;
+  }
+
+  /* Clear a one-cell approach outside the door so it connects. */
+  for (j = ty; j < ty + ysize; j++) {
+    for (i = tx; i < tx + xsize; i++) {
+      const it = itemAt(i, j);
+      if (!it || !it.matches(OCLOSEDDOOR)) continue;
+      const outs = [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]];
+      for (let o = 0; o < outs.length; o++) {
+        const ox = outs[o][0];
+        const oy = outs[o][1];
+        if (ox <= 0 || oy <= 0 || ox >= MAXX - 1 || oy >= MAXY - 1) continue;
+        if (ox >= tx && ox < tx + xsize && oy >= ty && oy < ty + ysize) continue;
+        if (itemAt(ox, oy).matches(OWALL)) setItem(ox, oy, OEMPTY);
+      }
+    }
+  }
+
+  /*
+   * Sparse placement — classic loot budgets, not a carpet.
+   * More gold piles than items; monsters only in this room at depth+3.
+   */
+  const monLevel = lv + 3;
+  const interior = [];
+  for (j = ty + 1; j < ty + ysize - 1; j++)
+    for (i = tx + 1; i < tx + xsize - 1; i++)
+      interior.push([i, j]);
+  for (let n = interior.length - 1; n > 0; n--) {
+    const m = rund(n + 1);
+    const tmp = interior[n];
+    interior[n] = interior[m];
+    interior[m] = tmp;
+  }
+  let p = 0;
+  const goldN = Math.min(interior.length, 5 + rnd(4)); /* 6–9 gold */
+  const itemN = Math.min(interior.length - goldN, 2 + rnd(2)); /* 2–4 items */
+  const monN = Math.min(interior.length, 3 + rnd(3)); /* 3–6 monsters */
+  for (let g = 0; g < goldN && p < interior.length; g++, p++) {
+    setItem(interior[p][0], interior[p][1], createGold(80 + rnd(50) * (lv + 1)));
+  }
+  for (let it = 0; it < itemN && p < interior.length; it++, p++) {
+    setItem(interior[p][0], interior[p][1], createTreasureMapLoot(lv));
+  }
+  for (let m = 0; m < monN && m < interior.length; m++) {
+    const [mx, my] = interior[m];
+    setMonster(mx, my, makemonst(monLevel));
+  }
+}
+
+
+
+/*
+ *  Classic mid-tier treasure closet (occasional enclosed room). Kept rarer
+ *  than original Larn so floors stay maze-like; the gold-heavy +3-monster
+ *  variant is placeRareTreasureRoom at 0.10%.
  */
 function treasureroom(lv) {
-  for (let tx = 1 + rnd(8); tx < MAXX - 10; tx += 9) {
-    if (rnd((ULARN ? 13 : 10)) == 2) {
-      let xsize = rnd(5) + 4;
-      let ysize = rnd(5) + 4;
-      let ty = rnd(Math.max(4, MAXY - ysize - 2)) + 1; /* upper left corner of room */
+  for (let tx = 1 + rnd(8); tx < MAXX - 10; tx += 12) {
+    if (rnd(40) == 2) {
+      let xsize = rnd(4) + 4;
+      let ysize = rnd(3) + 4;
+      let ty = rnd(Math.max(4, MAXY - ysize - 2)) + 1;
       troom(lv, xsize, ysize, tx, ty, rnd(9));
     }
   }
@@ -515,9 +810,9 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
   let tmpy = ty + (ysize >> 1);
   for (let tmpx = tx + 1; tmpx <= tx + xsize - 2; tmpx += 2) {
     for (i = 0, j = rnd(rndcount); i <= j; i++) {
-      setItem(tmpx, tmpy, createRandomItem(lv + 2), SCATTER);
+      setItem(tmpx, tmpy, createDepthLoot(lv + 2), SCATTER);
       if (rnd(101) < 8) // chance of another item
-        setItem(tmpx, tmpy, createRandomItem(lv + 2), SCATTER); 
+        setItem(tmpx, tmpy, createDepthLoot(lv + 2), SCATTER); 
       setMonster(tmpx, tmpy, makemonst(lv + monstbump), SCATTER);
     }
   }
@@ -530,6 +825,7 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
     subroutine to create the objects in the maze for the given level
  */
 function makeobject(depth) {
+  beginLevelLootSet();
   if (depth == 0) {
     fillTownBuilding(OENTRANCE, 0);  /*  entrance to dungeon         */
     fillTownBuilding(ODNDSTORE, 0);  /*  the DND STORE               */
