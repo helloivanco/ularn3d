@@ -364,6 +364,9 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
       ambient: after.ambient,
       sun: after.sun,
       playerLight: after.playerLight,
+      fogDensity: after.fogDensity,
+      pointLights: after.pointLights,
+      sunVisible: after.sunVisible,
     };
   });
   expect(stats.floorMaterial).toBe("MeshBasicMaterial");
