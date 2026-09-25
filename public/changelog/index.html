@@ -115,6 +115,18 @@
         </p>
 
         <ol class="changelog-list">
+          <li id="v1-3-20">
+            <header>
+              <span class="changelog-version">v1.3.20</span>
+              <h3>Smoother browser dungeon walking</h3>
+            </header>
+            <ul>
+              <li>Balanced graphics skips the shadow pass and tone-mapping cost that still hitch Chrome dungeon walks</li>
+              <li>Flat caves keep even lighting without sampling stone textures across the whole floor</li>
+              <li>Known floors reuse geometry and skip HUD/minimap thrash when only the adventurer moves</li>
+              <li>Dungeon walking is held to a town-relative frame budget in automated checks</li>
+            </ul>
+          </li>
           <li id="v1-3-19">
             <header>
               <span class="changelog-version">v1.3.19</span>

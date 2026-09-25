@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.20 — Smoother browser dungeon walking
+
+- Balanced mode turns off the shadow system entirely (no leftover sun/hero shadow pass in Chrome)
+- Flat dungeon floors/walls stay unlit and drop stone-map sampling; instance colors keep caves readable
+- No tone-mapping cost in Balanced; dust/water stay town-only
+- Snapshot tile buffers reused; known-floor walks skip full mesh rebuilds when only the hero or monsters move
+- HUD and minimap skip redundant work on unchanged frames
+- Regression: Playwright asserts dungeon frame time stays within 1.35× town on a known classic floor
+
 ## 1.3.19 — Experience panel, flat caves, north camera, door facing
 
 - Experience progression panel beside Spells and Stats: classic Ularn titles plus current XP / XP to next level
