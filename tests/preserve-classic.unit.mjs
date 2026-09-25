@@ -13,6 +13,9 @@ test("classic floor loot loops unchanged (do not increase density)", () => {
   assert.match(create, /rnd\(12\) \+ 11/);
   assert.doesNotMatch(create, /function placeRareTreasureRoom/);
   assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
+  /* Still classic eat() caverns — density is tuned, not rewritten. */
+  assert.match(create, /function eat\(/);
+  assert.match(create, /eat\(1, 1\)/);
 });
 
 test("loot goblin and treasure-room rarity remain as shipped", () => {

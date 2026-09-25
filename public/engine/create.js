@@ -446,9 +446,10 @@ function makemaze(k) {
 
   /*
    * Classic Ularn caverns (restored from first-commit eat() + 57×20 adaptation
-   * in 1.3.16): recursive 2-step maze eat, a few open chambers, then a full
-   * east-west run and north-south crossing so the walkable graph stays one
+   * in 1.3.16): recursive 2-step maze eat, a few modest open chambers, then a
+   * full east-west run and north-south crossing so the walkable graph stays one
    * piece. Doors come only from treasure rooms / canned maps — never scattered.
+   * Chamber count/size tuned toward canned Ularn labyrinth density (~55–65% walls).
    */
   for (let i = 0; i < MAXY; i++) {
     for (let j = 0; j < MAXX; j++) {
@@ -458,11 +459,11 @@ function makemaze(k) {
 
   eat(1, 1);
 
-  /* Wide, short rooms that fill a 57×20 floor (classic open chambers). */
-  let tmp2 = rnd(3) + 3;
+  /* Modest open chambers — keep some caves without blanking the labyrinth. */
+  let tmp2 = rnd(2) + 1; /* 1–2 chambers (was 3–5) */
   for (let tmp = 0; tmp < tmp2; tmp++) {
-    const xspan = rnd(8) + 6;
-    const yspan = rnd(3) + 3;
+    const xspan = rnd(5) + 4; /* 4–8 wide (was 6–14) */
+    const yspan = rnd(2) + 2; /* 2–3 tall (was 3–6) */
     const mx = rnd(Math.max(4, MAXX - xspan - 3)) + 2;
     const my = rnd(Math.max(3, MAXY - yspan - 3)) + 2;
     const mon = k >= MAXLEVEL ? makemonst(k) : null;
@@ -478,6 +479,8 @@ function makemaze(k) {
   for (let i = 1; i < MAXX - 1; i++) setItem(i, cy, OEMPTY);
   const cx = rnd(MAXX - 6) + 3;
   for (let j = 1; j < MAXY - 1; j++) setItem(cx, j, OEMPTY);
+
+  sculptLabyrinthDensity();
 
   if (k > (ULARN ? 4 : 1)) {
     treasureroom(k);
@@ -622,6 +625,172 @@ function sanitizeMazeDoors() {
       setMonster(x, y, null);
     }
   }
+  sealDoorThroats();
+}
+
+/*
+ * Corridor-axis door: floor E+W ⇒ travel E–W (door faces N–S laterals).
+ * Floor N+S ⇒ travel N–S. Keep in sync with src/door-throat.js.
+ */
+function doorCorridorAxis(x, y) {
+  const floor = (xx, yy) => {
+    if (!inBounds(xx, yy)) return false;
+    const n = itemAt(xx, yy);
+    return n && !n.matches(OWALL) && !n.matches(OCLOSEDDOOR) && !n.matches(OOPENDOOR);
+  };
+  const ew = floor(x - 1, y) && floor(x + 1, y);
+  const ns = floor(x, y - 1) && floor(x, y + 1);
+  if (ew && !ns) return "ew";
+  if (ns && !ew) return "ns";
+  return null;
+}
+
+function sealDoorLateralCell(x, y) {
+  if (!inBounds(x, y)) return;
+  const it = itemAt(x, y);
+  if (!it || it.matches(OWALL)) return;
+  if (it.matches(OCLOSEDDOOR) || it.matches(OOPENDOOR)) return;
+  if (
+    it.matches(OSTAIRSUP) ||
+    it.matches(OSTAIRSDOWN) ||
+    it.matches(OHOMEENTRANCE) ||
+    it.matches(OELEVATORUP) ||
+    it.matches(OELEVATORDOWN) ||
+    it.matches(OVOLUP) ||
+    it.matches(OVOLDOWN) ||
+    it.matches(OENTRANCE)
+  ) {
+    return;
+  }
+  setItem(x, y, OWALL);
+  setMonster(x, y, null);
+}
+
+/*
+ * Door cell must sit between stone that defines the corridor throat so
+ * diagonal keypad moves cannot bypass the door without entering it.
+ * Doors that cannot form a sealed throat become open passage.
+ */
+function sealDoorThroats() {
+  if (level === 0) return;
+  for (let y = 1; y < MAXY - 1; y++) {
+    for (let x = 1; x < MAXX - 1; x++) {
+      const it = itemAt(x, y);
+      if (!it || (!it.matches(OCLOSEDDOOR) && !it.matches(OOPENDOOR))) continue;
+      const axis = doorCorridorAxis(x, y);
+      if (axis === "ew") {
+        sealDoorLateralCell(x, y - 1);
+        sealDoorLateralCell(x, y + 1);
+        if (!itemAt(x, y - 1).matches(OWALL) || !itemAt(x, y + 1).matches(OWALL)) {
+          setItem(x, y, OEMPTY);
+          setMonster(x, y, null);
+        }
+      } else if (axis === "ns") {
+        sealDoorLateralCell(x - 1, y);
+        sealDoorLateralCell(x + 1, y);
+        if (!itemAt(x - 1, y).matches(OWALL) || !itemAt(x + 1, y).matches(OWALL)) {
+          setItem(x, y, OEMPTY);
+          setMonster(x, y, null);
+        }
+      }
+    }
+  }
+}
+
+/* Largest interior axis-aligned rectangle of cells matching pred. */
+function largestMatchingRect(pred) {
+  let best = null,
+    bestA = 0;
+  for (let y0 = 1; y0 < MAXY - 1; y0++) {
+    for (let x0 = 1; x0 < MAXX - 1; x0++) {
+      if (!pred(x0, y0)) continue;
+      let maxW = MAXX - 1 - x0;
+      for (let y1 = y0; y1 < MAXY - 1; y1++) {
+        let w = 0;
+        while (w < maxW && pred(x0 + w, y1)) w++;
+        maxW = Math.min(maxW, w);
+        if (maxW === 0) break;
+        const h = y1 - y0 + 1;
+        const a = maxW * h;
+        if (a > bestA) {
+          bestA = a;
+          best = { x: x0, y: y0, w: maxW, h, area: a };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function isOpenFloorCell(x, y) {
+  const it = itemAt(x, y);
+  return !!(it && it.matches(OEMPTY));
+}
+
+function isSolidWallCell(x, y) {
+  const it = itemAt(x, y);
+  return !!(it && it.matches(OWALL));
+}
+
+/*
+ * Soft post-process on classic eat()+chamber shells: split huge empty halls
+ * and pierce huge solid blocks so floors read as labyrinth, not open caves
+ * or blank stone. Does not replace the generator.
+ */
+function sculptLabyrinthDensity() {
+  if (level === 0) return;
+
+  for (let pass = 0; pass < 4; pass++) {
+    const rect = largestMatchingRect(isOpenFloorCell);
+    if (!rect || rect.area < 36) break; /* ~6×6 */
+    const mx = rect.x + (rect.w >> 1);
+    const my = rect.y + (rect.h >> 1);
+    if (rect.w >= rect.h) {
+      const gap = rect.y + 1 + (rect.h > 2 ? rund(rect.h - 2) : 0);
+      for (let y = rect.y; y < rect.y + rect.h; y++) {
+        if (y === gap) continue;
+        if (mx <= 0 || mx >= MAXX - 1) continue;
+        if (itemAt(mx, y).matches(OEMPTY)) {
+          setItem(mx, y, OWALL);
+          setMonster(mx, y, null);
+        }
+      }
+    } else {
+      const gap = rect.x + 1 + (rect.w > 2 ? rund(rect.w - 2) : 0);
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        if (x === gap) continue;
+        if (my <= 0 || my >= MAXY - 1) continue;
+        if (itemAt(x, my).matches(OEMPTY)) {
+          setItem(x, my, OWALL);
+          setMonster(x, my, null);
+        }
+      }
+    }
+  }
+
+  for (let pass = 0; pass < 4; pass++) {
+    const rect = largestMatchingRect(isSolidWallCell);
+    if (!rect || rect.area < 48) break; /* ~8×6 */
+    if (rect.w >= rect.h) {
+      const ty = rect.y + (rect.h >> 1);
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        if (x <= 0 || x >= MAXX - 1 || ty <= 0 || ty >= MAXY - 1) continue;
+        if (itemAt(x, ty).matches(OWALL)) {
+          setItem(x, ty, OEMPTY);
+          setMonster(x, ty, null);
+        }
+      }
+    } else {
+      const tx = rect.x + (rect.w >> 1);
+      for (let y = rect.y; y < rect.y + rect.h; y++) {
+        if (tx <= 0 || tx >= MAXX - 1 || y <= 0 || y >= MAXY - 1) continue;
+        if (itemAt(tx, y).matches(OWALL)) {
+          setItem(tx, y, OEMPTY);
+          setMonster(tx, y, null);
+        }
+      }
+    }
+  }
 }
 
 function mazeStructureOk(depth) {
@@ -637,9 +806,13 @@ function mazeStructureOk(depth) {
     }
   }
   const wallPct = (100 * walls) / (MAXX * MAXY);
-  /* Classic Ularn-like density (canned mazes ~49–61% walls; reject blank halls). */
-  if (wallPct < 35 || wallPct > 78) return false;
-  if (open < 200 || open > 900) return false;
+  /* Classic Ularn-like density (canned mazes ~54–70% walls; reject blank halls). */
+  if (wallPct < 42 || wallPct > 74) return false;
+  if (open < 280 || open > 700) return false;
+  const emptyRect = largestMatchingRect(isOpenFloorCell);
+  if (emptyRect && emptyRect.area > 72) return false; /* no huge empty halls */
+  const solidRect = largestMatchingRect(isSolidWallCell);
+  if (solidRect && solidRect.area > 140) return false; /* no huge solid blocks */
   return true;
 }
 
@@ -732,7 +905,7 @@ function levelTraversalOk(depth) {
     if (!main.has(`${ax},${ay}`) && !main.has(`${exit.x},${exit.y}`)) return false;
   }
 
-  /* No orphan doors. */
+  /* No orphan doors; corridor doors keep lateral stone throats. */
   for (let y = 1; y < MAXY - 1; y++) {
     for (let x = 1; x < MAXX - 1; x++) {
       const it = itemAt(x, y);
@@ -742,8 +915,17 @@ function levelTraversalOk(depth) {
         const n = itemAt(xx, yy);
         return n && !n.matches(OWALL) && !n.matches(OCLOSEDDOOR) && !n.matches(OOPENDOOR);
       };
-      if (!(floor(x - 1, y) && floor(x + 1, y)) && !(floor(x, y - 1) && floor(x, y + 1)))
-        return false;
+      const ew = floor(x - 1, y) && floor(x + 1, y);
+      const ns = floor(x, y - 1) && floor(x, y + 1);
+      if (!ew && !ns) return false;
+      if (ew && !ns) {
+        if (!itemAt(x, y - 1).matches(OWALL) || !itemAt(x, y + 1).matches(OWALL))
+          return false;
+      }
+      if (ns && !ew) {
+        if (!itemAt(x - 1, y).matches(OWALL) || !itemAt(x + 1, y).matches(OWALL))
+          return false;
+      }
     }
   }
   return true;
@@ -862,16 +1044,16 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
 
   switch (rnd(2)) /* locate the door on the treasure room */ {
     case 1:
-      /* on horizontal walls */
-      i = tx + rund(xsize);
+      /* on horizontal walls — avoid corners so laterals stay stone */
+      i = tx + 1 + rund(Math.max(1, xsize - 2));
       j = ty + (ysize - 1) * rund(2);
       setItem(i, j, createObject(OCLOSEDDOOR, glyph));
       break;
 
     case 2:
-      /* on vertical walls */
+      /* on vertical walls — avoid corners so laterals stay stone */
       i = tx + (xsize - 1) * rund(2);
-      j = ty + rund(ysize);
+      j = ty + 1 + rund(Math.max(1, ysize - 2));
       setItem(i, j, createObject(OCLOSEDDOOR, glyph));
       break;
   }

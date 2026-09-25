@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.21 — Door throats and labyrinth floors
+
+- Corridor doors sit flush between connecting stone so keypad diagonals (1/3/7/9) cannot squeeze past without going through the door
+- Closed doors also block diagonal corner-cuts in movement (open doors stay walkable)
+- Classic `eat()` caverns keep the connectivity spine but use fewer/smaller chambers plus a light density sculpt so floors read more like a labyrinth
+- Wall/open ratios track canned Ularn density more closely; huge empty halls and solid blocks are rejected
+- Stairs, Cave 1 town exit, flat lighting, XP panel, north camera, classic loot, and rare goblin/treasure rooms unchanged
+
 ## 1.3.20 — Smoother browser dungeon walking
 
 - Balanced mode turns off the shadow system entirely (no leftover sun/hero shadow pass in Chrome)

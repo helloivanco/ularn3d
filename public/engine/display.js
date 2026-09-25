@@ -628,6 +628,12 @@ function moveplayer(dir) {
     return 0;
   }
 
+  /* Closed doors seal their throat: no diagonal corner-cut past them. */
+  if (player.WTW == 0 && closedDoorBlocksDiagonal(player.x, player.y, k, m)) {
+    nomove = NOMOVE;
+    return 0;
+  }
+
   if (item.matches(OHOMEENTRANCE)) {
     // D1 spawn is on the south border; town is a centered plaza. Move onto
     // the plaza before loading town so positionplayer is not left in walls.

@@ -108,6 +108,14 @@ const MazeExplorer = {
         if (!inBounds(nx, ny) || parent.has(k)) continue;
         if (this.isBlocked(nx, ny)) continue;
         if (!this.isDiscovered(nx, ny)) continue; // Only move through discovered terrain
+        /* Match player movement: no diagonal squeeze past closed doors. */
+        if (
+          !player.WTW &&
+          dx !== 0 &&
+          dy !== 0 &&
+          closedDoorBlocksDiagonal(current.x, current.y, nx, ny)
+        )
+          continue;
 
         parent.set(k, current);
 

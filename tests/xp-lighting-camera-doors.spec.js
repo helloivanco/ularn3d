@@ -52,6 +52,52 @@ test("corridor doors orient to block travel along the hall", async ({ page }) =>
   expect(facings.ewFacing).toBeCloseTo(Math.PI / 2, 5);
 });
 
+test("closed corridor doors block keypad diagonal corner-cuts", async ({ page }) => {
+  const result = await page.evaluate(() => {
+    newcavelevel(1);
+    for (let x = 0; x < MAXX; x++)
+      for (let y = 0; y < MAXY; y++) {
+        setMonster(x, y, null);
+        setItem(x, y, OWALL);
+        setKnow(x, y, KNOWALL);
+      }
+    /* Open band around an E–W door so diagonal destinations are walkable;
+       closedDoorBlocksDiagonal must still refuse the corner-cut. */
+    for (let y = 7; y <= 9; y++)
+      for (let x = 7; x <= 13; x++) setItem(x, y, OEMPTY);
+    setItem(10, 8, createObject(OCLOSEDDOOR, 0));
+    player.WTW = 0;
+    player.x = 9;
+    player.y = 8;
+    const ne = moveplayer(5); /* NE → (10,7); orthogonal (10,8) is closed door */
+    const afterNe = { x: player.x, y: player.y };
+    const se = moveplayer(7); /* SE → (10,9); orthogonal (10,8) is closed door */
+    const afterSe = { x: player.x, y: player.y };
+    const eastClosed = moveplayer(2);
+    const afterClosed = { x: player.x, y: player.y };
+    setItem(10, 8, OOPENDOOR);
+    moveplayer(2);
+    return {
+      ne,
+      afterNe,
+      se,
+      afterSe,
+      eastClosed,
+      afterClosed,
+      final: { x: player.x, y: player.y },
+      blocksDiagonal: typeof closedDoorBlocksDiagonal === "function",
+    };
+  });
+  expect(result.blocksDiagonal).toBe(true);
+  expect(result.ne).toBe(0);
+  expect(result.afterNe).toEqual({ x: 9, y: 8 });
+  expect(result.se).toBe(0);
+  expect(result.afterSe).toEqual({ x: 9, y: 8 });
+  expect(result.eastClosed).toBe(0);
+  expect(result.afterClosed).toEqual({ x: 9, y: 8 });
+  expect(result.final).toEqual({ x: 10, y: 8 });
+});
+
 test("dungeon lighting is constant: unlit floors, no fog, no point lights", async ({ page }) => {
   const lit = await page.evaluate(() => {
     newcavelevel(1);
