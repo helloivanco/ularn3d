@@ -366,18 +366,21 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
       playerLight: after.playerLight,
     };
   });
-  expect(stats.floorMaterial).toBe("MeshLambertMaterial");
+  expect(stats.floorMaterial).toBe("MeshBasicMaterial");
   expect(stats.wallCastShadow).toBe(false);
   expect(stats.floorReceiveShadow).toBe(false);
   expect(stats.pixelRatio).toBeLessThanOrEqual(0.75);
   expect(stats.shadowAfter).toBe(stats.shadowBefore);
   expect(stats.propGroups).toBe(0);
-  expect(stats.lights).toBeLessThanOrEqual(5);
+  expect(stats.lights).toBeLessThanOrEqual(2);
   expect(stats.bloom).toBe(false);
   expect(stats.composer).toBe(false);
   expect(stats.playerLight).toBe(false);
   expect(stats.ambient).toBeGreaterThanOrEqual(1.4);
-  expect(stats.sun).toBeGreaterThanOrEqual(2.4);
+  expect(stats.sun).toBe(0);
+  expect(stats.fogDensity).toBe(0);
+  expect(stats.pointLights).toBe(0);
+  expect(stats.sunVisible).toBe(false);
 });
 
 test("a revealed dungeon floor does not keep a scene node per empty tile", async ({ page }) => {

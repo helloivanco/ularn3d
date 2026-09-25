@@ -247,6 +247,7 @@ async function start(resume) {
     $("pause").hidden = false;
     document.body.classList.add("playing");
     update();
+    world?.beginExpeditionCamera();
     sound("open");
   } catch (error) {
     $("start-error").textContent = error.message;
@@ -314,6 +315,8 @@ function update() {
   $("attributes").innerHTML = HUD_STATS.map(
     (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
   ).join(" ");
+  $("xp-count-value").textContent = `${state.xp}/${state.xpNext}`;
+  $("xp-title").textContent = state.title || "";
   updateInventoryAndEffects();
   const location =
     state.level === 0

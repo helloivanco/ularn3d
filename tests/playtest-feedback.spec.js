@@ -79,11 +79,14 @@ test("character stats sit beside the adventurer frame and the map shows the whol
   await page.waitForTimeout(400);
   await expect(page.locator("#attributes")).toBeVisible();
   await expect(page.locator("#spell-count")).toHaveText(/Spells\s*:\s*\d+\/\d+/);
+  await expect(page.locator("#xp-count")).toHaveText(/Exp\s*:\s*\d+\/\d+/);
+  await expect(page.locator("#xp-title")).toHaveText(/novice explorer/i);
   await expect(page.locator("#attributes")).toHaveText(/STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/);
   await expect(page.locator("#gold")).toBeVisible();
   const layout = await page.evaluate(() => {
-    const box = document.getElementById("stat-box").getBoundingClientRect();
+    const box = document.getElementById("info-boxes").getBoundingClientRect();
     const stats = document.getElementById("attributes").getBoundingClientRect();
+    const xpBox = document.getElementById("xp-box").getBoundingClientRect();
     const hero = document.querySelector(".hero-panel").getBoundingClientRect();
     const journal = document.querySelector(".journal").getBoundingClientRect();
     const map = document.getElementById("minimap");
@@ -93,12 +96,18 @@ test("character stats sit beside the adventurer frame and the map shows the whol
     const rows = +map.dataset.rows;
     return {
       statsVisible: stats.width > 80 && stats.height > 20,
+      xpVisible: xpBox.width > 60 && xpBox.height > 20,
       labels: document.getElementById("attributes").innerText.replace(/\s+/g, " ").trim(),
       spells: document.getElementById("spell-count").innerText.replace(/\s+/g, " ").trim(),
+      xp: document.getElementById("xp-count").innerText.replace(/\s+/g, " ").trim(),
+      title: document.getElementById("xp-title").innerText.trim(),
       mana: snap.mana,
       manaMax: snap.manaMax,
+      snapXp: snap.xp,
+      snapXpNext: snap.xpNext,
       manaMeter: document.getElementById("mana-text").textContent.replace(/\s+/g, " ").trim(),
       besideHero: Math.abs(box.top - hero.top) < 80 && box.left >= hero.right - 12,
+      xpBesideStats: xpBox.left >= document.getElementById("stat-box").getBoundingClientRect().right - 4,
       journalMoved: journal.left >= box.right - 8,
       spellAboveStats: document.getElementById("spell-count").getBoundingClientRect().bottom <= stats.top + 2,
       spellLarger: parseFloat(getComputedStyle(document.getElementById("spell-count")).fontSize) >
@@ -112,12 +121,16 @@ test("character stats sit beside the adventurer frame and the map shows the whol
     };
   });
   expect(layout.statsVisible).toBe(true);
+  expect(layout.xpVisible).toBe(true);
   expect(layout.labels).toMatch(/^STR=\d+ INT=\d+ WIS=\d+ CON=\d+ DEX=\d+$/);
   expect(layout.spells).toBe(`Spells : ${layout.mana}/${layout.manaMax}`);
+  expect(layout.xp).toBe(`Exp : ${layout.snapXp}/${layout.snapXpNext}`);
+  expect(layout.title).toBe("novice explorer");
   expect(layout.manaMeter).toBe(`${layout.mana} / ${layout.manaMax}`);
   expect(layout.spellAboveStats).toBe(true);
   expect(layout.spellLarger).toBe(true);
   expect(layout.besideHero).toBe(true);
+  expect(layout.xpBesideStats).toBe(true);
   expect(layout.journalMoved).toBe(true);
   expect(layout.cellWidth).toBeGreaterThanOrEqual(12);
   expect(layout.cellHeight).toBeGreaterThanOrEqual(12);
@@ -127,11 +140,16 @@ test("character stats sit beside the adventurer frame and the map shows the whol
   await page.screenshot({ path: "test-results/hud_stats_beside_hero.png" });
 });
 
-test("camera angle is retained on cave entry and floor transitions", async ({ page }) => {
+test("camera starts facing north and keeps orbit across floor transitions", async ({ page }) => {
   await start(page);
+  const startCam = await page.evaluate(() => ularnGraphics.metrics());
+  expect(Math.abs(startCam.cameraOffset[0])).toBeLessThan(0.05);
+  expect(startCam.cameraOffset[2]).toBeGreaterThan(0);
+  expect(Math.abs(startCam.cameraYaw)).toBeLessThan(2);
   await page.locator("#rotate-left").click();
   await page.locator("#rotate-left").click();
   const turned = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
+  expect(Math.abs(turned[0])).toBeGreaterThan(0.5);
   await page.evaluate(() => {
     moveNear(OENTRANCE, true);
     dungeon();

@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.19 — Experience panel, flat caves, north camera, door facing
+
+- Experience progression panel beside Spells and Stats: classic Ularn titles plus current XP / XP to next level
+- Dungeon lighting is constant (unlit floors, no torch/point lights, no fog dimming when zooming out)
+- Camera starts facing true north on new game and load; orbit zoom/elevation preferences persist across sessions
+- Corridor doors face correctly again — the door plane blocks travel along the hall
+- Loot goblin, treasure-room rarity, and classic loot density unchanged
+
 ## 1.3.18 — Classic caverns, reachable stairs, remembered name
 
 - Restored classic Ularn `eat()` cavern generation (with the proven 57×20 spine) instead of the short-lived room-corridor rewrite

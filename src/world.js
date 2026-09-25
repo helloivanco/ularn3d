@@ -6,7 +6,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, surface, surfaceLambert, noise } from "./materials.js";
+import { mat, surface, surfaceLambert, surfaceBasic, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
@@ -28,7 +28,39 @@ import {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const FLOOR_LIMIT = 40 * 32;
-const GAME_CAMERA = new THREE.Vector3(2.8, 15.5, 8.5);
+/* North-aligned default: pure +Z offset looks toward game north (−Z / −map Y). */
+const GAME_CAMERA_Y = 15.5;
+const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
+const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
+const CAMERA_PREF_KEY = "ularn3d.camera";
+const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y) => {
+  const horiz = Math.max(5, Math.min(46, radius));
+  const y = Math.max(4, Math.min(40, elevationY));
+  return new THREE.Vector3(0, y, horiz);
+};
+const readCameraPrefs = () => {
+  try {
+    const raw = localStorage.getItem(CAMERA_PREF_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const radius = Number(parsed.radius);
+    const elevation = Number(parsed.elevation);
+    if (!Number.isFinite(radius) || !Number.isFinite(elevation)) return null;
+    return { radius, elevation };
+  } catch {
+    return null;
+  }
+};
+const writeCameraPrefs = (offset) => {
+  try {
+    const radius = Math.hypot(offset.x, offset.z);
+    localStorage.setItem(
+      CAMERA_PREF_KEY,
+      JSON.stringify({ radius, elevation: offset.y }),
+    );
+  } catch {}
+};
 function destroy(group) {
   group.traverse((o) => {
     if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
@@ -346,7 +378,7 @@ export class World {
     this.lampPool = [];
     this.billboards = [];
     this.draining = [];
-    this.torchBudget = 2;
+    this.torchBudget = 0;
     const canvas = this.renderer.domElement;
     const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
     listen(canvas, "pointerdown", (e) => {
@@ -458,11 +490,20 @@ export class World {
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
           Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z)) * 180 / Math.PI,
+        cameraYaw: Math.atan2(
+          this.camera.position.x - this.controls.target.x,
+          this.camera.position.z - this.controls.target.z,
+        ) * 180 / Math.PI,
         cameraOffset: [
           this.camera.position.x - this.controls.target.x,
           this.camera.position.y - this.controls.target.y,
           this.camera.position.z - this.controls.target.z,
         ],
+        fogDensity: this.scene.fog?.density ?? 0,
+        sunVisible: !!(this.sun.visible && this.sun.intensity > 0),
+        fillVisible: !!(this.fill.visible && this.fill.intensity > 0),
+        pointLights: this.torchLights.filter((l) => l.visible && l.intensity > 0).length +
+          (this.playerLight.visible && this.playerLight.intensity > 0 ? 1 : 0),
         monsterActors: this.monsters.size,
         propGroups: this.objects.size,
         floorInstances: this.floor.count + this.grassFloor.count,
@@ -476,6 +517,7 @@ export class World {
         ...itemArtMetrics(),
         ...this.effects.metrics(),
       }),
+      beginExpeditionCamera: () => this.beginExpeditionCamera(),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
         uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
         facing: { ...mesh.userData.facing }, art: mesh.userData.artPath,
@@ -669,21 +711,29 @@ export class World {
       this.ambient.intensity = 1.75;
       this.sun.intensity = 4.15;
       this.fill.intensity = 1.25;
+      this.sun.visible = true;
+      this.fill.visible = true;
       if (this.scene.fog) this.scene.fog.density = 0.02;
-    } else if (cinematic) {
-      this.ambient.intensity = 0.72;
-      this.sun.intensity = 0.85;
-      this.fill.intensity = 0.5;
-      if (this.scene.fog) this.scene.fog.density = 0.044;
     } else {
-      // Balanced has no hero lantern or extra torches. Keep caves readable.
-      this.ambient.intensity = 1.55;
-      this.sun.intensity = 2.7;
-      this.fill.intensity = 1.2;
-      if (this.scene.fog) this.scene.fog.density = 0.022;
+      /* Constant dungeon light: ambient only, no directional/point, no fog dimming. */
+      this.ambient.intensity = cinematic ? 1.85 : 1.7;
+      this.sun.intensity = 0;
+      this.fill.intensity = 0;
+      this.sun.visible = false;
+      this.fill.visible = false;
+      if (this.scene.fog) this.scene.fog.density = 0;
     }
     if (this.state)
       this.fill.color.set(volcano ? 0xb54c35 : town ? 0x78b9cf : 0x8eb8c9);
+    this.disablePointLights();
+  }
+  disablePointLights() {
+    this.playerLight.visible = false;
+    this.playerLight.intensity = 0;
+    this.torchLights.forEach((light) => {
+      light.visible = false;
+      light.intensity = 0;
+    });
   }
   applyGpuQuality() {
     const cinematic = this.quality === "cinematic";
@@ -698,14 +748,10 @@ export class World {
       this.ensureComposer();
       this.bloom.enabled = true;
     } else this.disposeComposer();
-    this.torchBudget = cinematic ? this.torchLights.length : 2;
-    this.torchLights.forEach((light, i) => {
-      if (i >= this.torchBudget) {
-        light.visible = false;
-        light.intensity = 0;
-      } else light.visible = true;
-    });
-    if (cinematic) {
+    this.torchBudget = 0;
+    this.disablePointLights();
+    const town = !this.state || this.state.level === 0;
+    if (cinematic && town) {
       if (!this.environment) this.buildEnvironment();
       this.scene.environment = this.environment.texture;
       this.scene.environmentIntensity = 0.24;
@@ -724,10 +770,11 @@ export class World {
     this.applyFloorMaterials();
     this.applyLevelLighting();
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
-    this.syncPlayerLight();
     this.markShadowUpdate();
   }
   floorSurface(kind, color) {
+    const dungeon = this.state && this.state.level !== 0;
+    if (dungeon) return surfaceBasic(kind, color);
     return this.quality === "cinematic"
       ? surface(kind, color)
       : surfaceLambert(kind, color);
@@ -754,13 +801,7 @@ export class World {
     this.shadowUpdates++;
   }
   syncPlayerLight() {
-    // Balanced already dropped the hero point light in town. Dungeon paid it
-    // on the whole InstancedMesh floor, which is most of the screen.
-    const lantern = this.quality === "cinematic" && this.state && this.state.level !== 0;
-    this.playerLight.visible = lantern;
-    this.playerLight.intensity = lantern ? 6 : 0;
-    if (lantern)
-      this.playerLight.color.set(this.state.level > 15 ? 0xffa466 : 0xffce89);
+    this.disablePointLights();
   }
   setQuality(value, persist = true) {
     this.quality = ["cinematic", "balanced"].includes(value)
@@ -888,6 +929,7 @@ export class World {
   }
   captureCamera() {
     this.heldCameraOffset = this.camera.position.clone().sub(this.controls.target);
+    writeCameraPrefs(this.heldCameraOffset);
     return this.heldCameraOffset;
   }
   applyHeldCamera(target) {
@@ -903,6 +945,21 @@ export class World {
     this.controls.update();
     this.controls.enableDamping = damping;
     this.heldCameraOffset = offset;
+  }
+  /* New game / load: north yaw, preferred zoom/elevation from prior sessions. */
+  beginExpeditionCamera(target = null) {
+    const prefs = readCameraPrefs();
+    this.heldCameraOffset = northCameraOffset(
+      prefs?.radius ?? GAME_CAMERA_DIST,
+      prefs?.elevation ?? GAME_CAMERA_Y,
+    );
+    if (target || this.state) {
+      const at = target || new THREE.Vector3(this.state.x, 0, this.state.y);
+      this.applyHeldCamera(at);
+      this.updateWalls();
+      this.invalidate();
+    }
+    return this.heldCameraOffset.clone();
   }
   update(state) {
     const old = this.state;
@@ -1301,13 +1358,7 @@ export class World {
     this.lamps.sort(
       (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
     );
-    for (let i = 0; i < this.torchLights.length; i++) {
-      const lamp = i < this.torchBudget ? this.lamps[i] : null,
-        light = this.torchLights[i];
-      light.visible = !!lamp;
-      light.intensity = lamp ? 5 : 0;
-      if (lamp) light.position.copy(lamp);
-    }
+    this.disablePointLights();
     this.updateWalls();
   }
   updateWalls() {
@@ -1416,12 +1467,17 @@ export class World {
   }
   reset() {
     if (this.state) {
-      this.heldCameraOffset = GAME_CAMERA.clone();
+      const prefs = readCameraPrefs();
+      this.heldCameraOffset = northCameraOffset(
+        prefs?.radius ?? GAME_CAMERA_DIST,
+        prefs?.elevation ?? GAME_CAMERA_Y,
+      );
       this.controls.target.set(this.state.x, 0, this.state.y);
       this.camera.position
         .copy(this.controls.target)
-        .add(GAME_CAMERA);
+        .add(this.heldCameraOffset);
       this.controls.update();
+      writeCameraPrefs(this.heldCameraOffset);
       this.updateWalls();
       this.invalidate();
     }

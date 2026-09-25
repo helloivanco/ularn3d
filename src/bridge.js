@@ -137,7 +137,8 @@ function stairView3D(id) {
   return null;
 }
 
-/* Door slab faces the passage: EW halls keep default facing; NS halls rotate. */
+/* Door slab blocks corridor travel. Keep in sync with src/door-facing.js.
+ * Default mesh (0): thin along Z → blocks N↔S. π/2 → blocks E↔W. */
 function doorPassageFacing3D(x, y) {
   const openFloor = (xx, yy) => {
     if (!inBounds(xx, yy)) return false;
@@ -149,7 +150,14 @@ function doorPassageFacing3D(x, y) {
       !it.matches(OOPENDOOR)
     );
   };
-  if (openFloor(x, y - 1) && openFloor(x, y + 1)) return Math.PI / 2;
+  const north = openFloor(x, y - 1);
+  const south = openFloor(x, y + 1);
+  const east = openFloor(x + 1, y);
+  const west = openFloor(x - 1, y);
+  if (north && south && !(east && west)) return 0;
+  if (east && west && !(north && south)) return Math.PI / 2;
+  if (!east && !west && (north || south)) return 0;
+  if (!north && !south && (east || west)) return Math.PI / 2;
   return 0;
 }
 
@@ -616,6 +624,8 @@ window.ularn = {
       mana: player.SPELLS,
       manaMax: player.SPELLMAX,
       xp: player.EXPERIENCE,
+      xpNext: SKILL[Math.min(player.LEVEL, MAXPLEVEL)],
+      title: CLASSES[Math.max(0, Math.min(CLASSES.length, player.LEVEL) - 1)] || "",
       rank: player.LEVEL,
       gold: player.GOLD,
       bank: player.BANKACCOUNT,
