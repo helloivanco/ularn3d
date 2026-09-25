@@ -303,6 +303,8 @@ buttonCache.forEach((button, key) => {
 let saveTimer3D = null;
 let initialized3D = false;
 let saveError3D = "";
+/** Reused across paints so a known 57×20 floor does not allocate ~1k objects/step. */
+const snapshotTiles3D = [];
 const originalPaint3D = paint;
 paint = function () {
   originalPaint3D();
@@ -536,7 +538,9 @@ window.ularn = {
   },
   snapshot() {
     if (!initialized3D || !player || !LEVELS[level]) return null;
-    const tiles = [];
+    let n = 0;
+    let structureRev = (level * 9973) ^ (MAXX * 131) ^ (MAXY * 17);
+    let actorRev = 0;
     for (let y = 0; y < MAXY; y++)
       for (let x = 0; x < MAXX; x++) {
         const know = getKnow(x, y);
@@ -562,43 +566,69 @@ window.ularn = {
               : true;
         const isDoor =
           !masked && (item.matches(OCLOSEDDOOR) || item.matches(OOPENDOOR));
-        tiles.push({
-          x,
-          y,
-          id: masked ? 0 : item.id,
-          arg: masked ? 0 : item.arg ?? 0,
-          known: knownConsumable,
-          name: masked ? "The floor" : plainText3D(item.shortName()) + (stair?.blocked ? " (dead end)" : ""),
-          stair,
-          /* Passage axis so the 3D door slab faces the hall the adventurer opens. */
-          doorFacing: isDoor ? doorPassageFacing3D(x, y) : null,
-          symbol: masked
-            ? plainText3D(itemlist[0].ularnchar)
-            : item.matches(OHOMEENTRANCE)
+        const tile = snapshotTiles3D[n] || (snapshotTiles3D[n] = {});
+        n++;
+        tile.x = x;
+        tile.y = y;
+        tile.id = masked ? 0 : item.id;
+        tile.arg = masked ? 0 : item.arg ?? 0;
+        tile.known = knownConsumable;
+        tile.name =
+          masked
+            ? "The floor"
+            : plainText3D(item.shortName()) +
+              (stair?.blocked ? " (dead end)" : "");
+        tile.stair = stair;
+        tile.doorFacing = isDoor ? doorPassageFacing3D(x, y) : null;
+        tile.symbol = masked
+          ? plainText3D(itemlist[0].ularnchar)
+          : item.matches(OHOMEENTRANCE)
+            ? "<"
+            : item.matches(OSTAIRSUP)
               ? "<"
-              : item.matches(OSTAIRSUP)
-                ? "<"
-                : item.matches(OSTAIRSDOWN)
-                  ? ">"
-                  : plainText3D(itemlist[item.id].ularnchar),
-          wall: !masked && item.matches(OWALL),
-          hazard: !masked && !!item.isTrap(),
-          closed: !masked && item.matches(OCLOSEDDOOR),
-          store: !masked && item.isStore(),
-          monster: seenMonster
-            ? {
-                id: mimic || monster.arg,
-                ...monsterView3D(monster),
-                name: mimic ? monsterlist[mimic].desc : monster.desc,
-                symbol: plainText3D(monsterlist[mimic || monster.arg].char),
-                hp: monster.hitpoints,
-                color: monsterlist[mimic || monster.arg].color,
-              }
-            : null,
-        });
+              : item.matches(OSTAIRSDOWN)
+                ? ">"
+                : plainText3D(itemlist[item.id].ularnchar);
+        tile.wall = !masked && item.matches(OWALL);
+        tile.hazard = !masked && !!item.isTrap();
+        tile.closed = !masked && item.matches(OCLOSEDDOOR);
+        tile.store = !masked && item.isStore();
+        if (seenMonster) {
+          const mid = mimic || monster.arg;
+          const view = monsterView3D(monster);
+          const mon = tile.monster || (tile.monster = {});
+          mon.id = mid;
+          Object.assign(mon, view);
+          mon.name = mimic ? monsterlist[mimic].desc : monster.desc;
+          mon.symbol = plainText3D(monsterlist[mid].char);
+          mon.hp = monster.hitpoints;
+          mon.color = monsterlist[mid].color;
+          tile.monster = mon;
+          actorRev =
+            (Math.imul(actorRev, 16777619) ^
+              ((x + 1) * 131 +
+                (y + 1) * 17 +
+                mid * 997 +
+                String(mon.uid ?? `${x},${y}`).length * 13)) |
+            0;
+        } else tile.monster = null;
+        structureRev =
+          (Math.imul(structureRev, 16777619) ^
+            ((x + 1) * 73471 +
+              (y + 1) * 19349663 +
+              (tile.wall ? 3 : 0) +
+              tile.id * 997 +
+              (tile.arg ?? 0) * 13 +
+              (know & KNOWALL))) |
+          0;
       }
+    snapshotTiles3D.length = n;
+    const tiles = snapshotTiles3D;
     return {
       tiles,
+      structureRev: structureRev ^ n,
+      actorRev,
+      mapRev: (structureRev ^ n) ^ actorRev,
       width: MAXX,
       height: MAXY,
       level,

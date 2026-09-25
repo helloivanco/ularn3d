@@ -352,11 +352,16 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
     const after = ularnGraphics.metrics();
     return {
       floorMaterial: after.floorMaterial,
+      floorMapped: after.floorMapped,
       wallCastShadow: after.wallCastShadow,
       floorReceiveShadow: after.floorReceiveShadow,
       pixelRatio: after.pixelRatio,
       shadowBefore: before.shadowUpdates,
       shadowAfter: after.shadowUpdates,
+      shadowMapEnabled: after.shadowMapEnabled,
+      sunCastShadow: after.sunCastShadow,
+      toneMapping: after.toneMapping,
+      dustVisible: after.dustVisible,
       propGroups: after.propGroups,
       lights: after.lights,
       bloom: after.bloom,
@@ -370,10 +375,15 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
     };
   });
   expect(stats.floorMaterial).toBe("MeshBasicMaterial");
+  expect(stats.floorMapped).toBe(false);
   expect(stats.wallCastShadow).toBe(false);
   expect(stats.floorReceiveShadow).toBe(false);
   expect(stats.pixelRatio).toBeLessThanOrEqual(0.75);
   expect(stats.shadowAfter).toBe(stats.shadowBefore);
+  expect(stats.shadowMapEnabled).toBe(false);
+  expect(stats.sunCastShadow).toBe(false);
+  expect(stats.toneMapping).toBe(0); // THREE.NoToneMapping
+  expect(stats.dustVisible).toBe(false);
   expect(stats.propGroups).toBe(0);
   expect(stats.lights).toBeLessThanOrEqual(2);
   expect(stats.bloom).toBe(false);

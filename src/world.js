@@ -6,7 +6,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, surface, surfaceLambert, surfaceBasic, noise } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
@@ -180,13 +180,16 @@ export class World {
       stencil: false,
       failIfMajorPerformanceCaveat: false,
     });
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = this.quality === "cinematic";
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.shadowMap.needsUpdate = this.quality === "cinematic";
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMapping =
+      this.quality === "cinematic"
+        ? THREE.ACESFilmicToneMapping
+        : THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = this.quality === "cinematic" ? 1.15 : 1;
     container.appendChild(this.renderer.domElement);
     this.environment = null;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -203,8 +206,8 @@ export class World {
     this.scene.add(this.ambient);
     this.sun = new THREE.DirectionalLight(0xffd499, 3.9);
     this.sun.position.set(-12, 24, 8);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(this.quality === "cinematic" ? 2048 : 1024, this.quality === "cinematic" ? 2048 : 1024);
+    this.sun.castShadow = this.quality === "cinematic";
+    this.sun.shadow.mapSize.set(this.quality === "cinematic" ? 2048 : 256, this.quality === "cinematic" ? 2048 : 256);
     Object.assign(this.sun.shadow.camera, {
       left: -20,
       right: 20,
@@ -295,6 +298,9 @@ export class World {
     this.wallLayout = 0;
     this.wallLayoutKey = null;
     this.structureKey = null;
+    this.staticKey = null;
+    this.structureFastPath = 0;
+    this.monsterFastPath = 0;
     this.shadowUpdates = 0;
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
@@ -509,10 +515,18 @@ export class World {
         floorInstances: this.floor.count + this.grassFloor.count,
         wallInstances: this.walls.count,
         shadowUpdates: this.shadowUpdates,
+        shadowMapEnabled: this.renderer.shadowMap.enabled,
+        sunCastShadow: !!this.sun.castShadow,
         wallCastShadow: this.walls.castShadow,
         floorReceiveShadow: this.floor.receiveShadow,
         floorMaterial: this.floor.material?.type || null,
+        floorMapped: !!this.floor.material?.map,
+        toneMapping: this.renderer.toneMapping,
+        dustVisible: !!this.dust?.visible,
+        waterVisible: !!this.water?.visible,
         pixelRatio: this.renderer.getPixelRatio(),
+        structureFastPath: this.structureFastPath,
+        monsterFastPath: this.monsterFastPath,
         ...monsterArtMetrics(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
@@ -739,11 +753,18 @@ export class World {
     const cinematic = this.quality === "cinematic";
     // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.75));
-    this.renderer.shadowMap.enabled = true;
+    // Balanced never runs a shadow pass — walls already do not cast, and the
+    // leftover sun/hero shadow setup still cost town frames in Chrome.
+    this.renderer.shadowMap.enabled = cinematic;
     this.renderer.shadowMap.type = cinematic ? THREE.PCFShadowMap : THREE.BasicShadowMap;
+    this.sun.castShadow = cinematic;
     this.sun.shadow.mapSize.set(cinematic ? 2048 : 256, cinematic ? 2048 : 256);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
+    this.renderer.toneMapping = cinematic
+      ? THREE.ACESFilmicToneMapping
+      : THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = cinematic ? 1.15 : 1;
     if (cinematic) {
       this.ensureComposer();
       this.bloom.enabled = true;
@@ -760,21 +781,28 @@ export class World {
       this.scene.environmentIntensity = 0;
     }
     // Walls and floors filled the shadow pass on every walk frame. Balanced keeps
-    // the hero silhouette only; cinematic restores full contact shadows.
+    // shadows off entirely; cinematic restores contact shadows.
     this.walls.castShadow = cinematic;
     this.caps.castShadow = cinematic;
     this.floor.receiveShadow = cinematic;
     this.grassFloor.receiveShadow = cinematic;
     this.walls.receiveShadow = cinematic;
     this.caps.receiveShadow = cinematic;
+    this.player?.traverse((object) => {
+      if (!object.isMesh) return;
+      object.castShadow = cinematic;
+      object.receiveShadow = cinematic;
+    });
     this.applyFloorMaterials();
     this.applyLevelLighting();
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
-    this.markShadowUpdate();
+    if (cinematic) this.markShadowUpdate();
   }
   floorSurface(kind, color) {
     const dungeon = this.state && this.state.level !== 0;
-    if (dungeon) return surfaceBasic(kind, color);
+    // Flat caves: unlit + instance colors only. Skipping the stone map cuts
+    // texture bandwidth across 57×20 visible tiles without changing readability.
+    if (dungeon) return matBasic(0xffffff);
     return this.quality === "cinematic"
       ? surface(kind, color)
       : surfaceLambert(kind, color);
@@ -990,7 +1018,10 @@ export class World {
       this.applyLevelLighting();
       this.floor.material = this.floorSurface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
       this.water.visible = town;
+      this.dust.visible = town;
       this.paths = this.townPaths(state.tiles);
+      this.staticKey = null;
+      this.structureKey = null;
       if (!town) {
         const slab = box(
           this.terrain,
@@ -1095,19 +1126,26 @@ export class World {
       }
     }
     this.wallLayout = wallLayout ^ wallCount;
-    const structureKey = `${floorHash}|${this.wallLayout}|${propHash}|${monsterHash}|${state.tiles.length}`;
-    // Walking across an already-known floor only moves the hero. Skip rebuilding
-    // every wall cell list, floor instance, and empty-tile skip path.
-    if (
-      !isNew &&
-      this.structureKey === structureKey &&
-      this.wallCells.length === wallCount
-    ) {
+    const staticKey = `${floorHash}|${this.wallLayout}|${propHash}|${state.tiles.length}`;
+    const structureKey = `${staticKey}|${monsterHash}`;
+    // Walking a known floor with only hero/monster motion must not rebuild
+    // every floor instance and prop group.
+    if (!isNew && this.staticKey === staticKey && this.wallCells.length === wallCount) {
       this.floorHash = floorHash;
+      if (this.structureKey === structureKey) {
+        this.structureFastPath++;
+        this.syncMovers(state, old);
+        this.invalidate();
+        return;
+      }
+      this.structureKey = structureKey;
+      this.monsterFastPath++;
+      this.syncMonsterActors(state);
       this.syncMovers(state, old);
       this.invalidate();
       return;
     }
+    this.staticKey = staticKey;
     this.structureKey = structureKey;
     this.wallCells = [];
     this.lamps.length = 0;
@@ -1212,43 +1250,7 @@ export class World {
       this.props.add(g);
       this.objects.set(key, { sig, mesh: g });
     }
-    const creatures = new Set();
-    for (const tile of state.tiles) {
-      const monster = tile.monster;
-      if (!monster) continue;
-      const uid = monster.uid ?? `${tile.x},${tile.y}`;
-      creatures.add(uid);
-      let actor = this.monsters.get(uid);
-      if (actor && actor.species !== monster.id) {
-        actor.mesh.removeFromParent();
-        destroy(actor.mesh);
-        this.monsters.delete(uid);
-        actor = null;
-      }
-      if (!actor) {
-        const mesh =
-          monsterSprite(monster, () => this.invalidate()) ||
-          monsterModel(monster);
-        mesh.position.set(tile.x, 0, tile.y);
-        actor = {
-          mesh,
-          species: monster.id,
-          target: new THREE.Vector3(tile.x, 0, tile.y),
-        };
-        this.monsters.set(uid, actor);
-        this.actors.add(mesh);
-      }
-      actor.target.set(tile.x, 0, tile.y);
-      actor.mesh.userData.uid = uid;
-      actor.mesh.userData.tile = { x: tile.x, y: tile.y };
-      faceMonster(actor.mesh, monster.facing, this.camera);
-    }
-    for (const [uid, actor] of this.monsters)
-      if (!creatures.has(uid)) {
-        actor.mesh.removeFromParent();
-        destroy(actor.mesh);
-        this.monsters.delete(uid);
-      }
+    this.syncMonsterActors(state);
     if (rebuildFloors) {
       for (const [m, count] of [
         [this.floor, floorIndex],
@@ -1281,8 +1283,54 @@ export class World {
     }
     this.walls.count = this.caps.count = this.wallCells.length;
     this.syncMovers(state, old);
-    if (isNew) this.markShadowUpdate();
+    if (isNew && this.quality === "cinematic") this.markShadowUpdate();
     this.invalidate();
+  }
+  syncMonsterActors(state) {
+    const creatures = new Set();
+    for (const tile of state.tiles) {
+      const monster = tile.monster;
+      if (!monster) continue;
+      const uid = monster.uid ?? `${tile.x},${tile.y}`;
+      creatures.add(uid);
+      let actor = this.monsters.get(uid);
+      if (actor && actor.species !== monster.id) {
+        actor.mesh.removeFromParent();
+        destroy(actor.mesh);
+        this.monsters.delete(uid);
+        actor = null;
+      }
+      if (!actor) {
+        const mesh =
+          monsterSprite(monster, () => this.invalidate()) ||
+          monsterModel(monster);
+        mesh.position.set(tile.x, 0, tile.y);
+        if (this.quality !== "cinematic") {
+          mesh.traverse((object) => {
+            if (!object.isMesh) return;
+            object.castShadow = false;
+            object.receiveShadow = false;
+          });
+        }
+        actor = {
+          mesh,
+          species: monster.id,
+          target: new THREE.Vector3(tile.x, 0, tile.y),
+        };
+        this.monsters.set(uid, actor);
+        this.actors.add(mesh);
+      }
+      actor.target.set(tile.x, 0, tile.y);
+      actor.mesh.userData.uid = uid;
+      actor.mesh.userData.tile = { x: tile.x, y: tile.y };
+      faceMonster(actor.mesh, monster.facing, this.camera);
+    }
+    for (const [uid, actor] of this.monsters)
+      if (!creatures.has(uid)) {
+        actor.mesh.removeFromParent();
+        destroy(actor.mesh);
+        this.monsters.delete(uid);
+      }
   }
   syncMovers(state, old) {
     this.player.visible = true;
@@ -1337,27 +1385,32 @@ export class World {
     }
     // Balanced keeps the sun over the map center so the shadow map does not
     // chase the hero every step. Cinematic still follows the player.
-    if (this.quality === "cinematic") {
-      this.sun.position.set(state.x - 12, 24, state.y + 8);
-      this.sun.target.position.copy(target);
-    } else {
-      const cx = (state.width - 1) / 2;
-      const cz = (state.height - 1) / 2;
-      this.sun.position.set(cx - 12, 24, cz + 8);
-      this.sun.target.position.set(cx, 0, cz);
-      const extent = Math.max(state.width, state.height) * 0.55 + 8;
-      Object.assign(this.sun.shadow.camera, {
-        left: -extent,
-        right: extent,
-        top: extent,
-        bottom: -extent,
-      });
-      this.sun.shadow.camera.updateProjectionMatrix();
+    // Skip frustum rewrites entirely when shadows are off (Balanced / dungeon).
+    if (this.renderer.shadowMap.enabled && this.sun.castShadow) {
+      if (this.quality === "cinematic") {
+        this.sun.position.set(state.x - 12, 24, state.y + 8);
+        this.sun.target.position.copy(target);
+      } else {
+        const cx = (state.width - 1) / 2;
+        const cz = (state.height - 1) / 2;
+        this.sun.position.set(cx - 12, 24, cz + 8);
+        this.sun.target.position.set(cx, 0, cz);
+        const extent = Math.max(state.width, state.height) * 0.55 + 8;
+        Object.assign(this.sun.shadow.camera, {
+          left: -extent,
+          right: extent,
+          top: extent,
+          bottom: -extent,
+        });
+        this.sun.shadow.camera.updateProjectionMatrix();
+      }
     }
-    this.dust.position.set(state.x, 0, state.y);
-    this.lamps.sort(
-      (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
-    );
+    if (this.dust.visible) this.dust.position.set(state.x, 0, state.y);
+    if (this.torchBudget > 0 && this.lamps.length) {
+      this.lamps.sort(
+        (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
+      );
+    }
     this.disablePointLights();
     this.updateWalls();
   }

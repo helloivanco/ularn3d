@@ -92,6 +92,7 @@ try {
   if (saved !== null) inventoryPinned = saved === "true";
 } catch {}
 let inventorySignature = "", effectsSignature = "";
+let hudSignature = "";
 function syncInventoryPin() {
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
@@ -295,48 +296,79 @@ function update() {
   if (!next) return;
   state = next;
   world?.update(state);
-  $("player-name").textContent = state.name;
-  $("player-class").textContent = state.character;
-  setIcon(
-    document.querySelector(".hero-seal"),
-    classes.find(([name]) => name === state.character)?.[1] || "swords",
-  );
-  $("player-rank").textContent = `LV ${state.rank}`;
-  $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
-  $("health-bar").style.width =
-    `${Math.max(0, Math.min(100, (state.hp / state.hpMax) * 100))}%`;
-  $("mana-text").textContent = `${state.mana} / ${state.manaMax}`;
-  $("mana-bar").style.width =
-    `${Math.max(0, Math.min(100, (state.mana / Math.max(1, state.manaMax)) * 100))}%`;
-  $("gold").textContent = state.gold.toLocaleString();
-  $("armor").textContent = state.ac;
-  $("weapon").textContent = state.wc;
-  $("spell-count-value").textContent = `${state.mana}/${state.manaMax}`;
-  $("attributes").innerHTML = HUD_STATS.map(
-    (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
-  ).join(" ");
-  $("xp-count-value").textContent = `${state.xp}/${state.xpNext}`;
-  $("xp-title").textContent = state.title || "";
+  const hudKey = [
+    state.name,
+    state.character,
+    state.rank,
+    state.hp,
+    state.hpMax,
+    state.mana,
+    state.manaMax,
+    state.gold,
+    state.ac,
+    state.wc,
+    state.xp,
+    state.xpNext,
+    state.title,
+    state.level,
+    state.moves,
+    state.timeLeft,
+    state.stats.STR,
+    state.stats.INT,
+    state.stats.WIS,
+    state.stats.CON,
+    state.stats.DEX,
+    state.over,
+    state.maze,
+    state.prompt,
+    state.saveError || "",
+  ].join("|");
+  if (hudKey !== hudSignature) {
+    hudSignature = hudKey;
+    $("player-name").textContent = state.name;
+    $("player-class").textContent = state.character;
+    setIcon(
+      document.querySelector(".hero-seal"),
+      classes.find(([name]) => name === state.character)?.[1] || "swords",
+    );
+    $("player-rank").textContent = `LV ${state.rank}`;
+    $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
+    $("health-bar").style.width =
+      `${Math.max(0, Math.min(100, (state.hp / state.hpMax) * 100))}%`;
+    $("mana-text").textContent = `${state.mana} / ${state.manaMax}`;
+    $("mana-bar").style.width =
+      `${Math.max(0, Math.min(100, (state.mana / Math.max(1, state.manaMax)) * 100))}%`;
+    $("gold").textContent = state.gold.toLocaleString();
+    $("armor").textContent = state.ac;
+    $("weapon").textContent = state.wc;
+    $("spell-count-value").textContent = `${state.mana}/${state.manaMax}`;
+    $("attributes").innerHTML = HUD_STATS.map(
+      (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
+    ).join(" ");
+    $("xp-count-value").textContent = `${state.xp}/${state.xpNext}`;
+    $("xp-title").textContent = state.title || "";
+    const location =
+      state.level === 0
+        ? "THE TOWN OF ULARN"
+        : state.level <= 15
+          ? `THE CAVES · DEPTH ${state.level}`
+          : `THE VOLCANO · DEPTH ${state.level - 15}`;
+    $("location-name").textContent = location;
+    $("map-depth").textContent =
+      state.level === 0
+        ? "SURFACE"
+        : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
+    $("turn-count").textContent = `TURN ${state.moves}`;
+    $("time-left").textContent = Math.ceil(state.timeLeft);
+    $("engine-modal").hidden = state.maze && !state.over;
+    $("engine-title").textContent = state.over
+      ? "EXPEDITION ENDED"
+      : "ULARN";
+    $("new-after-death").hidden = !state.over;
+    if (state.saveError) toast(state.saveError);
+  }
   updateInventoryAndEffects();
-  const location =
-    state.level === 0
-      ? "THE TOWN OF ULARN"
-      : state.level <= 15
-        ? `THE CAVES · DEPTH ${state.level}`
-        : `THE VOLCANO · DEPTH ${state.level - 15}`;
-  $("location-name").textContent = location;
-  $("map-depth").textContent =
-    state.level === 0
-      ? "SURFACE"
-      : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
-  $("turn-count").textContent = `TURN ${state.moves}`;
-  $("time-left").textContent = Math.ceil(state.timeLeft);
   syncJournal(state.log);
-  $("engine-modal").hidden = state.maze && !state.over;
-  $("engine-title").textContent = state.over
-    ? "EXPEDITION ENDED"
-    : "ULARN";
-  $("new-after-death").hidden = !state.over;
   const hasActions =
     $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
   $("interaction").hidden =
@@ -355,7 +387,6 @@ function update() {
     setTimeout(() => document.body.classList.remove("damage"), 450);
   }
   lastHP = state.hp;
-  if (state.saveError) toast(state.saveError);
   $("town-travel").hidden = state.level !== 0;
   if (state.level === 0) {
     const landmarks = state.tiles.filter((t) => t.store);
@@ -461,23 +492,31 @@ function drawMap() {
   canvas.dataset.rows = String(rows);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = false;
-  let contentHash =
-    (state.level * 9973) ^
-    (state.tiles.length * 131) ^
-    ((x0 + 1) * 17 + (y0 + 1) * 19 + cols * 23 + rows * 29 + cell);
-  for (const t of state.tiles) {
-    contentHash =
-      (Math.imul(contentHash, 16777619) ^
-        ((t.x + 1) * 73471 +
-          (t.y + 1) * 19349663 +
-          (t.wall ? 3 : 0) +
-          t.id * 997 +
-          (t.arg ?? 0) * 13 +
-          (t.monster?.id ?? 0) * 47)) |
-      0;
-  }
-  const contentKey = `${contentHash}:${cssW}x${cssH}`;
+  const layoutKey = `${state.level}:${x0},${y0},${cols}x${rows}:${cell}:${cssW}x${cssH}`;
   const playerKey = `${state.x},${state.y}`;
+  // Prefer engine mapRev (floors/props/actors) over re-hashing every tile.
+  let contentKey =
+    state.mapRev != null
+      ? `rev:${state.mapRev}:${layoutKey}`
+      : null;
+  if (!contentKey) {
+    let contentHash =
+      (state.level * 9973) ^
+      (state.tiles.length * 131) ^
+      ((x0 + 1) * 17 + (y0 + 1) * 19 + cols * 23 + rows * 29 + cell);
+    for (const t of state.tiles) {
+      contentHash =
+        (Math.imul(contentHash, 16777619) ^
+          ((t.x + 1) * 73471 +
+            (t.y + 1) * 19349663 +
+            (t.wall ? 3 : 0) +
+            t.id * 997 +
+            (t.arg ?? 0) * 13 +
+            (t.monster?.id ?? 0) * 47)) |
+        0;
+    }
+    contentKey = `${contentHash}:${cssW}x${cssH}`;
+  }
   if (canvas.dataset.contentKey === contentKey && canvas.dataset.playerKey === playerKey)
     return;
   // Walking only moves @. Redraw the old and new cell instead of 57×20 fillRects.
