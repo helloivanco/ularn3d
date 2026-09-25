@@ -375,7 +375,7 @@ test("balanced walking skips floor rebuilds and wall shadow casting", async ({ p
     };
   });
   expect(stats.floorMaterial).toBe("MeshBasicMaterial");
-  expect(stats.floorMapped).toBe(false);
+  expect(stats.floorMapped).toBe(true);
   expect(stats.wallCastShadow).toBe(false);
   expect(stats.floorReceiveShadow).toBe(false);
   expect(stats.pixelRatio).toBeLessThanOrEqual(0.75);

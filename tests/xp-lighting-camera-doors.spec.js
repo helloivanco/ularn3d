@@ -117,6 +117,7 @@ test("dungeon lighting is constant: unlit floors, no fog, no point lights", asyn
     return ularnGraphics.metrics();
   });
   expect(lit.floorMaterial).toBe("MeshBasicMaterial");
+  expect(lit.floorMapped).toBe(true);
   expect(lit.fogDensity).toBe(0);
   expect(lit.pointLights).toBe(0);
   expect(lit.playerLight).toBe(false);

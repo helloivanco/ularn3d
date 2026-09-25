@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.22 — Textured floors, quieter saves
+
+- Dungeon floors show the classic stone texture again (MeshBasic flat lighting kept the maps; 1.3.20 had dropped sampling and left solid white ground)
+- Texture maps stay locked unless a texture change is explicitly requested
+- Moves keep an in-memory dirty snapshot only — disk writes happen on Save, Save & Exit, tab hide, or page unload, not every step
+- Labyrinth density, sealed door throats, XP panel, north camera, classic loot, and flat cave lighting unchanged
+
 ## 1.3.21 — Door throats and labyrinth floors
 
 - Corridor doors sit flush between connecting stone so keypad diagonals (1/3/7/9) cannot squeeze past without going through the door
@@ -15,7 +22,7 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 ## 1.3.20 — Smoother browser dungeon walking
 
 - Balanced mode turns off the shadow system entirely (no leftover sun/hero shadow pass in Chrome)
-- Flat dungeon floors/walls stay unlit and drop stone-map sampling; instance colors keep caves readable
+- Flat dungeon floors/walls stay unlit; Balanced skipped stone-map sampling (restored in 1.3.22)
 - No tone-mapping cost in Balanced; dust/water stay town-only
 - Snapshot tile buffers reused; known-floor walks skip full mesh rebuilds when only the hero or monsters move
 - HUD and minimap skip redundant work on unchanged frames

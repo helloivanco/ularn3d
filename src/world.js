@@ -6,7 +6,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, matBasic, surface, surfaceLambert, noise } from "./materials.js";
+import { mat, surface, surfaceLambert, surfaceBasic, noise } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
@@ -521,6 +521,7 @@ export class World {
         floorReceiveShadow: this.floor.receiveShadow,
         floorMaterial: this.floor.material?.type || null,
         floorMapped: !!this.floor.material?.map,
+        wallMapped: !!this.walls.material?.map,
         toneMapping: this.renderer.toneMapping,
         dustVisible: !!this.dust?.visible,
         waterVisible: !!this.water?.visible,
@@ -800,9 +801,9 @@ export class World {
   }
   floorSurface(kind, color) {
     const dungeon = this.state && this.state.level !== 0;
-    // Flat caves: unlit + instance colors only. Skipping the stone map cuts
-    // texture bandwidth across 57×20 visible tiles without changing readability.
-    if (dungeon) return matBasic(0xffffff);
+    // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
+    // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
+    if (dungeon) return surfaceBasic(kind, color);
     return this.quality === "cinematic"
       ? surface(kind, color)
       : surfaceLambert(kind, color);

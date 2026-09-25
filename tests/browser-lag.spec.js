@@ -109,7 +109,7 @@ test("known dungeon walk stays within town frame budget and skips dead GPU work"
   });
 
   expect(report.dungeon.metrics.floorMaterial).toBe("MeshBasicMaterial");
-  expect(report.dungeon.metrics.floorMapped).toBe(false);
+  expect(report.dungeon.metrics.floorMapped).toBe(true);
   expect(report.dungeon.metrics.shadowMapEnabled).toBe(false);
   expect(report.dungeon.metrics.sunCastShadow).toBe(false);
   expect(report.dungeon.metrics.toneMapping).toBe(0);
@@ -178,6 +178,6 @@ test("empty known dungeon walk does not rebuild floors each step", async ({
   });
   expect(stats.structureFastPath).toBeGreaterThanOrEqual(6);
   expect(stats.shadowDelta).toBe(0);
-  expect(stats.floorMapped).toBe(false);
+  expect(stats.floorMapped).toBe(true);
   expect(stats.shadowMapEnabled).toBe(false);
 });

@@ -50,9 +50,7 @@ try {
   await page.screenshot({ path: "test-results/desktop.png" });
   const original = await page.evaluate(() => {
     ularn.key(".");
-    // Make the close handler responsible for this last turn, as when the user
-    // quits before the normal two-second autosave debounce has elapsed.
-    clearTimeout(saveTimer3D);
+    // Close without an explicit Save click — pagehide / quit must persist.
     const { x, y, moves, hp, mana, inventory } = ularn.snapshot();
     return { x, y, moves, hp, mana, inventory };
   });
