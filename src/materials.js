@@ -125,6 +125,19 @@ export function matLambert(color, extra = {}) {
     materials.set(key, new THREE.MeshLambertMaterial({ color, ...extra }));
   return materials.get(key);
 }
+/* Unlit dungeon terrain: constant brightness regardless of lights or zoom. */
+export function matBasic(color, extra = {}) {
+  const key = `B|${color?.isColor ? color.getHex() : color}|${Object.entries(
+    extra,
+  )
+    .map(
+      ([k, v]) => `${k}:${v?.isTexture ? v.uuid : v?.isColor ? v.getHex() : v}`,
+    )
+    .join("|")}`;
+  if (!materials.has(key))
+    materials.set(key, new THREE.MeshBasicMaterial({ color, ...extra }));
+  return materials.get(key);
+}
 export function surface(kind, color, extra = {}) {
   const map = texture(kind);
   return mat(color, {
@@ -137,4 +150,7 @@ export function surface(kind, color, extra = {}) {
 }
 export function surfaceLambert(kind, color, extra = {}) {
   return matLambert(color, { map: texture(kind), ...extra });
+}
+export function surfaceBasic(kind, color, extra = {}) {
+  return matBasic(color, { map: texture(kind), ...extra });
 }
