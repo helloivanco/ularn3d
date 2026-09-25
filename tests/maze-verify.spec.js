@@ -69,8 +69,74 @@ test("stairs stay on the walkable maze graph; no orphan doors; classic density",
         open = 0,
         doors = 0,
         orphanDoors = 0,
+        unsealedThroats = 0,
+        diagonalBypass = 0,
         gold = 0,
         groundLoot = 0;
+      const isWall = (x, y) =>
+        inBounds(x, y) && itemAt(x, y).matches(OWALL);
+      const largestRect = (pred) => {
+        let bestA = 0;
+        for (let y0 = 1; y0 < MAXY - 1; y0++) {
+          for (let x0 = 1; x0 < MAXX - 1; x0++) {
+            if (!pred(x0, y0)) continue;
+            let maxW = MAXX - 1 - x0;
+            for (let y1 = y0; y1 < MAXY - 1; y1++) {
+              let w = 0;
+              while (w < maxW && pred(x0 + w, y1)) w++;
+              maxW = Math.min(maxW, w);
+              if (maxW === 0) break;
+              const a = maxW * (y1 - y0 + 1);
+              if (a > bestA) bestA = a;
+            }
+          }
+        }
+        return bestA;
+      };
+      const doorBypass = (x, y, axis) => {
+        const walk = (xx, yy) => isFloorish(xx, yy);
+        const sideA = axis === "ew" ? [[x - 1, y]] : [[x, y - 1]];
+        const sideB = axis === "ew" ? [[x + 1, y]] : [[x, y + 1]];
+        const near = (cells) => {
+          const out = [];
+          for (const [cx, cy] of cells) {
+            if (!walk(cx, cy)) continue;
+            out.push([cx, cy]);
+            for (const [dx, dy] of [
+              [-1, -1],
+              [0, -1],
+              [1, -1],
+              [-1, 0],
+              [1, 0],
+              [-1, 1],
+              [0, 1],
+              [1, 1],
+            ]) {
+              const nx = cx + dx,
+                ny = cy + dy;
+              if (nx === x && ny === y) continue;
+              if (walk(nx, ny)) out.push([nx, ny]);
+            }
+          }
+          return out;
+        };
+        const aCells = near(sideA);
+        const bSet = new Set(near(sideB).map(([bx, by]) => `${bx},${by}`));
+        for (const [ax, ay] of aCells) {
+          for (const [dx, dy] of [
+            [-1, -1],
+            [1, -1],
+            [-1, 1],
+            [1, 1],
+          ]) {
+            const nx = ax + dx,
+              ny = ay + dy;
+            if (nx === x && ny === y) continue;
+            if (bSet.has(`${nx},${ny}`)) return true;
+          }
+        }
+        return false;
+      };
       for (let y = 0; y < MAXY; y++) {
         for (let x = 0; x < MAXX; x++) {
           const it = itemAt(x, y);
@@ -78,11 +144,16 @@ test("stairs stay on the walkable maze graph; no orphan doors; classic density",
           else open++;
           if (isDoor(it)) {
             doors++;
-            if (
-              !(isFloorish(x - 1, y) && isFloorish(x + 1, y)) &&
-              !(isFloorish(x, y - 1) && isFloorish(x, y + 1))
-            )
-              orphanDoors++;
+            const ew = isFloorish(x - 1, y) && isFloorish(x + 1, y);
+            const ns = isFloorish(x, y - 1) && isFloorish(x, y + 1);
+            if (!ew && !ns) orphanDoors++;
+            else if (ew && !ns) {
+              if (!isWall(x, y - 1) || !isWall(x, y + 1)) unsealedThroats++;
+              if (doorBypass(x, y, "ew")) diagonalBypass++;
+            } else if (ns && !ew) {
+              if (!isWall(x - 1, y) || !isWall(x + 1, y)) unsealedThroats++;
+              if (doorBypass(x, y, "ns")) diagonalBypass++;
+            }
           }
           if (it.matches(OGOLDPILE)) gold++;
           if (
@@ -115,6 +186,10 @@ test("stairs stay on the walkable maze graph; no orphan doors; classic density",
       const needUp =
         depth > 1 && (ULARN && depth == MAXLEVEL ? true : depth != MAXLEVEL);
       const home = depth === 1 ? findItemXY(OHOMEENTRANCE) : null;
+      const maxEmpty = largestRect(
+        (x, y) => itemAt(x, y).matches(OEMPTY),
+      );
+      const maxSolid = largestRect((x, y) => itemAt(x, y).matches(OWALL));
       return {
         label,
         depth,
@@ -122,9 +197,13 @@ test("stairs stay on the walkable maze graph; no orphan doors; classic density",
         open,
         doors,
         orphanDoors,
+        unsealedThroats,
+        diagonalBypass,
         gold,
         groundLoot,
         wallPct: Math.round((100 * walls) / (MAXX * MAXY)),
+        maxEmpty,
+        maxSolid,
         mainSize: main.size,
         downOnMain: needDown ? onMain(OSTAIRSDOWN, main) : true,
         upOnMain: needUp ? onMain(OSTAIRSUP, main) : true,
@@ -186,9 +265,14 @@ test("stairs stay on the walkable maze graph; no orphan doors; classic density",
 
   for (const r of report.rows) {
     expect(r.orphanDoors, JSON.stringify(r)).toBe(0);
-    expect(r.open).toBeGreaterThan(200);
-    expect(r.open).toBeLessThan(900);
-    expect(r.wallPct).toBeGreaterThan(35);
+    expect(r.unsealedThroats, JSON.stringify(r)).toBe(0);
+    expect(r.diagonalBypass, JSON.stringify(r)).toBe(0);
+    expect(r.open).toBeGreaterThan(280);
+    expect(r.open).toBeLessThan(700);
+    expect(r.wallPct).toBeGreaterThanOrEqual(42);
+    expect(r.wallPct).toBeLessThanOrEqual(74);
+    expect(r.maxEmpty, JSON.stringify(r)).toBeLessThanOrEqual(72);
+    expect(r.maxSolid, JSON.stringify(r)).toBeLessThanOrEqual(140);
     expect(r.groundLoot, JSON.stringify(r)).toBeLessThan(70);
     expect(r.groundLoot, JSON.stringify(r)).toBeGreaterThan(10);
     expect(r.hasDown, JSON.stringify(r)).toBe(true);

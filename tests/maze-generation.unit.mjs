@@ -58,6 +58,8 @@ test("create.js restores classic eat() maze and hard stair/door invariants", () 
   assert.match(create, /function ensureMazeConnectivity/);
   assert.match(create, /function ensureLevelStairs/);
   assert.match(create, /function sanitizeMazeDoors/);
+  assert.match(create, /function sealDoorThroats/);
+  assert.match(create, /function sculptLabyrinthDensity/);
   assert.match(create, /function levelTraversalOk/);
   assert.match(create, /rnd\(4\) \+ 3/);
   assert.match(create, /rnd\(5\) \+ 3/);

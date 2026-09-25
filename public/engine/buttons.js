@@ -784,7 +784,11 @@ function movementButtons() {
 function canMoveButton(x, y) {
   if (blocking_callback === getdirectioninput) return true;
   var item = itemAt(x, y);
-  return (item && (player.WTW != 0 || !item.matches(OWALL) && !item.matches(OCLOSEDDOOR)));
+  if (!item) return false;
+  if (player.WTW != 0) return true;
+  if (item.matches(OWALL) || item.matches(OCLOSEDDOOR)) return false;
+  if (closedDoorBlocksDiagonal(player.x, player.y, x, y)) return false;
+  return true;
 }
 
 function startRun() {

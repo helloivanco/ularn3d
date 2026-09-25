@@ -57,6 +57,19 @@ function canMove(x, y) {
   return (!item.matches(OWALL) && !item.matches(OCLOSEDDOOR) && !monsterAt(x, y));
 }
 
+/*
+ * Diagonal keypad moves (1/3/7/9) must not squeeze past a closed door.
+ * Keep in sync with src/door-throat.js → diagonalSqueezesPastClosedDoor.
+ */
+function closedDoorBlocksDiagonal(fx, fy, tx, ty) {
+  const dx = tx - fx;
+  const dy = ty - fy;
+  if (dx === 0 || dy === 0) return false;
+  const sideA = itemAt(fx + dx, fy);
+  const sideB = itemAt(fx, fy + dy);
+  return !!(sideA && sideA.matches(OCLOSEDDOOR)) || !!(sideB && sideB.matches(OCLOSEDDOOR));
+}
+
 
 
 /*
