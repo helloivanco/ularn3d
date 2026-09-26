@@ -229,9 +229,8 @@ test("death ends the run, clears autosave, and allows a fresh expedition", async
   // Dead classic keys must not look pressable after the expedition ends.
   await expect(page.locator('.terminal-footer [data-key="space"]')).toBeHidden();
   await expect(page.locator('.terminal-footer [data-key="escape"]')).toBeHidden();
-  await expect(
-    page.locator('#engine-modal .panel-heading [data-key="escape"]'),
-  ).toBeHidden();
+  await expect(page.getByRole("button", { name: "Close game panel" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Cancel action" })).toBeHidden();
   await expect.poll(async () => (await snap(page)).awaitingScoreboard).toBe(true);
   await expect(page.locator('.terminal-footer [data-key="return"]')).toBeVisible();
   await page.keyboard.press("Enter");
@@ -241,6 +240,7 @@ test("death ends the run, clears autosave, and allows a fresh expedition", async
   await expect(page.locator('.terminal-footer [data-key="return"]')).toBeHidden();
   await expect(page.locator('.terminal-footer [data-key="space"]')).toBeHidden();
   await expect(page.locator('.terminal-footer [data-key="escape"]')).toBeHidden();
+  await expect(page.getByRole("button", { name: "Close game panel" })).toBeHidden();
   await expect(page.locator("#new-after-death")).toBeVisible();
   await page.locator("#new-after-death").click();
   await expect(page.locator("#welcome")).toBeVisible();

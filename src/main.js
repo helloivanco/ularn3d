@@ -322,14 +322,16 @@ const syncTerminalEndActions = (state) => {
   const footerKeys = document.querySelectorAll(
     "#engine-modal .terminal-footer [data-key]",
   );
-  const closeEsc = document.querySelector(
-    '#engine-modal .panel-heading [data-key="escape"]',
+  const inertEsc = document.querySelectorAll(
+    '#engine-modal .panel-heading [data-key="escape"], #interaction .panel-heading [data-key="escape"]',
   );
   if (!state?.over) {
     footerKeys.forEach((button) => {
       button.hidden = false;
     });
-    if (closeEsc) closeEsc.hidden = false;
+    inertEsc.forEach((button) => {
+      button.hidden = false;
+    });
     return;
   }
   footerKeys.forEach((button) => {
@@ -337,7 +339,10 @@ const syncTerminalEndActions = (state) => {
     // Enter still opens the scoreboard once; Continue / Return cannot resume a corpse.
     button.hidden = key !== "return" || !state.awaitingScoreboard;
   });
-  if (closeEsc) closeEsc.hidden = true;
+  // Esc close / cancel cannot dismiss a finished expedition.
+  inertEsc.forEach((button) => {
+    button.hidden = true;
+  });
 };
 const journalNearBottom = (el) =>
   el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
