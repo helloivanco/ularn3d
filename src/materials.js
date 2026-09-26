@@ -151,6 +151,8 @@ export function surface(kind, color, extra = {}) {
 export function surfaceLambert(kind, color, extra = {}) {
   return matLambert(color, { map: texture(kind), ...extra });
 }
+// Dungeon terrain lock: MeshBasic + map. Never drop the map for “perf” unless
+// Ivan explicitly requests a texture change — unmapped Basic floors go flat white.
 export function surfaceBasic(kind, color, extra = {}) {
   return matBasic(color, { map: texture(kind), ...extra });
 }

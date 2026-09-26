@@ -300,9 +300,11 @@ const baseMonsterStats3D = ULARN_monsterlist.map((monster) => ({
 buttonCache.forEach((button, key) => {
   button.id = `engine-${key}`;
 });
-let saveTimer3D = null;
 let initialized3D = false;
 let saveError3D = "";
+/** Live expedition is the in-memory snapshot; disk only on ask / exit / unload. */
+let saveDirty3D = false;
+let diskWriteCount3D = 0;
 /** Reused across paints so a known 57×20 floor does not allocate ~1k objects/step. */
 const snapshotTiles3D = [];
 const originalPaint3D = paint;
@@ -311,20 +313,17 @@ paint = function () {
   if (!initialized3D) return;
   window.dispatchEvent(new Event("ularn:update"));
   if (GAMEOVER) {
-    clearTimeout(saveTimer3D);
-    saveTimer3D = null;
+    saveDirty3D = false;
     try {
       localStorage.removeItem(SAVE_KEY_3D);
+      diskWriteCount3D++;
     } catch {
       /* Storage may be disabled. */
     }
-  } else if (mazeMode && !blocking_callback && !napping && saveTimer3D === null) {
-    // Compressing all explored floors on every slow keystroke caused steadily
-    // longer stalls. Coalesce changes, but still save during continuous travel.
-    saveTimer3D = setTimeout(() => {
-      saveTimer3D = null;
-      window.ularn.save();
-    }, 2000);
+  } else if (mazeMode && !blocking_callback && !napping) {
+    // Mark dirty only — do not compress or hit localStorage every step.
+    // Persist via ularn.save() on Save, Save & Exit, pagehide, or tab hide.
+    saveDirty3D = true;
   }
 };
 
@@ -506,8 +505,6 @@ window.ularn = {
   save() {
     if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping)
       return false;
-    clearTimeout(saveTimer3D);
-    saveTimer3D = null;
     try {
       // Equal-looking items can occupy different slots. Preserve their identity,
       // since the original loader matches equipment only by item ID and bonus.
@@ -522,6 +519,8 @@ window.ularn = {
         SAVE_KEY_3D,
         LZString.compressToUTF16(JSON.stringify(data)),
       );
+      diskWriteCount3D++;
+      saveDirty3D = false;
       if (saveError3D)
         window.dispatchEvent(new CustomEvent("ularn:storage", { detail: "" }));
       saveError3D = "";
@@ -535,6 +534,10 @@ window.ularn = {
         );
       return false;
     }
+  },
+  /** Diagnostics: dirty means moves pending; diskWrites count localStorage persists. */
+  saveStats() {
+    return { dirty: saveDirty3D, diskWrites: diskWriteCount3D };
   },
   snapshot() {
     if (!initialized3D || !player || !LEVELS[level]) return null;

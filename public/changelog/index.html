@@ -115,6 +115,17 @@
         </p>
 
         <ol class="changelog-list">
+          <li id="v1-3-22">
+            <header>
+              <span class="changelog-version">v1.3.22</span>
+              <h3>Textured floors, quieter saves</h3>
+            </header>
+            <ul>
+              <li>Cave floors show classic stone texture again under flat lighting (no more solid white ground)</li>
+              <li>Walking no longer writes the expedition to disk every step — Save, exit, or leaving the tab persists</li>
+              <li>Labyrinth doors, XP panel, north camera, and classic loot density unchanged</li>
+            </ul>
+          </li>
           <li id="v1-3-21">
             <header>
               <span class="changelog-version">v1.3.21</span>
@@ -134,7 +145,7 @@
             </header>
             <ul>
               <li>Balanced graphics skips the shadow pass and tone-mapping cost that still hitch Chrome dungeon walks</li>
-              <li>Flat caves keep even lighting without sampling stone textures across the whole floor</li>
+              <li>Flat caves keep even lighting; stone floor maps restored in 1.3.22 after a temporary unmapped pass</li>
               <li>Known floors reuse geometry and skip HUD/minimap thrash when only the adventurer moves</li>
               <li>Dungeon walking is held to a town-relative frame budget in automated checks</li>
             </ul>
