@@ -689,6 +689,8 @@ window.ularn = {
       volcanoFloors: MAXVLEVEL,
       maze: mazeMode,
       over: GAMEOVER,
+      // After death, Enter still opens the scoreboard once; afterward only a new run is valid.
+      awaitingScoreboard: GAMEOVER && blocking_callback === endgame,
       busy: napping,
       prompt: !!blocking_callback,
       aimAssist: (() => {

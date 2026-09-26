@@ -317,6 +317,28 @@ $("continue").addEventListener("click", () => start(true));
 let townOptions = "";
 let journalSynced = 0;
 let journalLogRev = -1;
+/** Hide terminal chrome that classic keys cannot satisfy after death. */
+const syncTerminalEndActions = (state) => {
+  const footerKeys = document.querySelectorAll(
+    "#engine-modal .terminal-footer [data-key]",
+  );
+  const closeEsc = document.querySelector(
+    '#engine-modal .panel-heading [data-key="escape"]',
+  );
+  if (!state?.over) {
+    footerKeys.forEach((button) => {
+      button.hidden = false;
+    });
+    if (closeEsc) closeEsc.hidden = false;
+    return;
+  }
+  footerKeys.forEach((button) => {
+    const key = button.dataset.key;
+    // Enter still opens the scoreboard once; Continue / Return cannot resume a corpse.
+    button.hidden = key !== "return" || !state.awaitingScoreboard;
+  });
+  if (closeEsc) closeEsc.hidden = true;
+};
 const journalNearBottom = (el) =>
   el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
 const syncJournal = (rawLog, logRev = null) => {
@@ -430,6 +452,7 @@ function update() {
     $("new-after-death").hidden = !state.over;
     if (state.saveError) toast(state.saveError);
   }
+  syncTerminalEndActions(state);
   updateInventoryAndEffects();
   syncJournal(state.log, state.logRev);
   const hasActions =
@@ -437,12 +460,14 @@ function update() {
   $("interaction").hidden =
     !hasActions || (!state.prompt && state.maze && !state.over);
   // Keep native command buttons inside the scrollable game panel.
-  const trayParent = state.maze
-    ? $("app") || document.body
-    : document.querySelector(".terminal-card");
+  // After death the expedition modal owns the tray even while mazeMode is still true.
+  const trayParent =
+    state.maze && !state.over
+      ? $("app") || document.body
+      : document.querySelector(".terminal-card");
   if ($("interaction").parentElement !== trayParent)
     trayParent.appendChild($("interaction"));
-  $("interaction").classList.toggle("in-modal", !state.maze);
+  $("interaction").classList.toggle("in-modal", !state.maze || state.over);
   if (lastHP !== null && state.hp < lastHP) {
     sound("hurt");
     document.body.classList.remove("damage");
