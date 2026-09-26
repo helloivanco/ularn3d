@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.24 — Quiet rats on the walls
+
+- Tiny ambient rats scurry along dungeon wall tops (Ivan Wong) — decorative only: not clickable, not combat, not inventory, and they never block movement
+- Hard-capped pool (4 per floor view), reused instances, no pathfinding against the player and no journal noise
+- Town stays quiet; Balanced idle frames are not kept awake except during a brief near-camera scurry
+- Labyrinth density, sealed doors, textured floors, quieter saves, journal cap, XP panel, north camera, and classic loot unchanged
+
 ## 1.3.23 — Stable long expeditions
 
 - Soft-caps the scrollable journal so LOG and journal DOM cannot grow without bound on very long runs (still far past the old 7/20/60 caps)
