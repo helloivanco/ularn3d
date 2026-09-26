@@ -12,6 +12,9 @@ var DBOTTOM;   // ULARN
 var VBOTTOM;   // ULARN
 const LOG_SIZE = 5;       /* number of log lines to show on the classic terminal */
 const LOG_SAVE_SIZE = 20; /* last log lines attached to a high score */
+/* Soft cap for the 3D scrollable journal — far above classic 5/7/20/60 so long
+ * expeditions stay readable, but LOG/DOM cannot grow without bound. */
+const LOG_JOURNAL_CAP = 2000;
 const MAXINVEN = 26;      /* max number of items a player can carry */
 const MAXX = 57;          /* dungeon width — classic Larn is wide, not square */
 const MAXY = 20;          /* dungeon height */

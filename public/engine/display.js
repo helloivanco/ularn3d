@@ -805,6 +805,11 @@ function parse_see_spells(key) {
 
 
 
+function trimJournalLog() {
+  if (!LOG || LOG.length <= LOG_JOURNAL_CAP) return;
+  LOG.splice(0, LOG.length - LOG_JOURNAL_CAP);
+}
+
 function updateLog(text, hint) {
 
   // BUGFIX FOR PUTTING EMPTY STRINGS INTO DYNAMO
@@ -818,6 +823,7 @@ function updateLog(text, hint) {
     text = `${text} ${hint}`;
   }
   LOG.push(text);
+  trimJournalLog();
 }
 
 

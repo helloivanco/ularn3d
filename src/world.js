@@ -299,8 +299,11 @@ export class World {
     this.wallLayoutKey = null;
     this.structureKey = null;
     this.staticKey = null;
+    this.lastStructureRev = null;
+    this.lastActorRev = null;
     this.structureFastPath = 0;
     this.monsterFastPath = 0;
+    this.revFastPath = 0;
     this.shadowUpdates = 0;
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
@@ -528,6 +531,7 @@ export class World {
         pixelRatio: this.renderer.getPixelRatio(),
         structureFastPath: this.structureFastPath,
         monsterFastPath: this.monsterFastPath,
+        revFastPath: this.revFastPath,
         ...monsterArtMetrics(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
@@ -1023,6 +1027,8 @@ export class World {
       this.paths = this.townPaths(state.tiles);
       this.staticKey = null;
       this.structureKey = null;
+      this.lastStructureRev = null;
+      this.lastActorRev = null;
       if (!town) {
         const slab = box(
           this.terrain,
@@ -1089,6 +1095,29 @@ export class World {
     let wallLayout = 0;
     let wallCount = 0;
     let lampIndex = 0;
+    // Bridge already hashed known tiles into structureRev/actorRev. Trust those
+    // on quiet walks so we do not re-walk every HAVESEEN cell just to early-return.
+    if (
+      !isNew &&
+      state.structureRev != null &&
+      state.structureRev === this.lastStructureRev &&
+      this.wallCells.length > 0
+    ) {
+      if (state.actorRev === this.lastActorRev) {
+        this.structureFastPath++;
+        this.revFastPath++;
+        this.syncMovers(state, old);
+        this.invalidate();
+        return;
+      }
+      this.lastActorRev = state.actorRev;
+      this.monsterFastPath++;
+      this.revFastPath++;
+      this.syncMonsterActors(state);
+      this.syncMovers(state, old);
+      this.invalidate();
+      return;
+    }
     let floorHash = state.tiles.length ^ (state.level * 9973);
     let propHash = 0;
     let monsterHash = 0;
@@ -1129,6 +1158,8 @@ export class World {
     this.wallLayout = wallLayout ^ wallCount;
     const staticKey = `${floorHash}|${this.wallLayout}|${propHash}|${state.tiles.length}`;
     const structureKey = `${staticKey}|${monsterHash}`;
+    this.lastStructureRev = state.structureRev ?? null;
+    this.lastActorRev = state.actorRev ?? null;
     // Walking a known floor with only hero/monster motion must not rebuild
     // every floor instance and prop group.
     if (!isNew && this.staticKey === staticKey && this.wallCells.length === wallCount) {

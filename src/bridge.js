@@ -307,6 +307,29 @@ let saveDirty3D = false;
 let diskWriteCount3D = 0;
 /** Reused across paints so a known 57×20 floor does not allocate ~1k objects/step. */
 const snapshotTiles3D = [];
+/** Cached LOG view — avoid LOG.slice() on every paint while the journal is unchanged. */
+let logView3D = [];
+let logViewLen3D = -1;
+let logViewLast3D = null;
+let logRev3D = 0;
+let logSliceCount3D = 0;
+const logViewForSnapshot3D = () => {
+  if (!LOG) {
+    logView3D = [];
+    logViewLen3D = 0;
+    logViewLast3D = null;
+    return logView3D;
+  }
+  const len = LOG.length;
+  const last = len ? LOG[len - 1] : null;
+  if (len === logViewLen3D && last === logViewLast3D) return logView3D;
+  logView3D = LOG.slice();
+  logViewLen3D = len;
+  logViewLast3D = last;
+  logRev3D++;
+  logSliceCount3D++;
+  return logView3D;
+};
 const originalPaint3D = paint;
 paint = function () {
   originalPaint3D();
@@ -434,6 +457,8 @@ window.ularn = {
           }
         }
         loadState(saved);
+        trimJournalLog();
+        logViewLen3D = -1;
         if (data.equipment) {
           for (const field of ["WIELD", "WEAR", "SHIELD"])
             player[field] =
@@ -539,6 +564,16 @@ window.ularn = {
   saveStats() {
     return { dirty: saveDirty3D, diskWrites: diskWriteCount3D };
   },
+  /** DEV/CI: journal + snapshot alloc counters (cheap; always safe to call). */
+  perfStats() {
+    return {
+      logLines: LOG ? LOG.length : 0,
+      logCap: LOG_JOURNAL_CAP,
+      logRev: logRev3D,
+      logSlices: logSliceCount3D,
+      tileBuffer: snapshotTiles3D.length,
+    };
+  },
   snapshot() {
     if (!initialized3D || !player || !LEVELS[level]) return null;
     let n = 0;
@@ -576,26 +611,39 @@ window.ularn = {
         tile.id = masked ? 0 : item.id;
         tile.arg = masked ? 0 : item.arg ?? 0;
         tile.known = knownConsumable;
-        tile.name =
-          masked
-            ? "The floor"
-            : plainText3D(item.shortName()) +
-              (stair?.blocked ? " (dead end)" : "");
         tile.stair = stair;
         tile.doorFacing = isDoor ? doorPassageFacing3D(x, y) : null;
-        tile.symbol = masked
-          ? plainText3D(itemlist[0].ularnchar)
-          : item.matches(OHOMEENTRANCE)
-            ? "<"
-            : item.matches(OSTAIRSUP)
-              ? "<"
-              : item.matches(OSTAIRSDOWN)
-                ? ">"
-                : plainText3D(itemlist[item.id].ularnchar);
         tile.wall = !masked && item.matches(OWALL);
         tile.hazard = !masked && !!item.isTrap();
         tile.closed = !masked && item.matches(OCLOSEDDOOR);
         tile.store = !masked && item.isStore();
+        // Only rebuild display strings when presentation identity changes.
+        const presentSig = masked
+          ? -1
+          : (Math.imul(tile.id + 1, 9973) ^
+              Math.imul((tile.arg ?? 0) + 1, 131) ^
+              ((know & KNOWALL) * 17) ^
+              (stair?.blocked ? 3 : 0) ^
+              (knownConsumable ? 0 : 5) ^
+              (isDoor ? 7 : 0)) |
+            0;
+        if (tile._sig !== presentSig) {
+          tile._sig = presentSig;
+          tile.name =
+            masked
+              ? "The floor"
+              : plainText3D(item.shortName()) +
+                (stair?.blocked ? " (dead end)" : "");
+          tile.symbol = masked
+            ? plainText3D(itemlist[0].ularnchar)
+            : item.matches(OHOMEENTRANCE)
+              ? "<"
+              : item.matches(OSTAIRSUP)
+                ? "<"
+                : item.matches(OSTAIRSDOWN)
+                  ? ">"
+                  : plainText3D(itemlist[item.id].ularnchar);
+        }
         if (seenMonster) {
           const mid = mimic || monster.arg;
           const view = monsterView3D(monster);
@@ -627,11 +675,13 @@ window.ularn = {
       }
     snapshotTiles3D.length = n;
     const tiles = snapshotTiles3D;
+    const structure = structureRev ^ n;
     return {
       tiles,
-      structureRev: structureRev ^ n,
+      structureRev: structure,
       actorRev,
-      mapRev: (structureRev ^ n) ^ actorRev,
+      mapRev: structure ^ actorRev,
+      logRev: logRev3D,
       width: MAXX,
       height: MAXY,
       level,
@@ -668,7 +718,7 @@ window.ularn = {
       autoLoot: !!getPref("auto_pickup"),
       moves: player.MOVESMADE,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
-      log: LOG.slice(),
+      log: logViewForSnapshot3D(),
       stats: {
         STR: player.STRENGTH + player.STREXTRA,
         INT: player.INTELLIGENCE,
