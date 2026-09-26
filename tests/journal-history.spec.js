@@ -26,7 +26,7 @@ const fillJournal = (count) => {
   };
 };
 
-test("journal keeps the full action history and scrolls past the old 7/20/60 caps", async ({ page }) => {
+test("journal keeps a deep scrollable action history past the old 7/20/60 caps", async ({ page }) => {
   await start(page);
   const result = await page.evaluate(fillJournal, 90);
   expect(result.engineCount).toBeGreaterThanOrEqual(90);
@@ -62,7 +62,7 @@ test("journal keeps the full action history and scrolls past the old 7/20/60 cap
   expect(whileReading.stillHasFirst).toBe(true);
 });
 
-test("full journal history survives save and resume", async ({ page }) => {
+test("deep journal history survives save and resume", async ({ page }) => {
   await start(page);
   await page.evaluate(fillJournal, 90);
   await page.locator("#save").click();
@@ -80,9 +80,11 @@ test("full journal history survives save and resume", async ({ page }) => {
       hasFirst: journal.innerText.includes("Journal history line 1"),
       hasLast: journal.innerText.includes("Journal history line 90"),
       canScroll: journal.scrollHeight > journal.clientHeight + 1,
+      logCap: LOG_JOURNAL_CAP,
     };
   });
   expect(restored.engineCount).toBeGreaterThanOrEqual(90);
+  expect(restored.engineCount).toBeLessThanOrEqual(restored.logCap);
   expect(restored.snapshotCount).toBe(restored.engineCount);
   expect(restored.rendered).toBe(restored.engineCount);
   expect(restored.hasFirst).toBe(true);

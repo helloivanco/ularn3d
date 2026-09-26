@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.23 — Stable long expeditions
+
+- Soft-caps the scrollable journal so LOG and journal DOM cannot grow without bound on very long runs (still far past the old 7/20/60 caps)
+- Snapshot reuses the log view between paints; world trusts structure/actor revisions so quiet walks skip re-hashing every known tile
+- DEV `?perf=1` / `ularn3d.perf` records move timing, journal size, and heap when available
+- Textured floors, dirty-only disk saves, labyrinth doors, XP panel, north camera, and classic loot unchanged
+
 ## 1.3.22 — Textured floors, quieter saves
 
 - Dungeon floors show the classic stone texture again (MeshBasic flat lighting kept the maps; 1.3.20 had dropped sampling and left solid white ground)

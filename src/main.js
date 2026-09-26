@@ -93,6 +93,52 @@ try {
 } catch {}
 let inventorySignature = "", effectsSignature = "";
 let hudSignature = "";
+let damageFlashTimer = null;
+const PERF_ENABLED = (() => {
+  try {
+    return (
+      new URLSearchParams(location.search).has("perf") ||
+      localStorage.getItem("ularn3d.perf") === "1"
+    );
+  } catch {
+    return false;
+  }
+})();
+const ularnPerf = {
+  enabled: PERF_ENABLED,
+  lastUpdateMs: 0,
+  moveSamples: [],
+  logLines: 0,
+  journalNodes: 0,
+  logSlices: 0,
+  revFastPath: 0,
+  heapUsed: null,
+  record(ms, extras = {}) {
+    this.lastUpdateMs = ms;
+    this.moveSamples.push(ms);
+    if (this.moveSamples.length > 64) this.moveSamples.shift();
+    Object.assign(this, extras);
+  },
+  mean() {
+    const a = this.moveSamples;
+    if (!a.length) return 0;
+    return a.reduce((x, y) => x + y, 0) / a.length;
+  },
+  snapshot() {
+    return {
+      enabled: this.enabled,
+      lastUpdateMs: this.lastUpdateMs,
+      meanUpdateMs: this.mean(),
+      samples: this.moveSamples.length,
+      logLines: this.logLines,
+      journalNodes: this.journalNodes,
+      logSlices: this.logSlices,
+      revFastPath: this.revFastPath,
+      heapUsed: this.heapUsed,
+    };
+  },
+};
+window.ularnPerf = ularnPerf;
 function syncInventoryPin() {
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
@@ -116,7 +162,12 @@ $("auto-loot").addEventListener("click", toggleAutoLoot);
 syncInventoryPin();
 function updateInventoryAndEffects() {
   const items = state.inventory.filter(Boolean);
-  const signature = JSON.stringify(items);
+  const signature = items
+    .map(
+      (item) =>
+        `${item.slot}:${item.id}:${item.name}:${(item.equipped || []).join(",")}`,
+    )
+    .join("|");
   if (signature !== inventorySignature) {
     inventorySignature = signature;
     $("inventory-count").textContent = `${items.length} / 26`;
@@ -139,7 +190,9 @@ function updateInventoryAndEffects() {
     if (!items.length) $("inventory-list").textContent = "Your pack is empty.";
   }
   const effects = state.effectDetails || state.effects.map((id) => ({ id, name: id, turns: "" }));
-  const effectsKey = JSON.stringify(effects);
+  const effectsKey = effects
+    .map((effect) => `${effect.id}:${effect.turns}`)
+    .join("|");
   if (effectsKey !== effectsSignature) {
     effectsSignature = effectsKey;
     $("effects-panel").hidden = effects.length === 0;
@@ -263,16 +316,25 @@ $("start-form").addEventListener("submit", (e) => {
 $("continue").addEventListener("click", () => start(true));
 let townOptions = "";
 let journalSynced = 0;
+let journalLogRev = -1;
 const journalNearBottom = (el) =>
   el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
-const syncJournal = (rawLog) => {
+const syncJournal = (rawLog, logRev = null) => {
   const lines = rawLog.filter((line) => String(line).trim());
   const el = $("journal-lines");
   const stickToBottom = journalNearBottom(el);
-  if (lines.length < journalSynced) {
+  // Length shrink OR soft-cap rotation (same length, new logRev) → full rebuild.
+  if (
+    lines.length < journalSynced ||
+    (logRev != null &&
+      journalLogRev >= 0 &&
+      logRev !== journalLogRev &&
+      lines.length <= journalSynced)
+  ) {
     el.replaceChildren();
     journalSynced = 0;
   }
+  if (logRev != null) journalLogRev = logRev;
   if (journalSynced > 0) {
     const last = el.lastElementChild;
     const latest = lines[journalSynced - 1];
@@ -292,6 +354,7 @@ const syncJournal = (rawLog) => {
   if (stickToBottom) el.scrollTop = el.scrollHeight;
 };
 function update() {
+  const perfStart = ularnPerf.enabled ? performance.now() : 0;
   const next = engine.snapshot();
   if (!next) return;
   state = next;
@@ -368,7 +431,7 @@ function update() {
     if (state.saveError) toast(state.saveError);
   }
   updateInventoryAndEffects();
-  syncJournal(state.log);
+  syncJournal(state.log, state.logRev);
   const hasActions =
     $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
   $("interaction").hidden =
@@ -384,7 +447,11 @@ function update() {
     sound("hurt");
     document.body.classList.remove("damage");
     requestAnimationFrame(() => document.body.classList.add("damage"));
-    setTimeout(() => document.body.classList.remove("damage"), 450);
+    if (damageFlashTimer) clearTimeout(damageFlashTimer);
+    damageFlashTimer = setTimeout(() => {
+      document.body.classList.remove("damage");
+      damageFlashTimer = null;
+    }, 450);
   }
   lastHP = state.hp;
   $("town-travel").hidden = state.level !== 0;
@@ -402,6 +469,17 @@ function update() {
     }
   }
   drawMap();
+  if (ularnPerf.enabled) {
+    const bridge = engine.perfStats?.() || {};
+    const metrics = window.ularnGraphics?.metrics?.() || {};
+    ularnPerf.record(performance.now() - perfStart, {
+      logLines: bridge.logLines ?? state.log?.length ?? 0,
+      journalNodes: $("journal-lines")?.children.length ?? 0,
+      logSlices: bridge.logSlices ?? 0,
+      revFastPath: metrics.revFastPath ?? 0,
+      heapUsed: performance.memory?.usedJSHeapSize ?? null,
+    });
+  }
 }
 window.addEventListener("ularn:update", update);
 window.addEventListener("resize", () => {
