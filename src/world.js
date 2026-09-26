@@ -11,6 +11,7 @@ import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResourc
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight } from "./wall-cut.js";
+import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import {
   box,
   block,
@@ -305,6 +306,9 @@ export class World {
     this.monsterFastPath = 0;
     this.revFastPath = 0;
     this.shadowUpdates = 0;
+    this.ambientRatsNear = false;
+    // Decorative wall-top rats: fixed pool, never in actors/props/pick.
+    this.ambientRats = new AmbientRats(this.scene);
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
       this.scene.add(l);
@@ -592,6 +596,14 @@ export class World {
         meshes: this.heroWeapon?.children?.length ?? 0,
         hasArt: !!this.heroWeapon?.getObjectByName("weapon-art"),
       }),
+      ambientRats: () => this.ambientRats?.snapshot() ?? {
+        pool: AMBIENT_RAT_POOL,
+        enabled: false,
+        interactive: false,
+        decorative: true,
+        count: 0,
+        rats: [],
+      },
     });
   }
   invalidate() {
@@ -616,9 +628,10 @@ export class World {
     if (this.disposed || document.hidden || this.lost || this.frameTimer != null || this.frameRequest != null) return;
     const idle = performance.now() > this.activeUntil;
     const effectsActive = this.effects.slots.some((slot) => slot.active);
-    if (idle && !this.hasMotion && !this.cameraLive && !effectsActive &&
+    const ambientActive = !!this.ambientRatsNear;
+    if (idle && !this.hasMotion && !this.cameraLive && !effectsActive && !ambientActive &&
       (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
-    const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || effectsActive || !idle);
+    const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || effectsActive || ambientActive || !idle);
     const fps = this.frameLimit() || 12;
     const delay = live ? 0 : Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
     const kick = () => {
@@ -1007,6 +1020,7 @@ export class World {
       destroy(this.actors);
       this.monsters.clear();
       this.effects.clear();
+      this.ambientRats?.clear();
       this.lamps = [];
       this.wallHeightAt.length = 0;
       this.wallView = null;
@@ -1314,6 +1328,8 @@ export class World {
       if (fountain?.userData.drainStartedAt) this.draining.push(fountain);
     }
     this.walls.count = this.caps.count = this.wallCells.length;
+    // Seed rats from the new wall set before the first cutaway pass.
+    this.ambientRats.setLayout(this.wallCells, state.level, this.wallHeightAt);
     this.syncMovers(state, old);
     if (isNew && this.quality === "cinematic") this.markShadowUpdate();
     this.invalidate();
@@ -1496,6 +1512,9 @@ export class World {
         this.scratchScale,
       );
       this.caps.setMatrixAt(i, this.scratchMatrix);
+    }
+    if (layoutChanged || !this.ambientRats.enabled) {
+      this.ambientRats.setLayout(this.wallCells, this.state.level, this.wallHeightAt);
     }
     if (!changed) return;
     for (const mesh of [this.walls, this.caps]) {
@@ -1684,6 +1703,10 @@ export class World {
       }
     }
     if (this.wallCells.length) this.updateWalls();
+    // Cheap transform updates only; does not allocate. Near-camera scurries
+    // briefly keep the frame loop alive, then Balanced can idle again.
+    this.ambientRatsNear = this.ambientRats?.update(dt, this.camera.position) || false;
+    if (this.ambientRatsNear) this.hasMotion = true;
     if (this.quality === "cinematic" && this.composer) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     this.renderedFrames++;
@@ -1697,6 +1720,8 @@ export class World {
     this.events.abort();
     this.controls.dispose();
     this.effects.dispose();
+    this.ambientRats?.dispose();
+    this.ambientRats = null;
     if (this.aimGrid) {
       this.aimGrid.geometry.dispose();
       this.aimGrid.material.dispose();
