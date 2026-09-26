@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.25 — Honest expedition-ended actions
+
+- After death, the scoreboard overlay only shows actions that still work (Ivan Wong) — **New expedition**, plus **Enter** while the classic scoreboard is still waiting to open
+- Hides inert **Continue / next page**, **Return to game**, and Esc close on a finished run (a dead character cannot return)
+- Scoreboard copy points at a new expedition instead of “reload your browser”
+- Gameplay, maze rules, saves, and live HUD chrome otherwise unchanged
+
 ## 1.3.24 — Quiet rats on the walls
 
 - Tiny ambient rats scurry along dungeon wall tops (Ivan Wong) — decorative only: not clickable, not combat, not inventory, and they never block movement

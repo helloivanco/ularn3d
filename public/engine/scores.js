@@ -335,7 +335,7 @@ function showScores(newScore, local, showWinners, showLosers, offset) {
     bound_exitscores = exitscores.bind(null, newScore, local);
     setCharCallback(bound_exitscores);
   } else {
-    lprcat(`                 ----  Reload your browser to play again  ----`);
+    lprcat(`                 ----  Start a new expedition to play again  ----`);
   }
   blt();
 }
