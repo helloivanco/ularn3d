@@ -14,6 +14,20 @@
 
 let STARTED_LEVEL_CREATION = false;
 
+/*
+ * Ularn create.c artifact rolls. rnd(n) is 1..n, so rnd(120) < 8 is 7/120.
+ * Brass lamp stays at the current raised threshold (not the classic < 8).
+ */
+const ULARN_ARTIFACT_SIDES = 120;
+const ULARN_ARTIFACT_UNDER = 8;
+const ULARN_BRASS_LAMP_UNDER = 10;
+const ULARN_SLAYER_GATE = 85;
+
+/* Door provenance for this level: "canned" | "treasure-room". */
+let levelFromCanned = false;
+let doorProvenance = new Map();
+let treasureRoomDoors = [];
+
 function newcavelevel(depth) {
 
   STARTED_LEVEL_CREATION = true;
@@ -41,29 +55,23 @@ function newcavelevel(depth) {
     return;
   }
 
-  /* Prefer reject/regenerate of the maze shell; place objects once on a good shell. */
-  let structured = false;
-  for (let attempt = 0; attempt < 16 && !structured; attempt++) {
+  /*
+   * Reject/regenerate only for broken Ularn rules: missing stairs or specials,
+   * an unreachable entrance, or an invalid treasure-room door. No density
+   * sculpt and no corridor carving to force a look.
+   */
+  let playable = false;
+  for (let attempt = 0; attempt < 32 && !playable; attempt++) {
     initNewLevel(depth);
+    resetLevelDoorBook();
     makemaze(depth);
-    sanitizeMazeDoors();
-    ensureMazeConnectivity();
-    updateWalls();
-    structured = mazeStructureOk(depth);
-  }
-  if (!structured) {
-    sanitizeMazeDoors();
-    ensureMazeConnectivity();
-    updateWalls();
-  }
-
-  makeobject(depth);
-  ensureSpecialLevelArtifacts(depth);
-  ensureLevelStairs(depth);
-  if (!levelTraversalOk(depth)) {
-    sanitizeMazeDoors();
-    ensureMazeConnectivity();
+    enforceDoorProvenance();
+    makeobject(depth);
+    ensureSpecialLevelArtifacts(depth);
     ensureLevelStairs(depth);
+    enforceDoorProvenance();
+    updateWalls();
+    playable = levelTraversalOk(depth);
   }
 
   sethp(true);
@@ -156,66 +164,12 @@ function isOpenMazeTile(x, y) {
   return item && !item.matches(OWALL) && !item.matches(OCLOSEDDOOR);
 }
 
-/* D1's town exit sits on the south border. Square rooms no longer span that
-   edge, so carve a guaranteed approach from the maze after generation. */
+/* Classic Ularn exit is column 33 on the south border. Do not carve a path. */
 function placeHomeEntrance() {
-  const x = homeEntranceX();
+  const x = 33 < MAXX - 1 ? 33 : homeEntranceX();
   const y = homeEntranceY();
-  const ax = x;
-  const ay = y - 1;
   setItem(x, y, OHOMEENTRANCE);
   setMonster(x, y, null);
-  if (inBounds(ax, ay) && !isOpenMazeTile(ax, ay)) {
-    setItem(ax, ay, OEMPTY);
-    setMonster(ax, ay, null);
-  }
-
-  const reachesMaze = () => {
-    const seen = new Set([`${ax},${ay}`]);
-    const q = [[ax, ay]];
-    while (q.length) {
-      const [cx, cy] = q.shift();
-      if (!(cx === ax && cy === ay) && !(cx === x && cy === y) && cy < MAXY - 1)
-        return true;
-      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        const nx = cx + dx,
-          ny = cy + dy,
-          key = `${nx},${ny}`;
-        if (seen.has(key) || !isOpenMazeTile(nx, ny)) continue;
-        seen.add(key);
-        q.push([nx, ny]);
-      }
-    }
-    return false;
-  };
-
-  if (reachesMaze()) return;
-
-  let tx = 1,
-    ty = 1,
-    best = Infinity;
-  for (let j = 1; j < MAXY - 1; j++) {
-    for (let i = 1; i < MAXX - 1; i++) {
-      if (i === ax && j === ay) continue;
-      if (!isOpenMazeTile(i, j)) continue;
-      const d = Math.abs(i - ax) + Math.abs(j - ay);
-      if (d < best) {
-        best = d;
-        tx = i;
-        ty = j;
-      }
-    }
-  }
-  let cx = ax,
-    cy = ay;
-  while (cx !== tx || cy !== ty) {
-    if (cx !== tx) cx += Math.sign(tx - cx);
-    else cy += Math.sign(ty - cy);
-    if (itemAt(cx, cy).matches(OWALL)) {
-      setItem(cx, cy, OEMPTY);
-      setMonster(cx, cy, null);
-    }
-  }
 }
 
 function inTown(x, y) {
@@ -274,6 +228,7 @@ function cannedlevel(depth) {
   if (!cannedMazeFits(loaded)) return false;
   var canned = loaded.maze;
   var isTreasure = !!loaded.treasure;
+  levelFromCanned = true;
   beginLevelLootSet();
 
   var pt = 0;
@@ -286,6 +241,7 @@ function cannedlevel(depth) {
           break;
         case 'D':
           setItem(x, y, createObject(OCLOSEDDOOR, rnd(30)));
+          noteDoor(x, y, "canned");
           break;
         case '-':
           setItem(x, y, isTreasure
@@ -434,7 +390,7 @@ function makemaze(k) {
     }
   }
 
-  if (useCanned && COMMON_MAZES[0]?.length === MAXX * MAXY && cannedlevel(k)) {
+  if (useCanned && cannedMapsAvailable() && cannedlevel(k)) {
     if (k == 1) placeHomeEntrance();
     return;
   }
@@ -445,11 +401,9 @@ function makemaze(k) {
   }
 
   /*
-   * Classic Ularn caverns (restored from first-commit eat() + 57×20 adaptation
-   * in 1.3.16): recursive 2-step maze eat, a few modest open chambers, then a
-   * full east-west run and north-south crossing so the walkable graph stays one
-   * piece. Doors come only from treasure rooms / canned maps — never scattered.
-   * Chamber count/size tuned toward canned Ularn labyrinth density (~55–65% walls).
+   * Ularn create.c makemaze: walls, eat(), the original open rectangles,
+   * then one east-west clearing. No north-south spine and no density sculpt.
+   * Doors are not carved here.
    */
   for (let i = 0; i < MAXY; i++) {
     for (let j = 0; j < MAXX; j++) {
@@ -459,28 +413,36 @@ function makemaze(k) {
 
   eat(1, 1);
 
-  /* Modest open chambers — keep some caves without blanking the labyrinth. */
-  let tmp2 = rnd(2) + 1; /* 1–2 chambers (was 3–5) */
-  for (let tmp = 0; tmp < tmp2; tmp++) {
-    const xspan = rnd(5) + 4; /* 4–8 wide (was 6–14) */
-    const yspan = rnd(2) + 2; /* 2–3 tall (was 3–6) */
-    const mx = rnd(Math.max(4, MAXX - xspan - 3)) + 2;
-    const my = rnd(Math.max(3, MAXY - yspan - 3)) + 2;
-    const mon = k >= MAXLEVEL ? makemonst(k) : null;
-    for (let i = mx; i < mx + xspan && i < MAXX - 1; i++)
-      for (let j = my; j < my + yspan && j < MAXY - 1; j++) {
-        setItem(i, j, OEMPTY);
-        setMonster(i, j, mon);
+  /* Open spaces — not on dungeon bottom or volcano bottom (those are canned). */
+  if (k != DBOTTOM && k != VBOTTOM) {
+    const tmp2 = rnd(3) + 3;
+    for (let tmp = 0; tmp < tmp2; tmp++) {
+      const my = rnd(11) + 2;
+      const myl = my - rnd(2);
+      const myh = my + rnd(2);
+      let mx;
+      let mxl;
+      let mxh;
+      let mon = null;
+      if (k <= DBOTTOM) {
+        mx = rnd(44) + 5;
+        mxl = mx - rnd(4);
+        mxh = mx + rnd(12) + 3;
+      } else {
+        mx = rnd(60) + 3;
+        mxl = mx - rnd(2);
+        mxh = mx + rnd(2);
+        mon = makemonst(k);
       }
+      paintOpenRect(mxl, mxh, myl, myh, mon);
+    }
+    /* D1 keeps this clearing on the row beside the south exit (column 33). */
+    const row = k === 1 ? MAXY - 2 : rnd(MAXY - 2);
+    for (let i = 1; i < MAXX - 1; i++) {
+      setItem(i, row, OEMPTY);
+      setMonster(i, row, null);
+    }
   }
-
-  /* Classic connectivity spine: full-width EW run + NS crossing. */
-  const cy = rnd(Math.max(4, MAXY - 6)) + 3;
-  for (let i = 1; i < MAXX - 1; i++) setItem(i, cy, OEMPTY);
-  const cx = rnd(MAXX - 6) + 3;
-  for (let j = 1; j < MAXY - 1; j++) setItem(cx, j, OEMPTY);
-
-  sculptLabyrinthDensity();
 
   if (k > (ULARN ? 4 : 1)) {
     treasureroom(k);
@@ -489,7 +451,7 @@ function makemaze(k) {
   if (k == 1) placeHomeEntrance();
 }
 
-/* True walkable network: walls block; closed doors count (player can open). */
+/* Walkable network: walls block; closed doors count (the player can open them). */
 function isNetworkTile(x, y) {
   if (!inBounds(x, y)) return false;
   const item = itemAt(x, y);
@@ -529,300 +491,124 @@ function largestNetworkComponent() {
   return best;
 }
 
-function carveNetworkPath(x0, y0, x1, y1) {
-  let x = x0,
-    y = y0;
-  while (x !== x1 || y !== y1) {
-    if (x !== x1) x += Math.sign(x1 - x);
-    else y += Math.sign(y1 - y);
-    if (x <= 0 || y <= 0 || x >= MAXX - 1 || y >= MAXY - 1) continue;
-    if (itemAt(x, y).matches(OWALL)) {
-      setItem(x, y, OEMPTY);
-      setMonster(x, y, null);
+function cannedMapsAvailable() {
+  const sample = (MAZES && MAZES.length && MAZES[0]) || (COMMON_MAZES && COMMON_MAZES[0]);
+  return !!(sample && sample.length === MAXX * MAXY);
+}
+
+function resetLevelDoorBook() {
+  levelFromCanned = false;
+  doorProvenance = new Map();
+  treasureRoomDoors = [];
+}
+
+function noteDoor(x, y, source, room) {
+  doorProvenance.set(`${x},${y}`, source);
+  if (source === "treasure-room" && room) treasureRoomDoors.push({ x, y, room });
+}
+
+function isDoorItem(it) {
+  return !!(it && (it.matches(OCLOSEDDOOR) || it.matches(OOPENDOOR)));
+}
+
+function paintOpenRect(x0, x1, y0, y1, mon) {
+  const xa = Math.max(1, Math.min(x0, x1));
+  const xb = Math.min(MAXX - 1, Math.max(x0, x1));
+  const ya = Math.max(1, Math.min(y0, y1));
+  const yb = Math.min(MAXY - 1, Math.max(y0, y1));
+  for (let i = xa; i < xb; i++) {
+    for (let j = ya; j < yb; j++) {
+      setItem(i, j, OEMPTY);
+      setMonster(i, j, mon);
     }
   }
 }
 
-/*
- * Join any open pocket to the main maze graph (or seal tiny noise).
- * Prevents stairs/spawn landing in rock-enclosed floor islands.
- */
-function ensureMazeConnectivity() {
-  if (level === 0) return;
-  let main = largestNetworkComponent();
-  if (!main.size) return;
-
-  for (let pass = 0; pass < 8; pass++) {
-    const orphans = [];
-    for (let y = 1; y < MAXY - 1; y++) {
-      for (let x = 1; x < MAXX - 1; x++) {
-        if (!isNetworkTile(x, y)) continue;
-        if (!main.has(`${x},${y}`)) orphans.push([x, y]);
-      }
-    }
-    if (!orphans.length) return;
-
-    /* Group orphans into components; connect each once. */
-    const seen = new Set();
-    for (const [ox, oy] of orphans) {
-      const okey = `${ox},${oy}`;
-      if (seen.has(okey)) continue;
-      const comp = new Set();
-      floodNetworkFrom(ox, oy, comp);
-      for (const k of comp) seen.add(k);
-
-      let bestD = Infinity,
-        tx = ox,
-        ty = oy,
-        sx = ox,
-        sy = oy;
-      for (const cell of comp) {
-        const [cx, cy] = cell.split(",").map(Number);
-        for (const m of main) {
-          const [mx, my] = m.split(",").map(Number);
-          const d = Math.abs(mx - cx) + Math.abs(my - cy);
-          if (d < bestD) {
-            bestD = d;
-            sx = cx;
-            sy = cy;
-            tx = mx;
-            ty = my;
-          }
-        }
-      }
-      if (comp.size <= 2 && bestD > 12) {
-        /* Tiny unreachable noise → solid rock. */
-        for (const cell of comp) {
-          const [cx, cy] = cell.split(",").map(Number);
-          setItem(cx, cy, OWALL);
-          setMonster(cx, cy, null);
-        }
-        continue;
-      }
-      carveNetworkPath(sx, sy, tx, ty);
-    }
-    main = largestNetworkComponent();
-  }
+function roomInterior(x, y, room) {
+  return x > room.tx && x < room.tx + room.xsize - 1 && y > room.ty && y < room.ty + room.ysize - 1;
 }
 
-/* Doors only at real hall/room junctions (floor on opposite sides). */
-function sanitizeMazeDoors() {
-  if (level === 0) return;
-  for (let y = 1; y < MAXY - 1; y++) {
-    for (let x = 1; x < MAXX - 1; x++) {
-      const it = itemAt(x, y);
-      if (!it || (!it.matches(OCLOSEDDOOR) && !it.matches(OOPENDOOR))) continue;
-      const floor = (xx, yy) => {
-        if (!inBounds(xx, yy)) return false;
-        const n = itemAt(xx, yy);
-        return n && !n.matches(OWALL) && !n.matches(OCLOSEDDOOR) && !n.matches(OOPENDOOR);
-      };
-      const horiz = floor(x - 1, y) && floor(x + 1, y);
-      const vert = floor(x, y - 1) && floor(x, y + 1);
-      if (horiz || vert) continue;
-      /* Orphan / decorative door → open passage so we never leave a fake door. */
-      setItem(x, y, OEMPTY);
-      setMonster(x, y, null);
-    }
-  }
-  sealDoorThroats();
+function roomWallRect(x, y, room) {
+  return x >= room.tx && x < room.tx + room.xsize && y >= room.ty && y < room.ty + room.ysize;
 }
 
-/*
- * Corridor-axis door: floor E+W ⇒ travel E–W (door faces N–S laterals).
- * Floor N+S ⇒ travel N–S. Keep in sync with src/door-throat.js.
- */
-function doorCorridorAxis(x, y) {
-  const floor = (xx, yy) => {
-    if (!inBounds(xx, yy)) return false;
-    const n = itemAt(xx, yy);
-    return n && !n.matches(OWALL) && !n.matches(OCLOSEDDOOR) && !n.matches(OOPENDOOR);
-  };
-  const ew = floor(x - 1, y) && floor(x + 1, y);
-  const ns = floor(x, y - 1) && floor(x, y + 1);
-  if (ew && !ns) return "ew";
-  if (ns && !ew) return "ns";
-  return null;
-}
+function treasureDoorValid(x, y) {
+  const rec = treasureRoomDoors.find((d) => d.x === x && d.y === y);
+  if (!rec) return false;
+  const room = rec.room;
+  if (!roomWallRect(x, y, room) || roomInterior(x, y, room)) return false;
+  const same = treasureRoomDoors.filter((d) => d.room === room);
+  if (same.length !== 1) return false;
 
-function sealDoorLateralCell(x, y) {
-  if (!inBounds(x, y)) return;
-  const it = itemAt(x, y);
-  if (!it || it.matches(OWALL)) return;
-  if (it.matches(OCLOSEDDOOR) || it.matches(OOPENDOOR)) return;
-  if (
-    it.matches(OSTAIRSUP) ||
-    it.matches(OSTAIRSDOWN) ||
-    it.matches(OHOMEENTRANCE) ||
-    it.matches(OELEVATORUP) ||
-    it.matches(OELEVATORDOWN) ||
-    it.matches(OVOLUP) ||
-    it.matches(OVOLDOWN) ||
-    it.matches(OENTRANCE)
-  ) {
-    return;
-  }
-  setItem(x, y, OWALL);
-  setMonster(x, y, null);
-}
-
-/*
- * Door cell must sit between stone that defines the corridor throat so
- * diagonal keypad moves cannot bypass the door without entering it.
- * Doors that cannot form a sealed throat become open passage.
- */
-function sealDoorThroats() {
-  if (level === 0) return;
-  for (let y = 1; y < MAXY - 1; y++) {
-    for (let x = 1; x < MAXX - 1; x++) {
-      const it = itemAt(x, y);
-      if (!it || (!it.matches(OCLOSEDDOOR) && !it.matches(OOPENDOOR))) continue;
-      const axis = doorCorridorAxis(x, y);
-      if (axis === "ew") {
-        sealDoorLateralCell(x, y - 1);
-        sealDoorLateralCell(x, y + 1);
-        if (!itemAt(x, y - 1).matches(OWALL) || !itemAt(x, y + 1).matches(OWALL)) {
-          setItem(x, y, OEMPTY);
-          setMonster(x, y, null);
-        }
-      } else if (axis === "ns") {
-        sealDoorLateralCell(x - 1, y);
-        sealDoorLateralCell(x + 1, y);
-        if (!itemAt(x - 1, y).matches(OWALL) || !itemAt(x + 1, y).matches(OWALL)) {
-          setItem(x, y, OEMPTY);
-          setMonster(x, y, null);
-        }
-      }
-    }
-  }
-}
-
-/* Largest interior axis-aligned rectangle of cells matching pred. */
-function largestMatchingRect(pred) {
-  let best = null,
-    bestA = 0;
-  for (let y0 = 1; y0 < MAXY - 1; y0++) {
-    for (let x0 = 1; x0 < MAXX - 1; x0++) {
-      if (!pred(x0, y0)) continue;
-      let maxW = MAXX - 1 - x0;
-      for (let y1 = y0; y1 < MAXY - 1; y1++) {
-        let w = 0;
-        while (w < maxW && pred(x0 + w, y1)) w++;
-        maxW = Math.min(maxW, w);
-        if (maxW === 0) break;
-        const h = y1 - y0 + 1;
-        const a = maxW * h;
-        if (a > bestA) {
-          bestA = a;
-          best = { x: x0, y: y0, w: maxW, h, area: a };
-        }
-      }
-    }
-  }
-  return best;
-}
-
-function isOpenFloorCell(x, y) {
-  const it = itemAt(x, y);
-  return !!(it && it.matches(OEMPTY));
-}
-
-function isSolidWallCell(x, y) {
-  const it = itemAt(x, y);
-  return !!(it && it.matches(OWALL));
-}
-
-/*
- * Soft post-process on classic eat()+chamber shells: split huge empty halls
- * and pierce huge solid blocks so floors read as labyrinth, not open caves
- * or blank stone. Does not replace the generator.
- */
-function sculptLabyrinthDensity() {
-  if (level === 0) return;
-
-  for (let pass = 0; pass < 4; pass++) {
-    const rect = largestMatchingRect(isOpenFloorCell);
-    if (!rect || rect.area < 36) break; /* ~6×6 */
-    const mx = rect.x + (rect.w >> 1);
-    const my = rect.y + (rect.h >> 1);
-    if (rect.w >= rect.h) {
-      const gap = rect.y + 1 + (rect.h > 2 ? rund(rect.h - 2) : 0);
-      for (let y = rect.y; y < rect.y + rect.h; y++) {
-        if (y === gap) continue;
-        if (mx <= 0 || mx >= MAXX - 1) continue;
-        if (itemAt(mx, y).matches(OEMPTY)) {
-          setItem(mx, y, OWALL);
-          setMonster(mx, y, null);
-        }
-      }
-    } else {
-      const gap = rect.x + 1 + (rect.w > 2 ? rund(rect.w - 2) : 0);
-      for (let x = rect.x; x < rect.x + rect.w; x++) {
-        if (x === gap) continue;
-        if (my <= 0 || my >= MAXY - 1) continue;
-        if (itemAt(x, my).matches(OEMPTY)) {
-          setItem(x, my, OWALL);
-          setMonster(x, my, null);
-        }
-      }
-    }
+  let interior = null;
+  let exterior = null;
+  let laterals = null;
+  if (y === room.ty) {
+    interior = [x, y + 1];
+    exterior = [x, y - 1];
+    laterals = [[x - 1, y], [x + 1, y]];
+  } else if (y === room.ty + room.ysize - 1) {
+    interior = [x, y - 1];
+    exterior = [x, y + 1];
+    laterals = [[x - 1, y], [x + 1, y]];
+  } else if (x === room.tx) {
+    interior = [x + 1, y];
+    exterior = [x - 1, y];
+    laterals = [[x, y - 1], [x, y + 1]];
+  } else if (x === room.tx + room.xsize - 1) {
+    interior = [x - 1, y];
+    exterior = [x + 1, y];
+    laterals = [[x, y - 1], [x, y + 1]];
+  } else {
+    return false;
   }
 
-  for (let pass = 0; pass < 4; pass++) {
-    const rect = largestMatchingRect(isSolidWallCell);
-    if (!rect || rect.area < 48) break; /* ~8×6 */
-    if (rect.w >= rect.h) {
-      const ty = rect.y + (rect.h >> 1);
-      for (let x = rect.x; x < rect.x + rect.w; x++) {
-        if (x <= 0 || x >= MAXX - 1 || ty <= 0 || ty >= MAXY - 1) continue;
-        if (itemAt(x, ty).matches(OWALL)) {
-          setItem(x, ty, OEMPTY);
-          setMonster(x, ty, null);
-        }
-      }
-    } else {
-      const tx = rect.x + (rect.w >> 1);
-      for (let y = rect.y; y < rect.y + rect.h; y++) {
-        if (tx <= 0 || tx >= MAXX - 1 || y <= 0 || y >= MAXY - 1) continue;
-        if (itemAt(tx, y).matches(OWALL)) {
-          setItem(tx, y, OEMPTY);
-          setMonster(tx, y, null);
-        }
-      }
-    }
+  if (!roomInterior(interior[0], interior[1], room)) return false;
+  const inside = itemAt(interior[0], interior[1]);
+  if (!inside || inside.matches(OWALL) || isDoorItem(inside)) return false;
+  if (!inBounds(exterior[0], exterior[1]) || roomWallRect(exterior[0], exterior[1], room)) return false;
+  const outside = itemAt(exterior[0], exterior[1]);
+  if (!outside || outside.matches(OWALL)) return false;
+  for (const [lx, ly] of laterals) {
+    const lat = itemAt(lx, ly);
+    if (!lat || !lat.matches(OWALL)) return false;
   }
-}
-
-function mazeStructureOk(depth) {
-  if (depth === 0) return true;
   const main = largestNetworkComponent();
-  if (main.size < 80) return false;
-  let walls = 0,
-    open = 0;
+  return main.has(`${exterior[0]},${exterior[1]}`) || main.has(`${x},${y}`);
+}
+
+/*
+ * Canned doors stay. Treasure-room doors stay only when they are that room's
+ * single entrance. Anything else is put back to wall — never opened into a passage.
+ */
+function enforceDoorProvenance() {
+  if (level === 0) return;
   for (let y = 0; y < MAXY; y++) {
     for (let x = 0; x < MAXX; x++) {
-      if (itemAt(x, y).matches(OWALL)) walls++;
-      else open++;
+      const it = itemAt(x, y);
+      if (!isDoorItem(it)) continue;
+      const source = doorProvenance.get(`${x},${y}`);
+      if (source === "canned") continue;
+      if (source === "treasure-room" && treasureDoorValid(x, y)) continue;
+      setItem(x, y, OWALL);
+      setMonster(x, y, null);
+      doorProvenance.delete(`${x},${y}`);
     }
   }
-  const wallPct = (100 * walls) / (MAXX * MAXY);
-  /* Classic Ularn-like density (canned mazes ~54–70% walls; reject blank halls). */
-  if (wallPct < 42 || wallPct > 74) return false;
-  if (open < 280 || open > 700) return false;
-  const emptyRect = largestMatchingRect(isOpenFloorCell);
-  if (emptyRect && emptyRect.area > 72) return false; /* no huge empty halls */
-  const solidRect = largestMatchingRect(isSolidWallCell);
-  if (solidRect && solidRect.area > 140) return false; /* no huge solid blocks */
-  return true;
 }
 
 function needsStairsDown(depth) {
-  return depth > 0 && depth != DBOTTOM && depth != VBOTTOM;
+  if (depth <= 0 || depth == DBOTTOM || depth == VBOTTOM) return false;
+  /* Ularn: no stair down on V3, V4, or V5. Deeper volcano is pits and trapdoors. */
+  if (ULARN && depth >= VBOTTOM - 2) return false;
+  return true;
 }
 
 function needsStairsUp(depth) {
   if (depth <= 1) return false;
-  if (ULARN && depth == MAXLEVEL) return true; /* dead-end up on V1 */
+  /* Dead-end up on D15 (spoiler) and on V1 (stairs.js). */
+  if (ULARN && (depth == DBOTTOM || depth == MAXLEVEL)) return true;
+  if (depth == DBOTTOM) return false;
   if (depth == MAXLEVEL) return false;
   return true;
 }
@@ -838,8 +624,8 @@ function pickEmptyOnMain(main) {
   return candidates[rund(candidates.length)];
 }
 
-function relocateSpecialToMain(what, main) {
-  const at = findItemXY(what);
+function relocateSpecialToMain(what, main, arg) {
+  const at = findItemXY(what, arg);
   if (at && main.has(`${at.x},${at.y}`)) return at;
   if (at) {
     setItem(at.x, at.y, OEMPTY);
@@ -847,7 +633,7 @@ function relocateSpecialToMain(what, main) {
   }
   const spot = pickEmptyOnMain(main);
   if (!spot) return null;
-  setItem(spot[0], spot[1], createObject(what, 0));
+  setItem(spot[0], spot[1], createObject(what, arg == null ? 0 : arg));
   setMonster(spot[0], spot[1], null);
   return { x: spot[0], y: spot[1] };
 }
@@ -862,73 +648,72 @@ function ensureLevelStairs(depth) {
   if (needsStairsDown(depth)) relocateSpecialToMain(OSTAIRSDOWN, main);
   if (needsStairsUp(depth)) relocateSpecialToMain(OSTAIRSUP, main);
   if (depth == MAXLEVEL) relocateSpecialToMain(OVOLUP, main);
+  if (depth == DBOTTOM) relocateSpecialToMain(OLARNEYE, main);
+  if (depth == VBOTTOM) relocateSpecialToMain(OPOTION, main, 21);
+}
 
-  /* Recompute after placements; never leave stairs off the graph. */
-  main = largestNetworkComponent();
-  if (needsStairsDown(depth)) relocateSpecialToMain(OSTAIRSDOWN, main);
-  if (needsStairsUp(depth)) relocateSpecialToMain(OSTAIRSUP, main);
+function countItem(what, arg) {
+  let n = 0;
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const item = itemAt(x, y);
+      if (item && item.matches(what) && (arg == null || item.arg === arg)) n++;
+    }
+  }
+  return n;
+}
 
-  if (depth == 1) {
-    placeHomeEntrance();
-    const exit = findItemXY(OHOMEENTRANCE);
-    if (exit) {
-      main = largestNetworkComponent();
-      const ax = exit.x,
-        ay = exit.y - 1;
-      if (!main.has(`${ax},${ay}`)) {
-        const spot = pickEmptyOnMain(main);
-        if (spot) carveNetworkPath(ax, ay, spot[0], spot[1]);
+function doorsFollowProvenance() {
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const it = itemAt(x, y);
+      if (!isDoorItem(it)) continue;
+      const source = doorProvenance.get(`${x},${y}`);
+      if (levelFromCanned) {
+        if (source !== "canned") return false;
+      } else if (source !== "treasure-room" || !treasureDoorValid(x, y)) {
+        return false;
       }
     }
   }
+  if (!levelFromCanned) {
+    for (const rec of treasureRoomDoors) {
+      const it = itemAt(rec.x, rec.y);
+      if (!isDoorItem(it) || !treasureDoorValid(rec.x, rec.y)) return false;
+    }
+  }
+  return true;
 }
 
 function levelTraversalOk(depth) {
   if (depth === 0) return true;
   const main = largestNetworkComponent();
-  if (main.size < 80) return false;
+  if (!main.size) return false;
 
-  const onMain = (what) => {
-    const at = findItemXY(what);
+  const onMain = (what, arg) => {
+    const at = findItemXY(what, arg);
     return !!(at && main.has(`${at.x},${at.y}`));
   };
 
   if (needsStairsDown(depth) && !onMain(OSTAIRSDOWN)) return false;
   if (needsStairsUp(depth) && !onMain(OSTAIRSUP)) return false;
+  if (!needsStairsDown(depth) && countItem(OSTAIRSDOWN) > 0) return false;
+  if (depth == 1 && countItem(OSTAIRSUP) > 0) return false;
+
   if (depth == 1) {
     const exit = findItemXY(OHOMEENTRANCE);
     if (!exit) return false;
-    const ax = exit.x,
-      ay = Math.max(0, exit.y - 1);
-    if (!isNetworkTile(ax, ay)) return false;
-    /* Approach must reach the main maze (not a rock pocket). */
-    if (!main.has(`${ax},${ay}`) && !main.has(`${exit.x},${exit.y}`)) return false;
+    const ay = exit.y - 1;
+    if (!isNetworkTile(exit.x, ay)) return false;
+    if (!main.has(`${exit.x},${ay}`) && !main.has(`${exit.x},${exit.y}`)) return false;
   }
 
-  /* No orphan doors; corridor doors keep lateral stone throats. */
-  for (let y = 1; y < MAXY - 1; y++) {
-    for (let x = 1; x < MAXX - 1; x++) {
-      const it = itemAt(x, y);
-      if (!it || (!it.matches(OCLOSEDDOOR) && !it.matches(OOPENDOOR))) continue;
-      const floor = (xx, yy) => {
-        if (!inBounds(xx, yy)) return false;
-        const n = itemAt(xx, yy);
-        return n && !n.matches(OWALL) && !n.matches(OCLOSEDDOOR) && !n.matches(OOPENDOOR);
-      };
-      const ew = floor(x - 1, y) && floor(x + 1, y);
-      const ns = floor(x, y - 1) && floor(x, y + 1);
-      if (!ew && !ns) return false;
-      if (ew && !ns) {
-        if (!itemAt(x, y - 1).matches(OWALL) || !itemAt(x, y + 1).matches(OWALL))
-          return false;
-      }
-      if (ns && !ew) {
-        if (!itemAt(x - 1, y).matches(OWALL) || !itemAt(x + 1, y).matches(OWALL))
-          return false;
-      }
-    }
-  }
-  return true;
+  if (depth == MAXLEVEL && !onMain(OVOLUP)) return false;
+  if (depth == DBOTTOM && !onMain(OLARNEYE)) return false;
+  if (depth == VBOTTOM && !onMain(OPOTION, 21)) return false;
+  if (ULARN && depth == VBOTTOM && (countItem(OPIT) < 1 || countItem(OIVTRAPDOOR) < 1)) return false;
+
+  return doorsFollowProvenance();
 }
 
 function updateWalls(x, y, dist) {
@@ -1005,12 +790,22 @@ function eat(xx, yy) {
  *  single door on a wall. Doors are junctions into the maze, not decorations.
  */
 function treasureroom(lv) {
-  for (let tx = 1 + rnd(8); tx < MAXX - 10; tx += 9) {
-    if (rnd((ULARN ? 13 : 10)) == 2) {
-      let xsize = rnd(5) + 4;
-      let ysize = rnd(5) + 4;
-      let ty = rnd(Math.max(4, MAXY - ysize - 2)) + 1; /* upper left corner of room */
-      troom(lv, xsize, ysize, tx, ty, rnd(9));
+  for (let tx = 1 + rnd(10); tx < MAXX - 10; tx += 10) {
+    /* Ularn: rnd(10) <= 2 is 2/10. Bottoms always get a room if this code runs. */
+    if (lv == DBOTTOM || lv == VBOTTOM || rnd(10) <= 2) {
+      const xsize = rnd(6) + 3;
+      const ysize = rnd(3) + 3;
+      let ty = rnd(Math.max(1, MAXY - 9)) + 1;
+      let roomX = tx;
+      if (lv == DBOTTOM || lv == VBOTTOM) roomX = tx + rnd(Math.max(1, MAXX - 24));
+      const maxX = MAXX - xsize - 1;
+      const maxY = MAXY - ysize - 1;
+      if (roomX < 1) roomX = 1;
+      if (roomX > maxX) roomX = Math.max(1, maxX);
+      if (ty < 1) ty = 1;
+      if (ty > maxY) ty = Math.max(1, maxY);
+      const glyph = lv == DBOTTOM || lv == VBOTTOM ? rnd(3) + 6 : rnd(9);
+      troom(lv, xsize, ysize, roomX, ty, glyph);
     }
   }
 }
@@ -1042,20 +837,32 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
     for (i = tx + 1; i < tx + xsize - 1; i++)
     setItem(i, j, OEMPTY); /* now clear out interior */
 
-  switch (rnd(2)) /* locate the door on the treasure room */ {
-    case 1:
-      /* on horizontal walls — avoid corners so laterals stay stone */
+  const room = { tx, ty, xsize, ysize };
+  let placed = false;
+  for (let attempt = 0; attempt < 16 && !placed; attempt++) {
+    if (rnd(2) === 1) {
       i = tx + 1 + rund(Math.max(1, xsize - 2));
       j = ty + (ysize - 1) * rund(2);
-      setItem(i, j, createObject(OCLOSEDDOOR, glyph));
-      break;
-
-    case 2:
-      /* on vertical walls — avoid corners so laterals stay stone */
+    } else {
       i = tx + (xsize - 1) * rund(2);
       j = ty + 1 + rund(Math.max(1, ysize - 2));
-      setItem(i, j, createObject(OCLOSEDDOOR, glyph));
-      break;
+    }
+    setItem(i, j, createObject(OCLOSEDDOOR, glyph));
+    noteDoor(i, j, "treasure-room", room);
+    if (treasureDoorValid(i, j)) {
+      placed = true;
+    } else {
+      setItem(i, j, OWALL);
+      doorProvenance.delete(`${i},${j}`);
+      treasureRoomDoors.pop();
+    }
+  }
+  if (!placed) {
+    /* One door on the outer wall, inset so the laterals are stone. */
+    i = tx + 1 + rund(Math.max(1, xsize - 2));
+    j = ty + ysize - 1;
+    setItem(i, j, createObject(OCLOSEDDOOR, glyph));
+    noteDoor(i, j, "treasure-room", room);
   }
 
   const rndcount = getDifficulty() < 2 ? 6 : 4;
@@ -1094,20 +901,11 @@ function makeobject(depth) {
 
   if (depth == MAXLEVEL) fillroom(OVOLUP, 0); /* volcano shaft up from the temple */
 
-  if ((depth > 0) &&        /* no stairs on home level */
-      (depth != DBOTTOM) && /* no stairs on bottom of dungeon */
-      (depth != VBOTTOM)) {  /* no stairs on bottom of volcano but ularn has dead down stairs on v3, v4 */
-    fillroom(OSTAIRSDOWN, 0);
-  }
+  /* Stairs down through V2. V3–V5 have no stair down (pits and trapdoors). */
+  if (needsStairsDown(depth)) fillroom(OSTAIRSDOWN, 0);
 
-  if (depth > 1) { /* no stairs on home level, D1 */
-    if (ULARN && depth == MAXLEVEL) {
-      fillroom(OSTAIRSUP, 0); /* ularn has dead up stairs on V1 */
-    }
-    else if (depth != MAXLEVEL) {
-      fillroom(OSTAIRSUP, 0); /* no up stairs on V1 */
-    } 
-  } 
+  /* Stairs up from D2. D15 and V1 are dead-end ups. No up stairs on D1. */
+  if (needsStairsUp(depth)) fillroom(OSTAIRSUP, 0); 
 
   if (ULARN) {
     if (depth > 3 &&          // > 3
@@ -1191,25 +989,27 @@ function makeobject(depth) {
   froom(2, ORINGOFEXTRA, 0); /* ring of extra regen */
 
   if (ULARN) {
-    // only one of these per level
+    // only one of these per level — coexistence order unchanged
     var created = false;
-    /* Slightly higher than the classic rnd(120) < 8 (~6.7%) lamp roll. */
-    created |= createArtifact(OBRASSLAMP,       player.LAMP,         !created && rnd(120) < 10);
-    created |= createArtifact(OWWAND,           player.WAND,         !created && rnd(120) < 8);
-    created |= createArtifact(OORBOFDRAGON,     player.SLAYING,      !created && rnd(120) < 8);
-    created |= createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, !created && rnd(120) < 8);
-    created |= createArtifact(OCUBEofUNDEAD,    player.CUBEofUNDEAD, !created && rnd(120) < 8);
-    created |= createArtifact(ONOTHEFT,         player.NOTHEFT,      !created && rnd(120) < 8);
-    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(120) < 11);
-    created |= createArtifact(OHAMMER,          player.BESSMANN,     !created && rnd(120) < 13);
-    created |= createArtifact(OSPHTALISMAN,     player.TALISMAN,     !created && rnd(120) < 8);
-    created |= createArtifact(OHANDofFEAR,      player.HAND,         !created && rnd(120) < 8);
-    created |= createArtifact(OORB,             player.ORB,          !created && rnd(120) < 8);
-    created |= createArtifact(OELVENCHAIN,      player.ELVEN,        !created && rnd(120) < 8);
-    created |= createArtifact(OSLAYER,          player.SLAY,         !created && depth >= 10 && rnd(100) > (82 - (depth - 10)));
-    created |= createArtifact(OVORPAL,          player.VORPAL,       !created && rnd(120) < 10);
-    created |= createArtifact(OPSTAFF,          player.STAFF,        !created && depth >= 8 && rnd(100) > (85 - (depth - 10)));
-    created |= createArtifact(OLIFEPRESERVER,   player.PRESERVER,    !created && depth >= 5 && rnd(120) < 8); // different than Ularn 1.6
+    /* Brass lamp keeps the current threshold. Classic Ularn is rnd(120) < 8. */
+    created |= createArtifact(OBRASSLAMP,       player.LAMP,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_BRASS_LAMP_UNDER);
+    created |= createArtifact(OWWAND,           player.WAND,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OORBOFDRAGON,     player.SLAYING,      !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OCUBEofUNDEAD,    player.CUBEofUNDEAD, !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(ONOTHEFT,         player.NOTHEFT,      !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OHAMMER,          player.BESSMANN,     !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OSPHTALISMAN,     player.TALISMAN,     !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OHANDofFEAR,      player.HAND,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OORB,             player.ORB,          !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OELVENCHAIN,      player.ELVEN,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OSLAYER,          player.SLAY,         !created && depth >= 10 && rnd(100) > (ULARN_SLAYER_GATE - (depth - 10)));
+    /* Vorpal is in Ularn 1.5 create.c at rnd(120) < 8. The 3D build had raised it to < 10. */
+    created |= createArtifact(OVORPAL,          player.VORPAL,       !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OPSTAFF,          player.STAFF,        !created && depth >= 8 && rnd(100) > (ULARN_SLAYER_GATE - (depth - 10)));
+    /* Life preservation is not in Ularn 1.5. This port's depth >= 5 and rnd(120) < 8 is unchanged. */
+    created |= createArtifact(OLIFEPRESERVER,   player.PRESERVER,    !created && depth >= 5 && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
   }
   else {
     createArtifact(OORBOFDRAGON,     player.SLAYING,      rnd(151) < 3);

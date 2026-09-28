@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.26 — Original caves, doors, and rare finds
+
+- Dungeon floors are irregular Ularn `eat()` labyrinths again (Ivan Wong) — no density sculpt, no cross-map spine, no room-and-corridor rewrite
+- The repeating weird-door floors were a fixed generated map library. Those depths now use the original Ularn canned maps, with a door only where that map has `D`
+- Procedural floors have no corridor doors. A treasure room, when it appears, has one door in its outer wall
+- Cave 1 still exits to town. D15 keeps the dead-end stair up and the Eye. Volcano 3–5 have no stair down; you go deeper by pit or trapdoor
+- Rare artifacts are back to the original `rnd(120) < 8` roll. The brass lamp stays at its current slightly higher chance. Slayer’s chance still rises with depth
+- Combat, monster stats, spells, shops, textures, and how often the game writes a save are unchanged
+
 ## 1.3.25 — Honest expedition-ended actions
 
 - After death, the scoreboard overlay only shows actions that still work (Ivan Wong) — **New expedition**, plus **Enter** while the classic scoreboard is still waiting to open

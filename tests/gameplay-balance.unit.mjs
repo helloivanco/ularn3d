@@ -21,15 +21,19 @@ test("giant centipede and ant strength drain is 20%", () => {
   assert.match(monster, /stung you! You feel weaker/);
 });
 
-test("brass lamp spawn chance is slightly higher than classic", () => {
-  assert.match(create, /OBRASSLAMP[\s\S]*rnd\(120\) < 10/);
+test("brass lamp stays at the current threshold, not classic rnd(120) < 8", () => {
+  assert.match(create, /const ULARN_BRASS_LAMP_UNDER = 10/);
+  assert.match(create, /OBRASSLAMP[\s\S]*ULARN_BRASS_LAMP_UNDER/);
 });
 
-test("special weapons have independent slight find-rate boosts", () => {
-  assert.match(create, /OSWORDofSLASHING[\s\S]*rnd\(120\) < 11/);
-  assert.match(create, /OHAMMER[\s\S]*rnd\(120\) < 13/);
-  assert.match(create, /OVORPAL[\s\S]*rnd\(120\) < 10/);
-  assert.match(create, /OSLAYER[\s\S]*rnd\(100\) > \(82 -/);
+test("rare artifacts use original Ularn rnd(120) < 8 and Slayer depth gate 85", () => {
+  assert.match(create, /const ULARN_ARTIFACT_UNDER = 8/);
+  assert.match(create, /OSWORDofSLASHING[\s\S]*ULARN_ARTIFACT_UNDER/);
+  assert.match(create, /OHAMMER[\s\S]*ULARN_ARTIFACT_UNDER/);
+  assert.match(create, /OVORPAL[\s\S]*ULARN_ARTIFACT_UNDER/);
+  assert.match(create, /OSLAYER[\s\S]*ULARN_SLAYER_GATE - \(depth - 10\)/);
+  assert.doesNotMatch(create, /rnd\(120\) < 1[123]/);
+  assert.doesNotMatch(create, /82 - \(depth - 10\)/);
 });
 
 test("loot goblin flees, despawns, and drops equal-chance loot", () => {
@@ -44,16 +48,18 @@ test("loot goblin flees, despawns, and drops equal-chance loot", () => {
   assert.match(create, /fillmonst\(LOOTGOBLIN/);
 });
 
-test("canned mazes are 57x20 maze-like with classic 1% treasure maps", () => {
+test("canned mazes are fitted original Ularn maps on the 57x20 grid", () => {
   const mazesSrc = readFileSync("public/engine/mazes.js", "utf8");
-  assert.match(mazesSrc, /const TREASURE_MAZES/);
-  assert.match(create, /rnd\(100\) === 1/);
+  assert.match(mazesSrc, /const TREASURE_MAZES = \[\]/);
+  assert.match(mazesSrc, /const ULARN_MAZES = \[\]/);
   assert.match(create, /function eat\(/);
   assert.match(create, /eat\(1, 1\)/);
   assert.match(create, /function ensureLevelStairs/);
   assert.match(create, /function createDepthLoot/);
+  assert.match(create, /noteDoor\(x, y, "canned"\)/);
   assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
   assert.doesNotMatch(create, /function placeRareTreasureRoom/);
+  assert.doesNotMatch(create, /function sculptLabyrinthDensity/);
   const vm = require("node:vm");
   const sandbox = {};
   vm.runInNewContext(
@@ -61,44 +67,10 @@ test("canned mazes are 57x20 maze-like with classic 1% treasure maps", () => {
       "\nthis.ULARN=ULARN_MAZES;this.TREASURE=TREASURE_MAZES;this.COMMON=COMMON_MAZES;",
     sandbox,
   );
-  assert.ok(sandbox.ULARN.length >= 100, `expected 100+ ularn maps, got ${sandbox.ULARN.length}`);
-  assert.ok(sandbox.TREASURE.length >= 1);
-  assert.ok(sandbox.ULARN.every((m) => m.length === 57 * 20));
-  assert.ok(sandbox.TREASURE.every((m) => m.length === 57 * 20));
+  assert.equal(sandbox.ULARN.length, 0);
+  assert.equal(sandbox.TREASURE.length, 0);
+  assert.equal(sandbox.COMMON.length, 21);
   assert.ok(sandbox.COMMON.every((m) => m.length === 57 * 20));
-
-  const W = 57;
-  const H = 20;
-  const orphanDoors = (m) => {
-    let bad = 0;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        if (m[y * W + x] !== "D") continue;
-        const floor = (xx, yy) => {
-          if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false;
-          const c = m[yy * W + xx];
-          return c !== "#" && c !== "D";
-        };
-        if (!(floor(x - 1, y) && floor(x + 1, y)) && !(floor(x, y - 1) && floor(x, y + 1)))
-          bad++;
-      }
-    }
-    return bad;
-  };
-  for (const m of [...sandbox.COMMON, ...sandbox.ULARN.slice(0, 20), ...sandbox.TREASURE]) {
-    assert.equal(orphanDoors(m), 0, "doors must connect floor tiles");
-    const walls = (m.match(/#/g) || []).length;
-    const open = m.length - walls;
-    assert.ok(open >= 300 && open <= 700, `open cells out of range: ${open}`);
-    const dash = m.split("-").length - 1;
-    assert.ok(dash <= 8, `too many canned loot markers: ${dash}`);
-  }
-  /* Treasure floors: more gold markers than item markers. */
-  for (const m of sandbox.TREASURE) {
-    const gold = m.split("$").length - 1;
-    const loot = m.split("-").length - 1;
-    assert.ok(gold > loot, `treasure map should favor gold (${gold} vs ${loot})`);
-  }
 });
 
 test("adventurer name is remembered across sessions", () => {
