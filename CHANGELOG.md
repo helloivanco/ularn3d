@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.26 — Original Ularn caverns and rare finds
+
+- Dungeon floors are original Ularn `eat()` caverns again (Ivan Wong) — the density sculpt, connectivity spines, and random corridor doors are gone
+- Doors come only from classic canned maps, or as the single entrance of a treasure room
+- Rare artifacts use classic Ularn find rates again; the brass lamp stays at its slightly higher chance
+- Death-screen actions, textured floors, quieter saves, journal cap, XP panel, and north camera unchanged
+
 ## 1.3.25 — Honest expedition-ended actions
 
 - After death, the scoreboard overlay only shows actions that still work (Ivan Wong) — **New expedition**, plus **Enter** while the classic scoreboard is still waiting to open

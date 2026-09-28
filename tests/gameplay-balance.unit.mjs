@@ -25,11 +25,26 @@ test("brass lamp spawn chance is slightly higher than classic", () => {
   assert.match(create, /OBRASSLAMP[\s\S]*rnd\(120\) < 10/);
 });
 
-test("special weapons have independent slight find-rate boosts", () => {
-  assert.match(create, /OSWORDofSLASHING[\s\S]*rnd\(120\) < 11/);
-  assert.match(create, /OHAMMER[\s\S]*rnd\(120\) < 13/);
-  assert.match(create, /OVORPAL[\s\S]*rnd\(120\) < 10/);
-  assert.match(create, /OSLAYER[\s\S]*rnd\(100\) > \(82 -/);
+test("rare Ularn artifacts use original rnd thresholds; brass lamp stays boosted", () => {
+  assert.match(create, /OBRASSLAMP[\s\S]*rnd\(120\) < 10/);
+  assert.match(create, /OWWAND[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OORBOFDRAGON[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OSPIRITSCARAB[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OCUBEofUNDEAD[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /ONOTHEFT[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OSWORDofSLASHING[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OHAMMER[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OSPHTALISMAN[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OHANDofFEAR[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OORB[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OELVENCHAIN[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OSLAYER[\s\S]*rnd\(100\) > 85 - \(depth - 10\)/);
+  assert.match(create, /OVORPAL[\s\S]*rnd\(120\) < 8/);
+  assert.match(create, /OPSTAFF[\s\S]*depth >= 8 && rnd\(100\) > 85 - \(depth - 10\)/);
+  assert.match(create, /OLIFEPRESERVER[\s\S]*depth >= 5 && rnd\(120\) < 8/);
+  assert.doesNotMatch(create, /rnd\(120\) < 11/);
+  assert.doesNotMatch(create, /rnd\(120\) < 13/);
+  assert.doesNotMatch(create, /82 - \(depth - 10\)/);
 });
 
 test("loot goblin flees, despawns, and drops equal-chance loot", () => {

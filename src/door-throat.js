@@ -6,7 +6,7 @@
  *
  * Keep engine copies in sync:
  * - public/engine/global.js → closedDoorBlocksDiagonal
- * - public/engine/create.js → sealDoorThroats / doorCorridorAxis
+ * Maze generation does not seal corridor throats; only canned and treasure-room doors exist.
  */
 
 /**

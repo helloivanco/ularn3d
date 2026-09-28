@@ -51,19 +51,21 @@ test("canned mazes have no orphan doors and sparse canned loot", () => {
 
 test("create.js restores classic eat() maze and hard stair/door invariants", () => {
   const create = readFileSync("public/engine/create.js", "utf8");
-  /* Classic Ularn caverns — not the short-lived room-corridor rewrite. */
+  /* Classic Ularn caverns — eat(), original open spaces, no density post-process. */
   assert.match(create, /function eat\(/);
   assert.match(create, /eat\(1, 1\)/);
-  assert.match(create, /Classic connectivity spine/);
-  assert.match(create, /function ensureMazeConnectivity/);
   assert.match(create, /function ensureLevelStairs/);
-  assert.match(create, /function sanitizeMazeDoors/);
-  assert.match(create, /function sealDoorThroats/);
-  assert.match(create, /function sculptLabyrinthDensity/);
+  assert.match(create, /function enforceDoorProvenance/);
   assert.match(create, /function levelTraversalOk/);
+  assert.match(create, /rnd\(3\) \+ 3/);
   assert.match(create, /rnd\(4\) \+ 3/);
   assert.match(create, /rnd\(5\) \+ 3/);
   assert.match(create, /rnd\(12\) \+ 11/);
+  assert.match(create, /rnd\(10\) <= 2/);
   assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
   assert.doesNotMatch(create, /function placeRareTreasureRoom/);
+  assert.doesNotMatch(create, /function sculptLabyrinthDensity/);
+  assert.doesNotMatch(create, /function sealDoorThroats/);
+  assert.doesNotMatch(create, /function ensureMazeConnectivity/);
+  assert.doesNotMatch(create, /wallPct < 42/);
 });
