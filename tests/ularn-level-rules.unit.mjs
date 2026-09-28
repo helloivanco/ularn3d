@@ -145,23 +145,21 @@ test("120 generated levels keep stair bands, canned doors, and treasure-room doo
     for (let pass = 0; pass < 6; pass++) {
       USED_MAZES = [];
       for (let depth = 1; depth <= 20; depth++) {
-        let ok = false;
-        for (let attempt = 0; attempt < 32 && !ok; attempt++) {
-          initNewLevel(depth);
-          resetLevelDoorBook();
-          makemaze(depth);
-          enforceDoorProvenance();
-          makeobject(depth);
-          ensureSpecialLevelArtifacts(depth);
-          ensureLevelStairs(depth);
-          enforceDoorProvenance();
-          ok = levelTraversalOk(depth);
-        }
+        const builtLevel = generateFreshLevel(depth);
+        const ok = builtLevel.ok && levelTraversalOk(depth);
         built++;
         if (!ok) {
           failed++;
           failDepths.push(depth);
           continue;
+        }
+        if (!levelFromCanned) {
+          const report = walkableReport(depth);
+          if (report.unreachable !== 0 || report.unreachableStairs !== 0 || report.unreachablePopulated !== 0 || report.invalidDoors !== 0) {
+            failed++;
+            failDepths.push(depth);
+            continue;
+          }
         }
         const doors = doorCells();
         if (levelFromCanned) {

@@ -28,6 +28,63 @@ let levelFromCanned = false;
 let doorProvenance = new Map();
 let treasureRoomDoors = [];
 
+/* Procedural carve origin. Canned charts do not set this. */
+let eatAnchor = null;
+let eatSeeds = [];
+/* Treasure rooms whose single door joined the carve. Loot waits until then. */
+let pendingTreasureRooms = [];
+/* Volcano open-rect monsters rolled during makemaze, placed only after the carve connects. */
+let pendingVolcanoMons = [];
+/* A treasure room whose door could not join the carved network. */
+let levelStructureRejected = false;
+/* Empty tiles that may receive stairs, monsters, and items. Null outside generation. */
+let placementNetwork = null;
+/* null | "procedural" | "canned" — tests pin a source; the game leaves this null. */
+let forceMazeSource = null;
+/* Last attempt, for the connectivity audit. */
+let lastLevelGen = null;
+
+const LEVEL_GEN_ATTEMPT_CAP = 48;
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function drawLevelSeed() {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    if (buf[0]) return buf[0];
+  }
+  return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+}
+
+function beginLevelAttempt(seed) {
+  const chosen = (seed >>> 0) || 1;
+  setLevelRng(mulberry32(chosen));
+  return chosen;
+}
+
+function endLevelAttempt() {
+  setLevelRng(null);
+  placementNetwork = null;
+}
+
+function resetDeferredPopulation() {
+  eatAnchor = null;
+  eatSeeds = [];
+  pendingTreasureRooms = [];
+  pendingVolcanoMons = [];
+  levelStructureRejected = false;
+  placementNetwork = null;
+}
+
 function newcavelevel(depth) {
 
   STARTED_LEVEL_CREATION = true;
@@ -56,25 +113,21 @@ function newcavelevel(depth) {
   }
 
   /*
-   * Reject/regenerate only for broken Ularn rules: missing stairs or specials,
-   * an unreachable entrance, or an invalid treasure-room door. No density
-   * sculpt and no corridor carving to force a look.
+   * Build the level, then keep it only when the walkable floor is one
+   * network from the player's start. A failed roll is discarded. Nothing
+   * is dug to stitch it together.
    */
-  let playable = false;
-  for (let attempt = 0; attempt < 32 && !playable; attempt++) {
-    initNewLevel(depth);
-    resetLevelDoorBook();
-    makemaze(depth);
-    enforceDoorProvenance();
-    makeobject(depth);
-    ensureSpecialLevelArtifacts(depth);
-    ensureLevelStairs(depth);
-    enforceDoorProvenance();
-    updateWalls();
-    playable = levelTraversalOk(depth);
+  const built = generateFreshLevel(depth);
+  if (!built.ok) {
+    const r = built.report || {};
+    const line =
+      `Ularn level generation failed depth=${depth} seed=${built.seed} attempts=${built.attempts} ` +
+      `walkable=${r.walkable} reachable=${r.reachable} unreachable=${r.unreachable}`;
+    console.warn(line);
+    debug(line);
   }
 
-  sethp(true);
+  alignPlayerToProgression(depth);
   positionplayer(player.x, player.y, true);
 
   if (GOTW) {
@@ -375,10 +428,94 @@ function createDepthLoot(depth) {
 
 
 
+/*
+ * One cave attempt: maze, original rooms, original doors, then a reachability
+ * check. Stairs, monsters, and items are placed only after that check passes.
+ * A disconnected procedural floor is discarded with its seed. No spine, no
+ * random corridor, no extra door.
+ */
+function generateFreshLevel(depth) {
+  let playable = false;
+  let seed = 0;
+  let report = null;
+  let attempts = 0;
+
+  for (let attempt = 1; attempt <= LEVEL_GEN_ATTEMPT_CAP && !playable; attempt++) {
+    attempts = attempt;
+    seed = beginLevelAttempt(drawLevelSeed());
+    try {
+      initNewLevel(depth);
+      resetLevelDoorBook();
+      resetDeferredPopulation();
+
+      if (depth === 0) {
+        makemaze(depth);
+        makeobject(depth);
+        playable = true;
+        report = { walkable: 0, reachable: 0, unreachable: 0, stairs: 0, unreachableStairs: 0, unreachablePopulated: 0, doors: 0, invalidDoors: 0 };
+        break;
+      }
+
+      /* 1–3. eat(), original open rectangles / treasure rooms, legitimate doors. */
+      makemaze(depth);
+      enforceDoorProvenance();
+
+      /* 4–5. Procedural floors must be one network. Canned charts are not rewritten. */
+      report = walkableReport(depth);
+      const structureOk = levelFromCanned
+        ? true
+        : report.unreachable === 0 && !levelStructureRejected;
+      if (!structureOk) continue;
+
+      placementNetwork = networkFromStart(depth);
+
+      /* 6–7. Stairs only on tiles reachable from the start. */
+      placeLevelStairs(depth);
+      ensureSpecialLevelArtifacts(depth);
+
+      /* 8. Monsters, including treasure-room and volcano-rect monsters. */
+      placeDeferredMonsters(depth);
+
+      /* 9. Items, including treasure-room loot. Stairs are already placed. */
+      placeDeferredTreasureLoot(depth);
+      makeobject(depth);
+
+      enforceDoorProvenance();
+      updateWalls();
+
+      /* 10. Every stair, monster, and item on a procedural floor is reachable. */
+      report = walkableReport(depth);
+      playable = levelTraversalOk(depth) && contentReachable(depth, report);
+    } finally {
+      endLevelAttempt();
+    }
+  }
+
+  lastLevelGen = {
+    ok: playable,
+    depth,
+    seed,
+    attempts,
+    canned: levelFromCanned,
+    report,
+  };
+  return lastLevelGen;
+}
+
 /* subroutine to make the caverns for a given level. only walls are made */
 function makemaze(k) {
+  pendingTreasureRooms = [];
+  pendingVolcanoMons = [];
+  levelStructureRejected = false;
+  eatAnchor = null;
+  eatSeeds = [];
+
   let useCanned = false;
-  if (k == DBOTTOM || k == VBOTTOM) {
+  if (forceMazeSource === "procedural") {
+    useCanned = false;
+  } else if (forceMazeSource === "canned") {
+    useCanned = k > 0;
+  } else if (k == DBOTTOM || k == VBOTTOM) {
     useCanned = true;
   }
   else if (k > 1) {
@@ -412,6 +549,7 @@ function makemaze(k) {
   }
 
   eat(1, 1);
+  rememberEatAnchor();
 
   /* Open spaces — not on dungeon bottom or volcano bottom (those are canned). */
   if (k != DBOTTOM && k != VBOTTOM) {
@@ -519,9 +657,50 @@ function paintOpenRect(x0, x1, y0, y1, mon) {
   for (let i = xa; i < xb; i++) {
     for (let j = ya; j < yb; j++) {
       setItem(i, j, OEMPTY);
-      setMonster(i, j, mon);
+      setMonster(i, j, null);
     }
   }
+  /* Roll the monster during the carve so the maze stream stays put. Place it later. */
+  if (mon != null) pendingVolcanoMons.push({ xa, xb, ya, yb, mon });
+}
+
+function rememberEatAnchor() {
+  eatAnchor = null;
+  eatSeeds = [];
+  let sx = -1;
+  let sy = -1;
+  for (let y = 0; y < MAXY && sx < 0; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      if (!isNetworkTile(x, y)) continue;
+      sx = x;
+      sy = y;
+      break;
+    }
+  }
+  if (sx < 0) return;
+  const seen = new Set();
+  floodNetworkFrom(sx, sy, seen);
+  eatSeeds = [...seen];
+  let best = null;
+  let bestD = Infinity;
+  for (const key of eatSeeds) {
+    const [x, y] = key.split(",").map(Number);
+    const dist = Math.abs(x - 1) + Math.abs(y - 1);
+    if (dist < bestD) {
+      bestD = dist;
+      best = { x, y };
+    }
+  }
+  eatAnchor = best;
+}
+
+function livingEatAnchor() {
+  if (eatAnchor && isNetworkTile(eatAnchor.x, eatAnchor.y)) return eatAnchor;
+  for (const key of eatSeeds) {
+    const [x, y] = key.split(",").map(Number);
+    if (isNetworkTile(x, y)) return { x, y };
+  }
+  return null;
 }
 
 function roomInterior(x, y, room) {
@@ -573,8 +752,9 @@ function treasureDoorValid(x, y) {
     const lat = itemAt(lx, ly);
     if (!lat || !lat.matches(OWALL)) return false;
   }
-  const main = largestNetworkComponent();
-  return main.has(`${exterior[0]},${exterior[1]}`) || main.has(`${x},${y}`);
+  /* The outside face has to sit on the carved network the player starts in. */
+  const reached = networkFromStart(level);
+  return reached.has(`${exterior[0]},${exterior[1]}`);
 }
 
 /*
@@ -613,43 +793,172 @@ function needsStairsUp(depth) {
   return true;
 }
 
-function pickEmptyOnMain(main) {
+function levelStartCell(depth) {
+  if (!levelFromCanned) {
+    if (depth === 1) {
+      const exit = findItemXY(OHOMEENTRANCE);
+      if (exit && isNetworkTile(exit.x, exit.y)) return { x: exit.x, y: exit.y };
+      const x = 33 < MAXX - 1 ? 33 : homeEntranceX();
+      const y = MAXY - 2;
+      if (isNetworkTile(x, y)) return { x, y };
+    }
+    const carved = livingEatAnchor();
+    if (carved) return carved;
+    if (player && isNetworkTile(player.x, player.y)) return { x: player.x, y: player.y };
+  } else {
+    if (depth == DBOTTOM) {
+      const eye = findItemXY(OLARNEYE);
+      if (eye && isNetworkTile(eye.x, eye.y)) return { x: eye.x, y: eye.y };
+    }
+    if (depth == VBOTTOM) {
+      const pot = findItemXY(OPOTION, 21);
+      if (pot && isNetworkTile(pot.x, pot.y)) return { x: pot.x, y: pot.y };
+    }
+    const main = largestNetworkComponent();
+    if (player && main.has(`${player.x},${player.y}`)) return { x: player.x, y: player.y };
+    for (const key of main) {
+      const [x, y] = key.split(",").map(Number);
+      return { x, y };
+    }
+  }
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      if (isNetworkTile(x, y)) return { x, y };
+    }
+  }
+  return null;
+}
+
+function networkFromStart(depth) {
+  const seen = new Set();
+  const start = levelStartCell(depth);
+  if (!start) return seen;
+  floodNetworkFrom(start.x, start.y, seen);
+  return seen;
+}
+
+function walkableReport(depth) {
+  const seen = networkFromStart(depth);
+  let walkable = 0;
+  let unreachable = 0;
+  let stairs = 0;
+  let unreachableStairs = 0;
+  let unreachablePopulated = 0;
+  let doors = 0;
+  let invalidDoors = 0;
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      if (!isNetworkTile(x, y)) continue;
+      walkable++;
+      const key = `${x},${y}`;
+      const reach = seen.has(key);
+      if (!reach) unreachable++;
+      const it = itemAt(x, y);
+      const mon = monsterAt(x, y);
+      const isStair = !!(it && (
+        it.matches(OSTAIRSDOWN) ||
+        it.matches(OSTAIRSUP) ||
+        it.matches(OVOLUP) ||
+        it.matches(OHOMEENTRANCE)
+      ));
+      const door = isDoorItem(it);
+      if (isStair) {
+        stairs++;
+        if (!reach) unreachableStairs++;
+      }
+      if (door) {
+        doors++;
+        const source = doorProvenance.get(key);
+        const valid = levelFromCanned
+          ? source === "canned"
+          : source === "treasure-room" && treasureDoorValid(x, y);
+        if (!valid) invalidDoors++;
+      }
+      const populated = !!mon || !!(it && !it.matches(OEMPTY) && !it.matches(OWALL) && !door && !isStair);
+      if (populated && !reach) unreachablePopulated++;
+    }
+  }
+  return {
+    walkable,
+    reachable: seen.size,
+    unreachable,
+    stairs,
+    unreachableStairs,
+    unreachablePopulated,
+    doors,
+    invalidDoors,
+  };
+}
+
+function contentReachable(depth, report) {
+  if (levelFromCanned) return report.unreachableStairs === 0 && report.invalidDoors === 0;
+  return report.unreachable === 0
+    && report.unreachableStairs === 0
+    && report.unreachablePopulated === 0
+    && report.invalidDoors === 0
+    && !levelStructureRejected;
+}
+
+function pickEmptyOnNetwork(net) {
   const candidates = [];
-  for (const key of main) {
+  for (const key of net) {
     const [x, y] = key.split(",").map(Number);
     if (x <= 0 || y <= 0 || x >= MAXX - 1 || y >= MAXY - 1) continue;
-    if (itemAt(x, y).matches(OEMPTY) && !monsterAt(x, y)) candidates.push([x, y]);
+    const it = itemAt(x, y);
+    if (it && it.matches(OEMPTY) && !monsterAt(x, y)) candidates.push([x, y]);
   }
   if (!candidates.length) return null;
   return candidates[rund(candidates.length)];
 }
 
-function relocateSpecialToMain(what, main, arg) {
+/* Place a missing object on the start network. Never slide an existing one. */
+function placeOnNetwork(what, arg, net) {
   const at = findItemXY(what, arg);
-  if (at && main.has(`${at.x},${at.y}`)) return at;
-  if (at) {
-    setItem(at.x, at.y, OEMPTY);
-    setMonster(at.x, at.y, null);
-  }
-  const spot = pickEmptyOnMain(main);
+  if (at) return at;
+  const spot = pickEmptyOnNetwork(net);
   if (!spot) return null;
   setItem(spot[0], spot[1], createObject(what, arg == null ? 0 : arg));
   setMonster(spot[0], spot[1], null);
   return { x: spot[0], y: spot[1] };
 }
 
-function ensureLevelStairs(depth) {
+function placeLevelStairs(depth) {
   if (depth === 0) return;
   if (depth == 1) placeHomeEntrance();
+  const net = placementNetwork || networkFromStart(depth);
+  if (!net.size) return;
+  if (needsStairsDown(depth)) placeOnNetwork(OSTAIRSDOWN, 0, net);
+  if (needsStairsUp(depth)) placeOnNetwork(OSTAIRSUP, 0, net);
+  if (depth == MAXLEVEL) placeOnNetwork(OVOLUP, 0, net);
+  if (depth == DBOTTOM) placeOnNetwork(OLARNEYE, 0, net);
+  if (depth == VBOTTOM) placeOnNetwork(OPOTION, 21, net);
+}
 
-  let main = largestNetworkComponent();
-  if (!main.size) return;
+function ensureLevelStairs(depth) {
+  placeLevelStairs(depth);
+}
 
-  if (needsStairsDown(depth)) relocateSpecialToMain(OSTAIRSDOWN, main);
-  if (needsStairsUp(depth)) relocateSpecialToMain(OSTAIRSUP, main);
-  if (depth == MAXLEVEL) relocateSpecialToMain(OVOLUP, main);
-  if (depth == DBOTTOM) relocateSpecialToMain(OLARNEYE, main);
-  if (depth == VBOTTOM) relocateSpecialToMain(OPOTION, main, 21);
+function alignPlayerToProgression(depth) {
+  if (!player || depth <= 0) return;
+  const net = networkFromStart(depth);
+  if (!net.size) return;
+  if (canMove(player.x, player.y) && net.has(`${player.x},${player.y}`)) return;
+  /* Procedural floors are one network; a wall landing still uses positionplayer. */
+  if (!levelFromCanned) return;
+  let best = null;
+  let bestD = Infinity;
+  for (const key of net) {
+    const [x, y] = key.split(",").map(Number);
+    if (!canMove(x, y)) continue;
+    const dist = Math.abs(x - player.x) + Math.abs(y - player.y);
+    if (dist < bestD) {
+      bestD = dist;
+      best = [x, y];
+    }
+  }
+  if (!best) return;
+  player.x = best[0];
+  player.y = best[1];
 }
 
 function countItem(what, arg) {
@@ -687,13 +996,18 @@ function doorsFollowProvenance() {
 
 function levelTraversalOk(depth) {
   if (depth === 0) return true;
-  const main = largestNetworkComponent();
+  const main = networkFromStart(depth);
   if (!main.size) return false;
 
   const onMain = (what, arg) => {
     const at = findItemXY(what, arg);
     return !!(at && main.has(`${at.x},${at.y}`));
   };
+
+  if (!levelFromCanned) {
+    const report = walkableReport(depth);
+    if (report.unreachable !== 0 || levelStructureRejected) return false;
+  }
 
   if (needsStairsDown(depth) && !onMain(OSTAIRSDOWN)) return false;
   if (needsStairsUp(depth) && !onMain(OSTAIRSUP)) return false;
@@ -711,7 +1025,12 @@ function levelTraversalOk(depth) {
   if (depth == MAXLEVEL && !onMain(OVOLUP)) return false;
   if (depth == DBOTTOM && !onMain(OLARNEYE)) return false;
   if (depth == VBOTTOM && !onMain(OPOTION, 21)) return false;
-  if (ULARN && depth == VBOTTOM && (countItem(OPIT) < 1 || countItem(OIVTRAPDOOR) < 1)) return false;
+  if (ULARN && depth == VBOTTOM) {
+    const pit = findItemXY(OPIT);
+    const trap = findItemXY(OIVTRAPDOOR);
+    if (!pit || !main.has(`${pit.x},${pit.y}`)) return false;
+    if (!trap || !main.has(`${trap.x},${trap.y}`)) return false;
+  }
 
   return doorsFollowProvenance();
 }
@@ -858,26 +1177,54 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
     }
   }
   if (!placed) {
-    /* One door on the outer wall, inset so the laterals are stone. */
-    i = tx + 1 + rund(Math.max(1, xsize - 2));
-    j = ty + ysize - 1;
-    setItem(i, j, createObject(OCLOSEDDOOR, glyph));
-    noteDoor(i, j, "treasure-room", room);
+    /* No hallway and no extra door. The caller discards this floor. */
+    levelStructureRejected = true;
+    return;
   }
 
-  const rndcount = getDifficulty() < 2 ? 6 : 4;
-  let monstbump = getDifficulty() < 2 ? 1 : 3;
-  if (ULARN) monstbump++;
-  let tmpy = ty + (ysize >> 1);
-  for (let tmpx = tx + 1; tmpx <= tx + xsize - 2; tmpx += 2) {
-    for (i = 0, j = rnd(rndcount); i <= j; i++) {
-      setItem(tmpx, tmpy, createDepthLoot(lv + 2), SCATTER);
-      if (rnd(101) < 8) // chance of another item
-        setItem(tmpx, tmpy, createDepthLoot(lv + 2), SCATTER); 
-      setMonster(tmpx, tmpy, makemonst(lv + monstbump), SCATTER);
+  pendingTreasureRooms.push({ lv, xsize, ysize, tx, ty });
+}
+
+/* Treasure-room monsters. One rnd(rndcount) per column, same as Ularn troom. */
+function placeDeferredMonsters(depth) {
+  for (const rect of pendingVolcanoMons) {
+    for (let i = rect.xa; i < rect.xb; i++) {
+      for (let j = rect.ya; j < rect.yb; j++) {
+        if (!itemAt(i, j) || !itemAt(i, j).matches(OEMPTY)) continue;
+        if (placementNetwork && !placementNetwork.has(`${i},${j}`)) continue;
+        setMonster(i, j, rect.mon);
+      }
     }
   }
+  for (const room of pendingTreasureRooms) {
+    const rndcount = getDifficulty() < 2 ? 6 : 4;
+    let monstbump = getDifficulty() < 2 ? 1 : 3;
+    if (ULARN) monstbump++;
+    const tmpy = room.ty + (room.ysize >> 1);
+    room.columns = [];
+    for (let tmpx = room.tx + 1; tmpx <= room.tx + room.xsize - 2; tmpx += 2) {
+      const n = rnd(rndcount);
+      room.columns.push({ tmpx, tmpy, n });
+      for (let i = 0; i <= n; i++) {
+        setMonster(tmpx, tmpy, makemonst(room.lv + monstbump), SCATTER);
+      }
+    }
+  }
+  stockNewLevelMonsters();
+  if (depth == null) return;
+}
 
+/* Treasure-room loot uses the column counts rolled with the monsters. */
+function placeDeferredTreasureLoot(depth) {
+  if (depth == null) return;
+  for (const room of pendingTreasureRooms) {
+    for (const col of room.columns || []) {
+      for (let i = 0; i <= col.n; i++) {
+        setItem(col.tmpx, col.tmpy, createDepthLoot(room.lv + 2), SCATTER);
+        if (rnd(101) < 8) setItem(col.tmpx, col.tmpy, createDepthLoot(room.lv + 2), SCATTER);
+      }
+    }
+  }
 }
 
 
@@ -899,13 +1246,7 @@ function makeobject(depth) {
     return;
   }
 
-  if (depth == MAXLEVEL) fillroom(OVOLUP, 0); /* volcano shaft up from the temple */
-
-  /* Stairs down through V2. V3–V5 have no stair down (pits and trapdoors). */
-  if (needsStairsDown(depth)) fillroom(OSTAIRSDOWN, 0);
-
-  /* Stairs up from D2. D15 and V1 are dead-end ups. No up stairs on D1. */
-  if (needsStairsUp(depth)) fillroom(OSTAIRSUP, 0); 
+  /* Stairs and the V1 shaft are placed on the reachable network before this. */
 
   if (ULARN) {
     if (depth > 3 &&          // > 3
@@ -1045,7 +1386,9 @@ function makeobject(depth) {
 function createArtifact(artifact, exists, odds) {
   var createdArtifact = false;
   if (!exists && odds) {
-    artifact = fillroom(artifact);
+    const placed = fillroom(artifact);
+    if (!placed) return false;
+    artifact = placed;
     createdArtifact = true;
     debug(`created ${artifact} on ${level}`);
   }
@@ -1143,8 +1486,15 @@ function fillTownBuilding(what, arg) {
     subroutine to put an object into an empty room
  *  uses a random walk
 */
+function placementCellOk(x, y) {
+  const it = itemAt(x, y);
+  if (!it || !it.matches(OEMPTY)) return false;
+  if (placementNetwork && !placementNetwork.has(`${x},${y}`)) return false;
+  return true;
+}
+
 function fillroom(what, arg) {
-  var safe = 100;
+  var safe = 2500;
   var x = rnd(MAXX - 2);
   var y = rnd(MAXY - 2);
   if (level == 0) {
@@ -1152,7 +1502,7 @@ function fillroom(what, arg) {
     x = b.x0 + rund(TOWN_SIZE);
     y = b.y0 + rund(TOWN_SIZE);
   }
-  while (!itemAt(x, y).matches(OEMPTY)) {
+  while (!placementCellOk(x, y)) {
     x += rnd(3) - 2;
     y += rnd(3) - 2;
     if (level == 0) {
@@ -1169,7 +1519,7 @@ function fillroom(what, arg) {
     }
     if (safe-- == 0) {
       debug(`fillroom: SAFETY!`);
-      break;
+      return null;
     }
   }
   var newItem = createObject(what, arg);
@@ -1191,6 +1541,7 @@ function fillmonst(what, awake) {
     //debug(`fillmonst: ${x},${y} ${itemAt(x, y)}`);
     if ((itemAt(x, y).matches(OEMPTY)) &&       // empty space
         (!monsterAt(x, y)) &&                   // no monster there
+        (!placementNetwork || placementNetwork.has(`${x},${y}`)) &&
         ((player.x != x) || (player.y != y))) { // not on player
       let monster = createMonster(what);
       setMonster(x, y, monster);
@@ -1208,6 +1559,35 @@ function fillmonst(what, awake) {
     must be done when entering a new level
     if sethp(1) then wipe out old monsters else leave them there
  */
+function stockNewLevelMonsters() {
+  const nummonsters = rnd(12) + 2 + (level >> 1);
+  for (let i = 0; i < nummonsters; i++) {
+    fillmonst(makemonst(level));
+  }
+  if (!ULARN || DEBUG_NO_MONSTERS) return;
+
+  /*
+  ** level 11 gets 1 demon lord … level 15 gets 5 demon lords
+  ** V1 gets 1 demon prince … V5 gets 5 demon princes
+  ** Stop if the floor cannot take another, so a full level cannot spin.
+  */
+  let numdemons = 0;
+  let kind = 0;
+  if ((level >= MAXLEVEL - 5) && (level < MAXLEVEL)) {
+    numdemons = level - 10;
+    kind = DEMONLORD;
+  } else if (level >= MAXLEVEL) {
+    numdemons = level - MAXLEVEL + 1;
+    kind = DEMONPRINCE;
+  }
+  let placed = 0;
+  let guard = numdemons * 12;
+  while (placed < numdemons && guard-- > 0) {
+    const which = kind === DEMONLORD ? DEMONLORD + rund(7) : DEMONPRINCE;
+    if (fillmonst(which)) placed++;
+  }
+}
+
 function sethp(newLevel) {
   // if (flg) {
   //   for (var i = 0; i < MAXY; i++) {
@@ -1225,51 +1605,24 @@ function sethp(newLevel) {
     return;
   }
 
-  var nummonsters;
+  const restore = placementNetwork;
+  let imposed = false;
+  if (!placementNetwork && player && isNetworkTile(player.x, player.y)) {
+    placementNetwork = new Set();
+    floodNetworkFrom(player.x, player.y, placementNetwork);
+    imposed = true;
+  }
+
   if (newLevel) {
-    nummonsters = rnd(12) + 2 + (level >> 1);
+    stockNewLevelMonsters();
   } else {
-    nummonsters = (level >> 1) + 1;
-  }
-
-  for (let i = 0; i < nummonsters; i++) {
-    fillmonst(makemonst(level));
-  }
-
-  if (ULARN && newLevel && !DEBUG_NO_MONSTERS) {
-    /*
-    ** level 11 gets 1 demon lord
-    ** level 12 gets 2 demon lords
-    ** level 13 gets 3 demon lords
-    ** level 14 gets 4 demon lords
-    ** level 15 gets 5 demon lords
-    */
-    var numdemons = 0;
-    if ((level >= MAXLEVEL - 5) && (level < MAXLEVEL)) {
-      numdemons = level - 10;
-      for (let j = 1 ; j <= numdemons ; j++) {
-        if (!fillmonst(DEMONLORD + rund(7))) {
-          j--;
-        }
-      }
-    }
-    /*
-    ** level V1 gets 1 demon prince
-    ** level V2 gets 2 demon princes
-    ** level V3 gets 3 demon princes
-    ** level V4 gets 4 demon princes
-    ** level V5 gets 5 demon princes
-    */
-    else if (level >= MAXLEVEL) {
-      numdemons = level - MAXLEVEL + 1;
-      for (let j = 1 ; j <= numdemons ; j++){
-        if (!fillmonst(DEMONPRINCE)) {
-          j--;
-        }
-      }
+    const nummonsters = (level >> 1) + 1;
+    for (let i = 0; i < nummonsters; i++) {
+      fillmonst(makemonst(level));
     }
   }
 
+  if (imposed) placementNetwork = restore;
 }
 
 
