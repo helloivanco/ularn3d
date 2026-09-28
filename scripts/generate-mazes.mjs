@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 /**
+ * Retired. Canned floors are the original Ularn Umaps fitted in public/engine/mazes.js.
+ * This generator built the repeating room-and-corridor maps with doors in odd places.
+ */
+console.error("generate-mazes.mjs is retired. Canned floors stay the original Ularn maps.");
+process.exit(1);
+/**
  * Generate maze-like 57×20 canned layouts for Ularn3d.
  * Rooms + 1-wide corridors; doors only between floor tiles.
  */

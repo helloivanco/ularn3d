@@ -61,13 +61,13 @@ test("open laterals allow diagonal bypass; sealed laterals do not", () => {
   assert.equal(doorHasDiagonalBypass(5, 5, "ew", sealed), false);
 });
 
-test("create.js seals door throats and keeps classic eat() generator", () => {
+test("create.js keeps eat() and does not seal corridor doors into the maze", () => {
   const create = readFileSync("public/engine/create.js", "utf8");
-  assert.match(create, /function sealDoorThroats/);
-  assert.match(create, /function sculptLabyrinthDensity/);
   assert.match(create, /function eat\(/);
   assert.match(create, /eat\(1, 1\)/);
   assert.doesNotMatch(create, /function buildRoomCorridorMaze/);
+  assert.doesNotMatch(create, /function sealDoorThroats/);
+  assert.doesNotMatch(create, /function sculptLabyrinthDensity/);
   /* Treasure-room doors avoid wall corners. */
   assert.match(create, /tx \+ 1 \+ rund\(Math\.max\(1, xsize - 2\)\)/);
 });
