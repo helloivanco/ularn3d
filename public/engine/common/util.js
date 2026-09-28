@@ -1,10 +1,26 @@
 'use strict';
 
 /*
+ * Optional level-generation stream. Null uses Math.random.
+ * Set only for the duration of one cave-generation attempt.
+ */
+let levelRngUnit = null;
+
+function setLevelRng(nextUnit) {
+  levelRngUnit = nextUnit;
+}
+
+function rngUnit() {
+  return levelRngUnit ? levelRngUnit() : Math.random();
+}
+
+
+
+/*
  * generate random numbers 1<=rnd(N)<=N
  */
 function rnd(value) {
-  return Math.floor(Math.random() * value + 1);
+  return Math.floor(rngUnit() * value + 1);
 }
 
 
@@ -13,7 +29,7 @@ function rnd(value) {
  * generate random numbers 0<=rund(N)<=N-1
  */
 function rund(value) {
-  return Math.floor(Math.random() * value);
+  return Math.floor(rngUnit() * value);
 }
 
 

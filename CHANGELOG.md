@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.27 — Reachable floors
+
+- A generated cave is kept only when every walkable tile connects back to where you start (Ivan Wong). A roll that leaves floor behind solid rock is thrown away and rolled again
+- Stairs, monsters, and items are placed after that check, and only on tiles you can reach
+- Original Ularn charts are not redrawn. Their rock stays. Stairs on those floors sit on the cavern you can actually travel
+- No new tunnels, spines, or corridor doors. A treasure room still has one door, and only when that door opens onto the maze
+- Combat, monster stats, spells, shops, textures, and save timing are unchanged
+
 ## 1.3.26 — Original caves, doors, and rare finds
 
 - Dungeon floors are irregular Ularn `eat()` labyrinths again (Ivan Wong) — no density sculpt, no cross-map spine, no room-and-corridor rewrite
