@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.28 — Teleport landings
+
+- A teleport stays on the map (Ivan Wong). Scrolls, the teleport spell, traps, and elevators never drop you outside the level
+- In town, you land in town. The square is not a cave, and the rock around it is not a floor
+- The destination is open floor with a step back into the level. Rock, a closed door, and a walled-off pocket are passed over
+- A bad roll tries another open tile. If none is left, you do not move, and you are not left in the wall
+- Caves, doors, combat, shops, and rare-item chances are unchanged
+
 ## 1.3.27 — Reachable floors
 
 - A generated cave is kept only when every walkable tile connects back to where you start (Ivan Wong). A roll that leaves floor behind solid rock is thrown away and rolled again
