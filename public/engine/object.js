@@ -1046,6 +1046,9 @@ function obottomless() {
 
 
 function oelevator(direction) {
+  const originLevel = level;
+  const originX = player.x;
+  const originY = player.y;
   // going up
   if (direction == 1) {
     if (level == 0) {
@@ -1053,10 +1056,6 @@ function oelevator(direction) {
       return;
     }
     appendLog(` The cage rattles and the world blurs${period}`);
-    player.x = rnd(MAXX - 2);
-    player.y = rnd(MAXY - 2);
-    //nap(2000);
-
 
     // in dungeon
     if (level <= DBOTTOM) {
@@ -1080,9 +1079,6 @@ function oelevator(direction) {
       return;
     }
     appendLog(` The cage rattles and the world blurs${period}`);
-    player.x = rnd(MAXX - 2);
-    player.y = rnd(MAXY - 2);
-    //nap(2000);
 
     // in dungeon
     if (level <= DBOTTOM) {
@@ -1093,7 +1089,7 @@ function oelevator(direction) {
       newcavelevel(level + rnd(VBOTTOM - level));
     }
   }
-  positionplayer();
+  if (!placeTeleportLanding()) revertTeleport(originLevel, originX, originY);
 }
 
 
@@ -1103,6 +1099,178 @@ function forget() {
 }
 
 
+
+/*
+ * Town is the town square, not a cave with a rock border.
+ * Dungeon and volcano use the classic 1..MAXX-2 / 1..MAXY-2 roll.
+ */
+function rollClassicTeleportCell() {
+  if (level == 0) {
+    const b = townBounds();
+    return {
+      x: b.x0 + rund(b.x1 - b.x0 + 1),
+      y: b.y0 + rund(b.y1 - b.y0 + 1),
+    };
+  }
+  return { x: rnd(MAXX - 2), y: rnd(MAXY - 2) };
+}
+
+function teleportInsideGrid(x, y) {
+  if (!inBounds(x, y)) return false;
+  if (level == 0) return inTown(x, y);
+  return true;
+}
+
+/* Open floor: not rock, not a closed door. Buildings are not town floor. */
+function teleportOpenSquare(x, y) {
+  if (!teleportInsideGrid(x, y)) return false;
+  const item = itemAt(x, y);
+  if (!item || item.matches(OWALL) || item.matches(OCLOSEDDOOR)) return false;
+  return true;
+}
+
+function teleportFloorLanding(x, y) {
+  if (!teleportOpenSquare(x, y)) return false;
+  if (level == 0 && itemAt(x, y).isStore()) return false;
+  if (monsterAt(x, y)) return false;
+  return true;
+}
+
+function teleportNetworkCell(x, y) {
+  if (level == 0) {
+    if (!inTown(x, y)) return false;
+    const item = itemAt(x, y);
+    return !!(item && !item.matches(OWALL));
+  }
+  return isNetworkTile(x, y);
+}
+
+function floodTeleportNet(sx, sy, seen) {
+  if (level != 0) {
+    floodNetworkFrom(sx, sy, seen);
+    return;
+  }
+  if (!teleportNetworkCell(sx, sy) || seen.has(`${sx},${sy}`)) return;
+  const q = [[sx, sy]];
+  seen.add(`${sx},${sy}`);
+  while (q.length) {
+    const [x, y] = q.shift();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const key = `${nx},${ny}`;
+      if (seen.has(key) || !teleportNetworkCell(nx, ny)) continue;
+      seen.add(key);
+      q.push([nx, ny]);
+    }
+  }
+}
+
+function largestTeleportComponent() {
+  let best = new Set();
+  const claimed = new Set();
+  const b = level == 0 ? townBounds() : { x0: 0, y0: 0, x1: MAXX - 1, y1: MAXY - 1 };
+  for (let y = b.y0; y <= b.y1; y++) {
+    for (let x = b.x0; x <= b.x1; x++) {
+      const key = `${x},${y}`;
+      if (claimed.has(key) || !teleportNetworkCell(x, y)) continue;
+      const comp = new Set();
+      floodTeleportNet(x, y, comp);
+      for (const cell of comp) claimed.add(cell);
+      if (comp.size > best.size) best = comp;
+    }
+  }
+  return best;
+}
+
+/* Stairs and the town square name the playable network. Pockets do not. */
+function teleportPlayableNetwork() {
+  if (level == 0) return largestTeleportComponent();
+  const anchors = [];
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const item = itemAt(x, y);
+      if (!item) continue;
+      if (
+        item.matches(OSTAIRSDOWN) ||
+        item.matches(OSTAIRSUP) ||
+        item.matches(OHOMEENTRANCE) ||
+        item.matches(OVOLUP) ||
+        item.matches(OVOLDOWN) ||
+        item.matches(OLARNEYE)
+      ) anchors.push([x, y]);
+    }
+  }
+  let best = new Set();
+  const claimed = new Set();
+  for (const [x, y] of anchors) {
+    const key = `${x},${y}`;
+    if (claimed.has(key)) continue;
+    const comp = new Set();
+    floodTeleportNet(x, y, comp);
+    for (const cell of comp) claimed.add(cell);
+    if (comp.size > best.size) best = comp;
+  }
+  if (best.size) return best;
+  return largestTeleportComponent();
+}
+
+function teleportHasOpenConnection(x, y, net) {
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (!teleportOpenSquare(nx, ny)) continue;
+    if (net && !net.has(`${nx},${ny}`)) continue;
+    return true;
+  }
+  return false;
+}
+
+function teleportDestinationOk(x, y, net) {
+  const network = net || teleportPlayableNetwork();
+  if (!teleportFloorLanding(x, y)) return false;
+  if (!network.has(`${x},${y}`)) return false;
+  return teleportHasOpenConnection(x, y, network);
+}
+
+function markTeleportLanding(x, y) {
+  player.x = x;
+  player.y = y;
+  const known = typeof KNOWALL == "undefined" ? 0 : KNOWALL;
+  setKnow(x, y, known);
+}
+
+/*
+ * Classic Ularn rolls a cell, then tries another if that cell is blocked.
+ * A failed roll is never written onto the player. If nothing legal remains,
+ * the teleport does not move you.
+ */
+function placeTeleportLanding() {
+  const net = teleportPlayableNetwork();
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const cell = rollClassicTeleportCell();
+    if (!teleportDestinationOk(cell.x, cell.y, net)) continue;
+    markTeleportLanding(cell.x, cell.y);
+    return true;
+  }
+  const legal = [];
+  const b = level == 0 ? townBounds() : { x0: 0, y0: 0, x1: MAXX - 1, y1: MAXY - 1 };
+  for (let y = b.y0; y <= b.y1; y++) {
+    for (let x = b.x0; x <= b.x1; x++) {
+      if (teleportDestinationOk(x, y, net)) legal.push({ x, y });
+    }
+  }
+  if (!legal.length) return false;
+  const pick = legal[rund(legal.length)];
+  markTeleportLanding(pick.x, pick.y);
+  return true;
+}
+
+function revertTeleport(originLevel, originX, originY) {
+  if (level != originLevel) newcavelevel(originLevel);
+  player.x = originX;
+  player.y = originY;
+}
 
 /*
  * subroutine to handle a teleport trap +/- 1 level maximum
@@ -1135,6 +1303,7 @@ function oteleport(teleportSelf, teleportMessage) {
     changedDepth = millis(); // notify when depth changes to '?'
   }
 
+  const previousFlag = player.TELEFLAG;
   player.TELEFLAG = wizard ? 0 : 1; /* show ? on bottomline if been teleported */
 
   var newLevel;
@@ -1153,8 +1322,6 @@ function oteleport(teleportSelf, teleportMessage) {
     if (newLevel < MAXLEVEL)
       newLevel = MAXLEVEL;
   }
-  player.x = rnd(MAXX - 2);
-  player.y = rnd(MAXY - 2);
 
   /*
   v12.4.5 - if you hit a monster, and then teleport away, it would keep
@@ -1168,10 +1335,17 @@ function oteleport(teleportSelf, teleportMessage) {
   lasthx = 0;
   lasthy = 0;
 
+  const originLevel = level;
+  const originX = player.x;
+  const originY = player.y;
+
   if (level != newLevel) {
     newcavelevel(newLevel);
   }
-  positionplayer();
+  if (!placeTeleportLanding()) {
+    player.TELEFLAG = previousFlag;
+    revertTeleport(originLevel, originX, originY);
+  }
 }
 
 
