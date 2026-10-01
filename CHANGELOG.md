@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.29 — Rare find rates
+
+- Six named rare finds change spawn chance only (Ivan Wong). Effects, stats, and the depths where they can appear stay the same
+- Brass lamp is 5% (was 7.5%). Slayer is 5 points lower at every eligible depth, from 10% on D10 to 20% on V5, and still starts on dungeon 10
+- Staff of power is 2 points lower at every eligible depth, from 11% on D8 to 23% on V5, and still starts on dungeon 8
+- Sword of slashing, elven chain, and the orb of enlightenment use the closest 1–120 step: 7.5%, 8.333%, and 8.333%. The exact requested 7.333%, 8.133%, and 8.233% are not on that roll
+- Other rare-item chances, caves, doors, combat, spells, and shops are unchanged
+
 ## 1.3.28 — Teleport landings
 
 - A teleport stays on the map (Ivan Wong). Scrolls, the teleport spell, traps, and elevators never drop you outside the level

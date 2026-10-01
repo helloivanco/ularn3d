@@ -98,27 +98,31 @@ const boot = () => {
   return context;
 };
 
-test("artifact thresholds are the Ularn constants, brass lamp unchanged", () => {
+test("artifact thresholds keep one-per-floor order and the 1.3.29 named rates", () => {
   const create = read("public/engine/create.js");
   assert.match(create, /const ULARN_ARTIFACT_SIDES = 120/);
   assert.match(create, /const ULARN_ARTIFACT_UNDER = 8/);
-  assert.match(create, /const ULARN_BRASS_LAMP_UNDER = 10/);
-  assert.match(create, /const ULARN_SLAYER_GATE = 85/);
+  assert.match(create, /const ULARN_BRASS_LAMP_UNDER = 7/);
+  assert.match(create, /const ULARN_SLASHING_UNDER = 10/);
+  assert.match(create, /const ULARN_ELVEN_CHAIN_UNDER = 11/);
+  assert.match(create, /const ULARN_ORB_UNDER = 11/);
+  assert.match(create, /const ULARN_SLAYER_GATE = 90/);
+  assert.match(create, /const ULARN_STAFF_GATE = 87/);
   assert.match(create, /OBRASSLAMP,\s+player\.LAMP,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_BRASS_LAMP_UNDER/);
   assert.match(create, /OWWAND,\s+player\.WAND,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /OORBOFDRAGON,\s+player\.SLAYING,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /OSPIRITSCARAB,\s+player\.NEGATESPIRIT,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /OCUBEofUNDEAD,\s+player\.CUBEofUNDEAD,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /ONOTHEFT,\s+player\.NOTHEFT,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OSWORDofSLASHING,\s+player\.SLASH,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
+  assert.match(create, /OSWORDofSLASHING,\s+player\.SLASH,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_SLASHING_UNDER/);
   assert.match(create, /OHAMMER,\s+player\.BESSMANN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /OSPHTALISMAN,\s+player\.TALISMAN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.match(create, /OHANDofFEAR,\s+player\.HAND,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OORB,\s+player\.ORB,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OELVENCHAIN,\s+player\.ELVEN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
+  assert.match(create, /OORB,\s+player\.ORB,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ORB_UNDER/);
+  assert.match(create, /OELVENCHAIN,\s+player\.ELVEN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ELVEN_CHAIN_UNDER/);
   assert.match(create, /OSLAYER,\s+player\.SLAY,\s+!created && depth >= 10 && rnd\(100\) > \(ULARN_SLAYER_GATE - \(depth - 10\)\)/);
   assert.match(create, /OVORPAL,\s+player\.VORPAL,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OPSTAFF,\s+player\.STAFF,\s+!created && depth >= 8 && rnd\(100\) > \(ULARN_SLAYER_GATE - \(depth - 10\)\)/);
+  assert.match(create, /OPSTAFF,\s+player\.STAFF,\s+!created && depth >= 8 && rnd\(100\) > \(ULARN_STAFF_GATE - \(depth - 10\)\)/);
   assert.match(create, /OLIFEPRESERVER,\s+player\.PRESERVER,\s+!created && depth >= 5 && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/);
   assert.doesNotMatch(create, /rnd\(120\) < 1[123]/);
   assert.doesNotMatch(create, /82 - \(depth - 10\)/);

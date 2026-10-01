@@ -15,13 +15,27 @@
 let STARTED_LEVEL_CREATION = false;
 
 /*
- * Ularn create.c artifact rolls. rnd(n) is 1..n, so rnd(120) < 8 is 7/120.
- * Brass lamp stays at the current raised threshold (not the classic < 8).
+ * Ularn create.c artifact rolls. rnd(n) is 1..n, so a threshold of 8 is 7/120.
+ * 1.3.29 changes six named rates. Every other artifact stays at threshold 8.
+ *
+ * Brass lamp: 6/120 = 5%. Threshold 7.
+ * Sword of slashing: requested 7.333% is not on a 1–120 roll; nearest is 9/120 = 7.5%. Threshold 10.
+ * Elven chain: requested 8.133%; nearest is 10/120 = 8.333%. Threshold 11.
+ * Orb of enlightenment: requested 8.233%; nearest is 10/120 = 8.333%. Threshold 11.
+ *
+ * Slayer and the staff of power keep rnd(100) > (gate - (depth - 10)).
+ * That is one point per depth. A higher gate removes that many points at every depth.
+ * Slayer gate 90 is the old gate 85 minus 5 points. Staff gate 87 is the old gate 85 minus 2 points.
+ * Slayer still starts at depth 10. The staff still starts at depth 8.
  */
 const ULARN_ARTIFACT_SIDES = 120;
 const ULARN_ARTIFACT_UNDER = 8;
-const ULARN_BRASS_LAMP_UNDER = 10;
-const ULARN_SLAYER_GATE = 85;
+const ULARN_BRASS_LAMP_UNDER = 7;
+const ULARN_SLASHING_UNDER = 10;
+const ULARN_ELVEN_CHAIN_UNDER = 11;
+const ULARN_ORB_UNDER = 11;
+const ULARN_SLAYER_GATE = 90;
+const ULARN_STAFF_GATE = 87;
 
 /* Door provenance for this level: "canned" | "treasure-room". */
 let levelFromCanned = false;
@@ -1332,23 +1346,23 @@ function makeobject(depth) {
   if (ULARN) {
     // only one of these per level — coexistence order unchanged
     var created = false;
-    /* Brass lamp keeps the current threshold. Classic Ularn is rnd(120) < 8. */
+    /* Brass lamp is 6/120. Classic Ularn is threshold 8. */
     created |= createArtifact(OBRASSLAMP,       player.LAMP,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_BRASS_LAMP_UNDER);
     created |= createArtifact(OWWAND,           player.WAND,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(OORBOFDRAGON,     player.SLAYING,      !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(OSPIRITSCARAB,    player.NEGATESPIRIT, !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(OCUBEofUNDEAD,    player.CUBEofUNDEAD, !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(ONOTHEFT,         player.NOTHEFT,      !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
-    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OSWORDofSLASHING, player.SLASH,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_SLASHING_UNDER);
     created |= createArtifact(OHAMMER,          player.BESSMANN,     !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(OSPHTALISMAN,     player.TALISMAN,     !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
     created |= createArtifact(OHANDofFEAR,      player.HAND,         !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
-    created |= createArtifact(OORB,             player.ORB,          !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
-    created |= createArtifact(OELVENCHAIN,      player.ELVEN,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
+    created |= createArtifact(OORB,             player.ORB,          !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ORB_UNDER);
+    created |= createArtifact(OELVENCHAIN,      player.ELVEN,        !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ELVEN_CHAIN_UNDER);
     created |= createArtifact(OSLAYER,          player.SLAY,         !created && depth >= 10 && rnd(100) > (ULARN_SLAYER_GATE - (depth - 10)));
-    /* Vorpal is in Ularn 1.5 create.c at rnd(120) < 8. The 3D build had raised it to < 10. */
+    /* Vorpal stays at threshold 8. The 3D build had raised it above that. */
     created |= createArtifact(OVORPAL,          player.VORPAL,       !created && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
-    created |= createArtifact(OPSTAFF,          player.STAFF,        !created && depth >= 8 && rnd(100) > (ULARN_SLAYER_GATE - (depth - 10)));
+    created |= createArtifact(OPSTAFF,          player.STAFF,        !created && depth >= 8 && rnd(100) > (ULARN_STAFF_GATE - (depth - 10)));
     /* Life preservation is not in Ularn 1.5. This port's depth >= 5 and rnd(120) < 8 is unchanged. */
     created |= createArtifact(OLIFEPRESERVER,   player.PRESERVER,    !created && depth >= 5 && rnd(ULARN_ARTIFACT_SIDES) < ULARN_ARTIFACT_UNDER);
   }

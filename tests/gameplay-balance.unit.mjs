@@ -21,19 +21,107 @@ test("giant centipede and ant strength drain is 20%", () => {
   assert.match(monster, /stung you! You feel weaker/);
 });
 
-test("brass lamp stays at the current threshold, not classic rnd(120) < 8", () => {
-  assert.match(create, /const ULARN_BRASS_LAMP_UNDER = 10/);
-  assert.match(create, /OBRASSLAMP[\s\S]*ULARN_BRASS_LAMP_UNDER/);
+const readConst = (name) => {
+  const match = create.match(new RegExp(`const ${name} = (\\d+)`));
+  assert.ok(match, `${name} is missing`);
+  return Number(match[1]);
+};
+
+/* rnd(n) is 1..n, so rnd(sides) < under succeeds (under - 1) times. */
+const underPercent = (under, sides) => ((under - 1) / sides) * 100;
+
+/* rnd(100) > (gate - (depth - 10)) succeeds once per point below 100. */
+const depthPercent = (gate, depth) => {
+  const threshold = gate - (depth - 10);
+  let hits = 0;
+  for (let roll = 1; roll <= 100; roll++) if (roll > threshold) hits++;
+  return hits;
+};
+
+test("brass lamp is 6/120 (5%), not the previous threshold of 10", () => {
+  assert.equal(readConst("ULARN_BRASS_LAMP_UNDER"), 7);
+  assert.equal(underPercent(readConst("ULARN_BRASS_LAMP_UNDER"), 120), 5);
+  assert.match(create, /OBRASSLAMP,\s+player\.LAMP,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_BRASS_LAMP_UNDER/);
 });
 
-test("rare artifacts use original Ularn rnd(120) < 8 and Slayer depth gate 85", () => {
-  assert.match(create, /const ULARN_ARTIFACT_UNDER = 8/);
-  assert.match(create, /OSWORDofSLASHING[\s\S]*ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OHAMMER[\s\S]*ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OVORPAL[\s\S]*ULARN_ARTIFACT_UNDER/);
-  assert.match(create, /OSLAYER[\s\S]*ULARN_SLAYER_GATE - \(depth - 10\)/);
+test("rare artifacts keep threshold 8 except the six named 1.3.29 rates", () => {
+  assert.equal(readConst("ULARN_ARTIFACT_SIDES"), 120);
+  assert.equal(readConst("ULARN_ARTIFACT_UNDER"), 8);
+  assert.equal(readConst("ULARN_SLASHING_UNDER"), 10);
+  assert.equal(readConst("ULARN_ELVEN_CHAIN_UNDER"), 11);
+  assert.equal(readConst("ULARN_ORB_UNDER"), 11);
+  assert.equal(readConst("ULARN_SLAYER_GATE"), 90);
+  assert.equal(readConst("ULARN_STAFF_GATE"), 87);
+  assert.match(create, /OSWORDofSLASHING,\s+player\.SLASH,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_SLASHING_UNDER/);
+  assert.match(create, /OELVENCHAIN,\s+player\.ELVEN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ELVEN_CHAIN_UNDER/);
+  assert.match(create, /OORB,\s+player\.ORB,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ORB_UNDER/);
+  assert.match(create, /OSLAYER,\s+player\.SLAY,\s+!created && depth >= 10 && rnd\(100\) > \(ULARN_SLAYER_GATE - \(depth - 10\)\)/);
+  assert.match(create, /OPSTAFF,\s+player\.STAFF,\s+!created && depth >= 8 && rnd\(100\) > \(ULARN_STAFF_GATE - \(depth - 10\)\)/);
+  for (const line of [
+    /OWWAND,\s+player\.WAND,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OORBOFDRAGON,\s+player\.SLAYING,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OSPIRITSCARAB,\s+player\.NEGATESPIRIT,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OCUBEofUNDEAD,\s+player\.CUBEofUNDEAD,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /ONOTHEFT,\s+player\.NOTHEFT,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OHAMMER,\s+player\.BESSMANN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OSPHTALISMAN,\s+player\.TALISMAN,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OHANDofFEAR,\s+player\.HAND,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OVORPAL,\s+player\.VORPAL,\s+!created && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+    /OLIFEPRESERVER,\s+player\.PRESERVER,\s+!created && depth >= 5 && rnd\(ULARN_ARTIFACT_SIDES\) < ULARN_ARTIFACT_UNDER/,
+  ]) {
+    assert.match(create, line);
+  }
   assert.doesNotMatch(create, /rnd\(120\) < 1[123]/);
   assert.doesNotMatch(create, /82 - \(depth - 10\)/);
+  assert.doesNotMatch(create, /OPSTAFF[\s\S]{0,160}ULARN_SLAYER_GATE/);
+});
+
+test("named rare-item rolls match the 1.3.29 discrete table", (t) => {
+  const sides = readConst("ULARN_ARTIFACT_SIDES");
+  const rows = [
+    ["Brass Lamp", 7.5, -2.5, underPercent(readConst("ULARN_BRASS_LAMP_UNDER"), sides)],
+    ["Sword of Slashing", 5.833333, 1.5, underPercent(readConst("ULARN_SLASHING_UNDER"), sides)],
+    ["Elven Chain", 5.833333, 2.3, underPercent(readConst("ULARN_ELVEN_CHAIN_UNDER"), sides)],
+    ["Orb of Enlightenment", 5.833333, 2.4, underPercent(readConst("ULARN_ORB_UNDER"), sides)],
+  ];
+  const slayerGate = readConst("ULARN_SLAYER_GATE");
+  const staffGate = readConst("ULARN_STAFF_GATE");
+  const depthName = (depth) => (depth <= 15 ? `D${depth}` : `V${depth - 15}`);
+  for (let depth = 10; depth <= 20; depth++) {
+    rows.push([
+      `Slayer ${depthName(depth)}`,
+      15 + (depth - 10),
+      -5,
+      depthPercent(slayerGate, depth),
+    ]);
+  }
+  for (let depth = 8; depth <= 20; depth++) {
+    rows.push([
+      `Staff ${depthName(depth)}`,
+      13 + (depth - 8),
+      -2,
+      depthPercent(staffGate, depth),
+    ]);
+  }
+
+  assert.equal(rows[0][3], 5);
+  assert.equal(rows[1][3], 7.5);
+  assert.equal(rows[2][3], (10 / 120) * 100);
+  assert.equal(rows[3][3], (10 / 120) * 100);
+  /* Exact 7.333%, 8.133%, and 8.233% are not on a 1–120 roll. */
+  assert.notEqual(rows[1][3], 7.333333);
+  assert.ok(Math.abs(rows[1][3] - (rows[1][1] + rows[1][2])) < Math.abs((8 / 120) * 100 - (rows[1][1] + rows[1][2])));
+  assert.ok(Math.abs(rows[2][3] - (rows[2][1] + rows[2][2])) < Math.abs((9 / 120) * 100 - (rows[2][1] + rows[2][2])));
+  assert.ok(Math.abs(rows[3][3] - (rows[3][1] + rows[3][2])) < Math.abs((9 / 120) * 100 - (rows[3][1] + rows[3][2])));
+
+  for (const [label, oldPct, delta, actual] of rows) {
+    if (label.startsWith("Slayer") || label.startsWith("Staff")) {
+      assert.equal(actual, oldPct + delta, label);
+    }
+    t.diagnostic(
+      `${label.padEnd(22)} old ${oldPct.toFixed(3)}%  change ${delta.toFixed(3)}  new ${actual.toFixed(3)}%`,
+    );
+  }
 });
 
 test("loot goblin flees, despawns, and drops equal-chance loot", () => {
