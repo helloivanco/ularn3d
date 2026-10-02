@@ -133,7 +133,7 @@ test("120 generated levels keep stair bands, canned doors, and treasure-room doo
   const summary = vm.runInContext(
     `
     const W = MAXX;
-    let built = 0, failed = 0, procDoors = 0, cannedMismatch = 0, stairBad = 0, treasureBad = 0;
+    let built = 0, failed = 0, procDoors = 0, cannedMismatch = 0, stairBad = 0, treasureBad = 0, unreachable = 0;
     const failDepths = [];
     const doorCells = () => {
       const cells = [];
@@ -157,26 +157,43 @@ test("120 generated levels keep stair bands, canned doors, and treasure-room doo
           failDepths.push(depth);
           continue;
         }
-        if (!levelFromCanned) {
-          const report = walkableReport(depth);
-          if (report.unreachable !== 0 || report.unreachableStairs !== 0 || report.unreachablePopulated !== 0 || report.invalidDoors !== 0) {
-            failed++;
-            failDepths.push(depth);
-            continue;
-          }
+        const report = walkableReport(depth);
+        if (report.unreachable !== 0 || report.unreachableStairs !== 0 || report.unreachablePopulated !== 0 || report.invalidDoors !== 0) {
+          failed++;
+          unreachable += report.unreachable || 0;
+          failDepths.push(depth);
+          continue;
         }
         const doors = doorCells();
         if (levelFromCanned) {
           const maze = MAZES[USED_MAZES[USED_MAZES.length - 1]];
           const expect = [];
+          const chartFloor = (ch) => !!ch && ch !== "#";
           for (let i = 0; i < maze.length; i++) {
-            if (maze[i] === "D") expect.push((i % W) + "," + ((i / W) | 0));
+            if (maze[i] !== "D") continue;
+            const x = i % W;
+            const y = (i / W) | 0;
+            const north = y > 0 ? maze[i - W] : "#";
+            const south = y + 1 < MAXY ? maze[i + W] : "#";
+            const east = x + 1 < W ? maze[i + 1] : "#";
+            const west = x > 0 ? maze[i - 1] : "#";
+            if (chartFloor(north) || chartFloor(south) || chartFloor(east) || chartFloor(west)) {
+              expect.push(x + "," + y);
+            }
           }
           expect.sort();
-          if (expect.join("|") !== doors.join("|")) cannedMismatch++;
+          for (const cell of expect) {
+            if (!doors.includes(cell) || doorProvenance.get(cell) !== "canned") cannedMismatch++;
+          }
+          for (const key of doors) {
+            if (expect.includes(key)) continue;
+            const [x, y] = key.split(",").map(Number);
+            if (doorProvenance.get(key) !== "repair" || !repairDoorValid(x, y)) cannedMismatch++;
+          }
         } else {
           for (const key of doors) {
-            if (doorProvenance.get(key) !== "treasure-room") procDoors++;
+            const source = doorProvenance.get(key);
+            if (source !== "treasure-room" && source !== "repair") procDoors++;
           }
           if (!doorsFollowProvenance()) treasureBad++;
         }
@@ -191,7 +208,7 @@ test("120 generated levels keep stair bands, canned doors, and treasure-room doo
         if (depth === 20 && (countItem(OPOTION, 21) < 1 || countItem(OPIT) < 1 || countItem(OIVTRAPDOOR) < 1)) stairBad++;
       }
     }
-    ({ built, failed, failDepths, procDoors, cannedMismatch, stairBad, treasureBad });
+    ({ built, failed, failDepths, procDoors, cannedMismatch, stairBad, treasureBad, unreachable });
     `,
     ctx,
   );
@@ -202,4 +219,5 @@ test("120 generated levels keep stair bands, canned doors, and treasure-room doo
   assert.equal(summary.cannedMismatch, 0);
   assert.equal(summary.stairBad, 0);
   assert.equal(summary.treasureBad, 0);
+  assert.equal(summary.unreachable, 0);
 });

@@ -123,14 +123,84 @@ test("a rock-locked floor is unreachable from the carve", () => {
   assert.ok(result.after >= 1);
 });
 
-test("1000 procedural levels per cave and volcano depth are fully reachable", { timeout: 1_200_000 }, () => {
+test("a sealed room with no doorway is joined to the dungeon", () => {
+  const ctx = boot();
+  const result = vm.runInContext(
+    `
+    forceMazeSource = "procedural";
+    const built = generateFreshLevel(4);
+    const tx = 8, ty = 6, w = 7, h = 6;
+    for (let y = ty; y < ty + h; y++) {
+      for (let x = tx; x < tx + w; x++) {
+        setItem(x, y, OWALL);
+        setMonster(x, y, null);
+        doorProvenance.delete(x + "," + y);
+      }
+    }
+    let interior = 0;
+    for (let y = ty + 1; y < ty + h - 1; y++) {
+      for (let x = tx + 1; x < tx + w - 1; x++) {
+        setItem(x, y, OEMPTY);
+        interior++;
+      }
+    }
+    const before = walkableReport(4).unreachable;
+    const joined = repairPlayableRegions(4);
+    const after = walkableReport(4);
+    const net = networkFromStart(4);
+    let interiorReach = 0;
+    let repairDoors = 0;
+    for (let y = ty + 1; y < ty + h - 1; y++) {
+      for (let x = tx + 1; x < tx + w - 1; x++) {
+        if (net.has(x + "," + y)) interiorReach++;
+      }
+    }
+    for (let y = ty; y < ty + h; y++) {
+      for (let x = tx; x < tx + w; x++) {
+        const it = itemAt(x, y);
+        if (!it || !it.matches(OCLOSEDDOOR)) continue;
+        if (doorProvenance.get(x + "," + y) === "repair" && repairDoorValid(x, y)) repairDoors++;
+      }
+    }
+    const wallBlocked = playerCanStep(tx + 1, ty + 1, tx, ty + 1) === false;
+    forceMazeSource = null;
+    ({
+      builtOk: built.ok,
+      before,
+      joined,
+      afterUnreachable: after.unreachable,
+      afterInvalid: after.invalidDoors,
+      interior,
+      interiorReach,
+      repairDoors,
+      wallBlocked,
+    });
+    `,
+    ctx,
+  );
+  assert.equal(result.builtOk, true);
+  assert.ok(result.before > 0);
+  assert.equal(result.joined, true);
+  assert.equal(result.afterUnreachable, 0);
+  assert.equal(result.afterInvalid, 0);
+  assert.equal(result.interiorReach, result.interior);
+  assert.ok(result.repairDoors >= 1);
+  assert.equal(result.wallBlocked, true);
+});
+
+test("1000 maps per cave and volcano depth and source are fully reachable", { timeout: 2_700_000 }, () => {
   const ctx = boot();
   const summary = vm.runInContext(
     `
-    forceMazeSource = "procedural";
-    const depths = [];
-    for (let depth = 1; depth <= 14; depth++) depths.push(depth);
-    for (let depth = 16; depth <= 19; depth++) depths.push(depth);
+    const jobs = [];
+    for (let depth = 1; depth <= 20; depth++) {
+      if (depth === 1) jobs.push({ depth, source: "procedural" });
+      else if (depth === 15 || depth === 20) jobs.push({ depth, source: "canned" });
+      else {
+        jobs.push({ depth, source: "procedural" });
+        jobs.push({ depth, source: "canned" });
+      }
+    }
     const perDepth = [];
     const failures = [];
     let levels = 0;
@@ -142,7 +212,9 @@ test("1000 procedural levels per cave and volcano depth are fully reachable", { 
     let attemptsSum = 0;
     let attemptsMax = 0;
     let gaveUp = 0;
-    for (const depth of depths) {
+    for (const job of jobs) {
+      const depth = job.depth;
+      forceMazeSource = job.source;
       let n = 0;
       let unreach = 0;
       let stairsBad = 0;
@@ -151,6 +223,7 @@ test("1000 procedural levels per cave and volcano depth are fully reachable", { 
       let attemptSum = 0;
       let attemptMax = 0;
       for (let i = 0; i < 1000; i++) {
+        USED_MAZES = [];
         const built = generateFreshLevel(depth);
         const report = built.report || walkableReport(depth);
         n++;
@@ -197,6 +270,7 @@ test("1000 procedural levels per cave and volcano depth are fully reachable", { 
       }
       perDepth.push({
         depth,
+        source: job.source,
         levels: n,
         attemptsSum: attemptSum,
         attemptsMax: attemptMax,
@@ -224,7 +298,7 @@ test("1000 procedural levels per cave and volcano depth are fully reachable", { 
     `,
     ctx,
   );
-  assert.equal(summary.levels, 18000);
+  assert.equal(summary.levels, 37000);
   assert.equal(summary.unreachableWalkable, 0);
   assert.equal(summary.unreachableStairs, 0);
   assert.equal(summary.unreachablePopulated, 0);

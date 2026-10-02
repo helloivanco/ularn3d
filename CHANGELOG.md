@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.30 — Reachable caves
+
+- Every cave and volcano floor can be walked from where you enter (Ivan Wong). A room or hallway with no way in is joined by a door, or it is not built
+- Original chart floors keep their rooms. A sealed room gets a door into the cavern you can already travel
+- Stairs, monsters, and items go down after that, and only on tiles you can reach
+- Rare-item chances, combat, town, and teleport landings are unchanged
+
 ## 1.3.29 — Rare find rates
 
 - Six named rare finds change spawn chance only (Ivan Wong). Effects, stats, and the depths where they can appear stay the same

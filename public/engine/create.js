@@ -37,10 +37,12 @@ const ULARN_ORB_UNDER = 11;
 const ULARN_SLAYER_GATE = 90;
 const ULARN_STAFF_GATE = 87;
 
-/* Door provenance for this level: "canned" | "treasure-room". */
+/* Door provenance for this level: "canned" | "treasure-room" | "repair". */
 let levelFromCanned = false;
 let doorProvenance = new Map();
 let treasureRoomDoors = [];
+/* Doors and passages added to join a sealed room or hallway to the start. */
+let repairLinks = 0;
 
 /* Procedural carve origin. Canned charts do not set this. */
 let eatAnchor = null;
@@ -55,6 +57,8 @@ let levelStructureRejected = false;
 let placementNetwork = null;
 /* null | "procedural" | "canned" — tests pin a source; the game leaves this null. */
 let forceMazeSource = null;
+/* Start cell for this attempt. Cleared when that tile stops being floor. */
+let levelEntry = null;
 /* Last attempt, for the connectivity audit. */
 let lastLevelGen = null;
 
@@ -97,6 +101,8 @@ function resetDeferredPopulation() {
   pendingVolcanoMons = [];
   levelStructureRejected = false;
   placementNetwork = null;
+  repairLinks = 0;
+  levelEntry = null;
 }
 
 function newcavelevel(depth) {
@@ -127,9 +133,10 @@ function newcavelevel(depth) {
   }
 
   /*
-   * Build the level, then keep it only when the walkable floor is one
-   * network from the player's start. A failed roll is discarded. Nothing
-   * is dug to stitch it together.
+   * Build the level and keep it only when every playable tile is on the
+   * player's network. A sealed room is joined by a real door or passage,
+   * or it is not left on the map. Retries are bounded. The fallback still
+   * has to be walkable.
    */
   const built = generateFreshLevel(depth);
   if (!built.ok) {
@@ -444,18 +451,34 @@ function createDepthLoot(depth) {
 
 /*
  * One cave attempt: maze, original rooms, original doors, then a reachability
- * check. Stairs, monsters, and items are placed only after that check passes.
- * A disconnected procedural floor is discarded with its seed. No spine, no
- * random corridor, no extra door.
+ * repair. Stairs, monsters, and items are placed only after the floor is one
+ * network. Canned charts keep their rooms; a sealed room gets a door.
  */
+function finishLevelPopulation(depth) {
+  placementNetwork = networkFromStart(depth);
+  placeLevelStairs(depth);
+  ensureSpecialLevelArtifacts(depth);
+  placeDeferredMonsters(depth);
+  placeDeferredTreasureLoot(depth);
+  makeobject(depth);
+  enforceDoorProvenance();
+  updateWalls();
+  /* Placement does not seal a passage. Repair again if a door was rejected. */
+  repairPlayableRegions(depth);
+  enforceDoorProvenance();
+  updateWalls();
+}
+
 function generateFreshLevel(depth) {
   let playable = false;
   let seed = 0;
   let report = null;
   let attempts = 0;
+  let populated = false;
 
   for (let attempt = 1; attempt <= LEVEL_GEN_ATTEMPT_CAP && !playable; attempt++) {
     attempts = attempt;
+    populated = false;
     seed = beginLevelAttempt(drawLevelSeed());
     try {
       initNewLevel(depth);
@@ -466,38 +489,59 @@ function generateFreshLevel(depth) {
         makemaze(depth);
         makeobject(depth);
         playable = true;
+        populated = true;
         report = { walkable: 0, reachable: 0, unreachable: 0, stairs: 0, unreachableStairs: 0, unreachablePopulated: 0, doors: 0, invalidDoors: 0 };
         break;
       }
 
-      /* 1–3. eat(), original open rectangles / treasure rooms, legitimate doors. */
+      /* 1–2. eat() or a canned chart, original rooms, legitimate doors. */
       makemaze(depth);
       enforceDoorProvenance();
 
-      /* 4–5. Procedural floors must be one network. Canned charts are not rewritten. */
+      /* 3–5. Join sealed rooms, then require one player network. */
+      repairPlayableRegions(depth);
       report = walkableReport(depth);
-      const structureOk = levelFromCanned
-        ? true
-        : report.unreachable === 0 && !levelStructureRejected;
+      const structureOk = report.unreachable === 0 && !levelStructureRejected;
       if (!structureOk) continue;
 
-      placementNetwork = networkFromStart(depth);
+      /* 6–9. Stairs and population only on the reachable floor. */
+      finishLevelPopulation(depth);
+      populated = true;
 
-      /* 6–7. Stairs only on tiles reachable from the start. */
-      placeLevelStairs(depth);
-      ensureSpecialLevelArtifacts(depth);
+      /* 10. Stairs, monsters, items, and every other playable tile. */
+      report = walkableReport(depth);
+      playable = levelTraversalOk(depth) && contentReachable(depth, report);
+    } finally {
+      endLevelAttempt();
+    }
+  }
 
-      /* 8. Monsters, including treasure-room and volcano-rect monsters. */
-      placeDeferredMonsters(depth);
-
-      /* 9. Items, including treasure-room loot. Stairs are already placed. */
-      placeDeferredTreasureLoot(depth);
-      makeobject(depth);
-
-      enforceDoorProvenance();
-      updateWalls();
-
-      /* 10. Every stair, monster, and item on a procedural floor is reachable. */
+  if (!playable && depth !== 0) {
+    seed = beginLevelAttempt((seed >>> 0) || 1);
+    try {
+      if (!populated) {
+        repairPlayableRegions(depth);
+        eraseUnreachablePlayable(depth, false);
+        finishLevelPopulation(depth);
+        populated = true;
+      } else {
+        repairPlayableRegions(depth);
+        eraseUnreachablePlayable(depth, false);
+        enforceDoorProvenance();
+        updateWalls();
+      }
+      report = walkableReport(depth);
+      if (report.unreachable !== 0 || report.unreachablePopulated !== 0 || report.unreachableStairs !== 0) {
+        eraseUnreachablePlayable(depth, true);
+        placementNetwork = networkFromStart(depth);
+        placeLevelStairs(depth);
+        ensureSpecialLevelArtifacts(depth);
+        enforceDoorProvenance();
+        updateWalls();
+        repairPlayableRegions(depth);
+        enforceDoorProvenance();
+        updateWalls();
+      }
       report = walkableReport(depth);
       playable = levelTraversalOk(depth) && contentReachable(depth, report);
     } finally {
@@ -511,6 +555,7 @@ function generateFreshLevel(depth) {
     seed,
     attempts,
     canned: levelFromCanned,
+    repairLinks,
     report,
   };
   return lastLevelGen;
@@ -543,6 +588,7 @@ function makemaze(k) {
 
   if (useCanned && cannedMapsAvailable() && cannedlevel(k)) {
     if (k == 1) placeHomeEntrance();
+    levelEntry = null;
     return;
   }
 
@@ -601,6 +647,7 @@ function makemaze(k) {
   }
 
   if (k == 1) placeHomeEntrance();
+  levelEntry = null;
 }
 
 /* Walkable network: walls block; closed doors count (the player can open them). */
@@ -610,6 +657,10 @@ function isNetworkTile(x, y) {
   return !!(item && !item.matches(OWALL));
 }
 
+/*
+ * Orthogonal flood. Teleport landings (1.3.28) still use this and do not
+ * treat a diagonal touch as a connection.
+ */
 function floodNetworkFrom(sx, sy, seen) {
   if (!isNetworkTile(sx, sy) || seen.has(`${sx},${sy}`)) return;
   const q = [[sx, sy]];
@@ -627,6 +678,45 @@ function floodNetworkFrom(sx, sy, seen) {
   }
 }
 
+/*
+ * Real movement. Orthogonal steps cross open floor and a closed door the
+ * player can open. Diagonal steps match moveplayer: a closed door on either
+ * corner blocks the cut. Walls are never steps.
+ */
+function playerCanStep(x, y, nx, ny) {
+  if (!isNetworkTile(nx, ny)) return false;
+  const dx = nx - x;
+  const dy = ny - y;
+  if (dx === 0 && dy === 0) return false;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return false;
+  if (dx === 0 || dy === 0) return true;
+  const cornerA = itemAt(x + dx, y);
+  const cornerB = itemAt(x, y + dy);
+  if (cornerA && cornerA.matches(OCLOSEDDOOR)) return false;
+  if (cornerB && cornerB.matches(OCLOSEDDOOR)) return false;
+  return true;
+}
+
+function floodPlayerFrom(sx, sy, seen) {
+  if (!isNetworkTile(sx, sy) || seen.has(`${sx},${sy}`)) return;
+  const q = [[sx, sy]];
+  seen.add(`${sx},${sy}`);
+  while (q.length) {
+    const [x, y] = q.shift();
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+        const key = `${nx},${ny}`;
+        if (seen.has(key) || !playerCanStep(x, y, nx, ny)) continue;
+        seen.add(key);
+        q.push([nx, ny]);
+      }
+    }
+  }
+}
+
 function largestNetworkComponent() {
   let best = new Set();
   const claimed = new Set();
@@ -635,7 +725,7 @@ function largestNetworkComponent() {
       const key = `${x},${y}`;
       if (claimed.has(key) || !isNetworkTile(x, y)) continue;
       const comp = new Set();
-      floodNetworkFrom(x, y, comp);
+      floodPlayerFrom(x, y, comp);
       for (const k of comp) claimed.add(k);
       if (comp.size > best.size) best = comp;
     }
@@ -725,7 +815,7 @@ function roomWallRect(x, y, room) {
   return x >= room.tx && x < room.tx + room.xsize && y >= room.ty && y < room.ty + room.ysize;
 }
 
-function treasureDoorValid(x, y) {
+function treasureDoorValid(x, y, net) {
   const rec = treasureRoomDoors.find((d) => d.x === x && d.y === y);
   if (!rec) return false;
   const room = rec.room;
@@ -767,26 +857,40 @@ function treasureDoorValid(x, y) {
     if (!lat || !lat.matches(OWALL)) return false;
   }
   /* The outside face has to sit on the carved network the player starts in. */
-  const reached = networkFromStart(level);
+  const reached = net || networkFromStart(level);
   return reached.has(`${exterior[0]},${exterior[1]}`);
 }
 
+/* A chart door the player can stand beside and open. A door in solid rock is not one. */
+function cannedDoorHasFloor(x, y) {
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+    const it = itemAt(x + dx, y + dy);
+    if (it && !it.matches(OWALL)) return true;
+  }
+  return false;
+}
+
 /*
- * Canned doors stay. Treasure-room doors stay only when they are that room's
- * single entrance. Anything else is put back to wall — never opened into a passage.
+ * Canned doors stay when they open onto floor. Treasure-room doors stay when
+ * they are that room's single entrance. Repair doors stay when they join two
+ * floors. Anything else goes back to wall.
  */
 function enforceDoorProvenance() {
   if (level === 0) return;
+  let net = null;
+  const reached = () => net || (net = networkFromStart(level));
   for (let y = 0; y < MAXY; y++) {
     for (let x = 0; x < MAXX; x++) {
       const it = itemAt(x, y);
       if (!isDoorItem(it)) continue;
       const source = doorProvenance.get(`${x},${y}`);
-      if (source === "canned") continue;
-      if (source === "treasure-room" && treasureDoorValid(x, y)) continue;
+      if (source === "canned" && cannedDoorHasFloor(x, y)) continue;
+      if (source === "treasure-room" && treasureDoorValid(x, y, reached())) continue;
+      if (source === "repair" && repairDoorValid(x, y, reached())) continue;
       setItem(x, y, OWALL);
       setMonster(x, y, null);
       doorProvenance.delete(`${x},${y}`);
+      net = null;
     }
   }
 }
@@ -808,6 +912,13 @@ function needsStairsUp(depth) {
 }
 
 function levelStartCell(depth) {
+  if (levelEntry && isNetworkTile(levelEntry.x, levelEntry.y)) return levelEntry;
+  const found = levelStartCellUncached(depth);
+  levelEntry = found;
+  return found;
+}
+
+function levelStartCellUncached(depth) {
   if (!levelFromCanned) {
     if (depth === 1) {
       const exit = findItemXY(OHOMEENTRANCE);
@@ -847,7 +958,7 @@ function networkFromStart(depth) {
   const seen = new Set();
   const start = levelStartCell(depth);
   if (!start) return seen;
-  floodNetworkFrom(start.x, start.y, seen);
+  floodPlayerFrom(start.x, start.y, seen);
   return seen;
 }
 
@@ -882,11 +993,7 @@ function walkableReport(depth) {
       }
       if (door) {
         doors++;
-        const source = doorProvenance.get(key);
-        const valid = levelFromCanned
-          ? source === "canned"
-          : source === "treasure-room" && treasureDoorValid(x, y);
-        if (!valid) invalidDoors++;
+        if (!doorRecordOk(x, y, seen)) invalidDoors++;
       }
       const populated = !!mon || !!(it && !it.matches(OEMPTY) && !it.matches(OWALL) && !door && !isStair);
       if (populated && !reach) unreachablePopulated++;
@@ -905,12 +1012,253 @@ function walkableReport(depth) {
 }
 
 function contentReachable(depth, report) {
-  if (levelFromCanned) return report.unreachableStairs === 0 && report.invalidDoors === 0;
   return report.unreachable === 0
     && report.unreachableStairs === 0
     && report.unreachablePopulated === 0
     && report.invalidDoors === 0
     && !levelStructureRejected;
+}
+
+function isMapBorder(x, y) {
+  return x === 0 || y === 0 || x === MAXX - 1 || y === MAXY - 1;
+}
+
+/* Floor you can stand on. A door is not a side of another door. */
+function doorSideFloor(x, y) {
+  if (!inBounds(x, y)) return false;
+  const it = itemAt(x, y);
+  if (!it || it.matches(OWALL) || isDoorItem(it)) return false;
+  return true;
+}
+
+/* One passage axis, stone on both sides, neither face is rock. */
+function passageDoorGeometry(x, y) {
+  if (isMapBorder(x, y)) return false;
+  const axes = [
+    { sides: [[x, y - 1], [x, y + 1]], lats: [[x - 1, y], [x + 1, y]] },
+    { sides: [[x - 1, y], [x + 1, y]], lats: [[x, y - 1], [x, y + 1]] },
+  ];
+  for (const axis of axes) {
+    if (!doorSideFloor(axis.sides[0][0], axis.sides[0][1])) continue;
+    if (!doorSideFloor(axis.sides[1][0], axis.sides[1][1])) continue;
+    let latOk = true;
+    for (const [lx, ly] of axis.lats) {
+      const lat = itemAt(lx, ly);
+      if (!lat || !lat.matches(OWALL)) latOk = false;
+    }
+    if (latOk) return true;
+  }
+  return false;
+}
+
+function repairDoorValid(x, y, net) {
+  if (!isDoorItem(itemAt(x, y))) return false;
+  if (!passageDoorGeometry(x, y)) return false;
+  const reached = net || networkFromStart(level);
+  return reached.has(`${x},${y}`);
+}
+
+function outsideComponents(main) {
+  const seen = new Set();
+  const comps = [];
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const key = `${x},${y}`;
+      if (main.has(key) || seen.has(key) || !isNetworkTile(x, y)) continue;
+      const comp = new Set();
+      floodPlayerFrom(x, y, comp);
+      for (const k of comp) seen.add(k);
+      comps.push(comp);
+    }
+  }
+  comps.sort((a, b) => a.size - b.size);
+  return comps;
+}
+
+function componentProtected(comp) {
+  for (const key of comp) {
+    const [x, y] = key.split(",").map(Number);
+    const it = itemAt(x, y);
+    if (!it) continue;
+    if (it.matches(OLARNEYE) || it.matches(OHOMEENTRANCE)) return true;
+    if (it.matches(OSTAIRSDOWN) || it.matches(OSTAIRSUP) || it.matches(OVOLUP)) return true;
+    if (it.matches(OPOTION) && it.arg === 21) return true;
+  }
+  return false;
+}
+
+/* A connected treasure room keeps its one door. Its wall is not a shortcut. */
+function connectedTreasureWall(x, y, main) {
+  for (const room of pendingTreasureRooms) {
+    if (!roomWallRect(x, y, room) || roomInterior(x, y, room)) continue;
+    if (main.has(`${room.tx + 1},${room.ty + 1}`)) return true;
+  }
+  return false;
+}
+
+function findDirectRepairDoor(main) {
+  let best = null;
+  for (let y = 1; y < MAXY - 1; y++) {
+    for (let x = 1; x < MAXX - 1; x++) {
+      const it = itemAt(x, y);
+      if (!it || !it.matches(OWALL)) continue;
+      if (connectedTreasureWall(x, y, main)) continue;
+      if (!passageDoorGeometry(x, y)) continue;
+      const axes = [
+        [[x, y - 1], [x, y + 1]],
+        [[x - 1, y], [x + 1, y]],
+      ];
+      let joins = false;
+      for (const [a, b] of axes) {
+        if (!doorSideFloor(a[0], a[1]) || !doorSideFloor(b[0], b[1])) continue;
+        const aIn = main.has(`${a[0]},${a[1]}`);
+        const bIn = main.has(`${b[0]},${b[1]}`);
+        if (aIn !== bIn) joins = true;
+      }
+      if (!joins) continue;
+      const score = y * MAXX + x;
+      if (!best || score < best.score) best = { score, path: [[x, y]] };
+    }
+  }
+  return best;
+}
+
+/* Shortest orthogonal wall path from the start network to some other floor. */
+function findRepairLink(main) {
+  const dist = new Map();
+  const prev = new Map();
+  const q = [];
+  for (const key of main) {
+    dist.set(key, 0);
+    q.push(key);
+  }
+  const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+  let qi = 0;
+  while (qi < q.length) {
+    const key = q[qi++];
+    const [x, y] = key.split(",").map(Number);
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!inBounds(nx, ny)) continue;
+      const nk = `${nx},${ny}`;
+      if (dist.has(nk)) continue;
+      if (isNetworkTile(nx, ny)) {
+        if (main.has(nk)) continue;
+        const walls = [];
+        let cur = key;
+        while (cur && !main.has(cur)) {
+          const [cx, cy] = cur.split(",").map(Number);
+          walls.push([cx, cy]);
+          cur = prev.get(cur);
+        }
+        walls.reverse();
+        if (!walls.length) continue;
+        return { path: walls };
+      }
+      if (isMapBorder(nx, ny)) continue;
+      if (connectedTreasureWall(nx, ny, main)) continue;
+      const wall = itemAt(nx, ny);
+      if (!wall || !wall.matches(OWALL)) continue;
+      dist.set(nk, 1);
+      prev.set(nk, key);
+      q.push(nk);
+    }
+  }
+  return null;
+}
+
+function applyRepairLink(path) {
+  for (const [x, y] of path) {
+    setItem(x, y, OEMPTY);
+    setMonster(x, y, null);
+    doorProvenance.delete(`${x},${y}`);
+  }
+  for (const [x, y] of path) {
+    if (!passageDoorGeometry(x, y)) continue;
+    setItem(x, y, createObject(OCLOSEDDOOR, 0));
+    setMonster(x, y, null);
+    noteDoor(x, y, "repair");
+    repairLinks++;
+    return;
+  }
+  repairLinks++;
+}
+
+function eraseComponent(comp) {
+  for (const key of comp) {
+    const [x, y] = key.split(",").map(Number);
+    setItem(x, y, OWALL);
+    setMonster(x, y, null);
+    doorProvenance.delete(key);
+  }
+  pendingTreasureRooms = pendingTreasureRooms.filter((room) => {
+    for (let y = room.ty + 1; y < room.ty + room.ysize - 1; y++) {
+      for (let x = room.tx + 1; x < room.tx + room.xsize - 1; x++) {
+        if (comp.has(`${x},${y}`)) return false;
+      }
+    }
+    return true;
+  });
+  treasureRoomDoors = treasureRoomDoors.filter((d) => !comp.has(`${d.x},${d.y}`));
+  pendingVolcanoMons = pendingVolcanoMons.filter((rect) => {
+    for (let x = rect.xa; x < rect.xb; x++) {
+      for (let y = rect.ya; y < rect.yb; y++) {
+        if (comp.has(`${x},${y}`)) return false;
+      }
+    }
+    return true;
+  });
+}
+
+/*
+ * Join every sealed room or hallway to the start. A single wall becomes a
+ * door when the throat is legal. A thicker gap becomes the shortest passage,
+ * with a door on that passage when the throat is legal. A pocket that cannot
+ * be joined without opening the map border is not generated.
+ */
+function repairPlayableRegions(depth) {
+  let guard = 64;
+  while (guard-- > 0) {
+    const main = networkFromStart(depth);
+    if (!main.size) return false;
+    const outside = outsideComponents(main);
+    if (!outside.length) {
+      levelStructureRejected = false;
+      return true;
+    }
+    const door = findDirectRepairDoor(main);
+    if (door) {
+      applyRepairLink(door.path);
+      continue;
+    }
+    const link = findRepairLink(main);
+    if (link) {
+      applyRepairLink(link.path);
+      continue;
+    }
+    const victim = outside.find((comp) => !componentProtected(comp));
+    if (!victim) return false;
+    eraseComponent(victim);
+  }
+  return false;
+}
+
+/* Drop playable tiles that are still off the start network. */
+function eraseUnreachablePlayable(depth, force) {
+  let guard = 64;
+  while (guard-- > 0) {
+    const main = networkFromStart(depth);
+    const outside = outsideComponents(main);
+    if (!outside.length) {
+      levelStructureRejected = false;
+      return true;
+    }
+    const victim = force ? outside[0] : outside.find((comp) => !componentProtected(comp));
+    if (!victim) return false;
+    eraseComponent(victim);
+  }
+  return false;
 }
 
 function pickEmptyOnNetwork(net) {
@@ -986,23 +1334,27 @@ function countItem(what, arg) {
   return n;
 }
 
+function doorRecordOk(x, y, net) {
+  const source = doorProvenance.get(`${x},${y}`);
+  if (source === "canned") return cannedDoorHasFloor(x, y);
+  if (source === "treasure-room") return treasureDoorValid(x, y, net);
+  if (source === "repair") return repairDoorValid(x, y, net);
+  return false;
+}
+
 function doorsFollowProvenance() {
+  const net = networkFromStart(level);
   for (let y = 0; y < MAXY; y++) {
     for (let x = 0; x < MAXX; x++) {
       const it = itemAt(x, y);
       if (!isDoorItem(it)) continue;
-      const source = doorProvenance.get(`${x},${y}`);
-      if (levelFromCanned) {
-        if (source !== "canned") return false;
-      } else if (source !== "treasure-room" || !treasureDoorValid(x, y)) {
-        return false;
-      }
+      if (!doorRecordOk(x, y, net)) return false;
     }
   }
   if (!levelFromCanned) {
     for (const rec of treasureRoomDoors) {
       const it = itemAt(rec.x, rec.y);
-      if (!isDoorItem(it) || !treasureDoorValid(rec.x, rec.y)) return false;
+      if (!isDoorItem(it) || !treasureDoorValid(rec.x, rec.y, net)) return false;
     }
   }
   return true;
@@ -1018,10 +1370,8 @@ function levelTraversalOk(depth) {
     return !!(at && main.has(`${at.x},${at.y}`));
   };
 
-  if (!levelFromCanned) {
-    const report = walkableReport(depth);
-    if (report.unreachable !== 0 || levelStructureRejected) return false;
-  }
+  const report = walkableReport(depth);
+  if (report.unreachable !== 0 || levelStructureRejected) return false;
 
   if (needsStairsDown(depth) && !onMain(OSTAIRSDOWN)) return false;
   if (needsStairsUp(depth) && !onMain(OSTAIRSUP)) return false;
