@@ -4,6 +4,7 @@ import { GameAudio } from "./audio.js";
 import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
+import { monsterCardInfo } from "./monster-descriptions.js";
 mountIcons();
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
@@ -231,12 +232,41 @@ for (const [name, icon, description] of classes) {
 $("class-description").textContent = classes[0][2];
 $("continue").hidden = !engine.hasSave();
 $("save-notice").hidden = !engine.hasSave();
+const showMonsterCard = (card, info, event) => {
+  const art = card.querySelector(".monster-card-art");
+  const name = card.querySelector(".monster-card-name");
+  const body = card.querySelector(".monster-card-desc");
+  if (art.getAttribute("src") !== info.art) art.setAttribute("src", info.art);
+  art.classList.toggle("monster-card-cutout", info.art.startsWith("/engine/"));
+  name.textContent = info.name;
+  body.textContent = info.description;
+  card.hidden = false;
+  const margin = 8;
+  const left = Math.min(
+    Math.max(margin, event.clientX + 15),
+    Math.max(margin, innerWidth - card.offsetWidth - margin),
+  );
+  const top = Math.min(
+    Math.max(margin, event.clientY + 18),
+    Math.max(margin, innerHeight - card.offsetHeight - margin),
+  );
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+};
 try {
   world = new World(
     $("world"),
     (tile) => travel(tile),
     (tile, event) => {
       const label = $("tile-label");
+      const card = $("monster-card");
+      const cardInfo = event ? monsterCardInfo(tile?.monster) : null;
+      if (cardInfo) {
+        showMonsterCard(card, cardInfo, event);
+        label.hidden = true;
+        return;
+      }
+      card.hidden = true;
       const info = groundHoverInfo(tile);
       label.hidden = !info;
       label.classList.toggle("tile-label-special", info?.kind === "special");
