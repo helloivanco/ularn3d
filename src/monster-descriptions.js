@@ -1,0 +1,87 @@
+import { monsterArtPath } from "./monster-art.js";
+
+// Original notes for Ularn's own monster list. Keyed by the id in
+// public/engine/monsterdata.js. Not copied from any Monster Manual.
+export const MONSTER_DESCRIPTIONS = Object.freeze({
+  1: "A small cave rodent. Startle one and more may pour out of the cracks.",
+  2: "A short cave-dweller with a few coins and a swing that is mean for its size.",
+  3: "A squat hall raider. It hits harder than its hunched stance suggests.",
+  4: "A lean scavenger that snaps at ankles and almost never carries coin.",
+  5: "A wiry tunnel pest. It bites quickly and travels light.",
+  6: "A coarse cave soldier with a blade and a purse it will not drop alive.",
+  7: "A low coil on the stone. The bite is small, and it still draws blood.",
+  8: "A many-legged crawler. Its sting can leave you weaker than the wound looks.",
+  9: "A darting reptile that strikes from a short lunge, then holds its ground.",
+  10: "A pale cave brute that hoards gold and lumbers behind the things around it.",
+  11: "A worker the size of a dog. The sting can sap your strength.",
+  12: "A hovering orb that watches the hall. It is harder to ignore than to strike.",
+  13: "A grinning thief with deep pockets. It would rather take your gold than trade blows.",
+  14: "A charming figure in the dark. Keep a hand on your pack; it prefers to steal.",
+  15: "A small, spiteful creature that claws harder than its size suggests.",
+  16: "It does not so much bite as ruin. Armor you are wearing grows weaker at its touch.",
+  17: "A slow corpse that still swings. Its pockets are empty.",
+  18: "A large insect that closes in and stabs with a heavy strike.",
+  19: "A plated insect of the deeper caves, tougher than the bugs upstairs.",
+  20: "A hound that breathes a short gout of fire. The bark is the least of it.",
+  21: "A pale reptile of the cold halls. The barbed tail is how it finishes a lunge.",
+  22: "Half rider and half mount, and it fights as both at once.",
+  23: "A towering cave brute with a long reach and a purse of gold.",
+  24: "A white-furred hunter of the colder depths. The claws are the warning.",
+  25: "A pale dragon of the caves. Its breath is cold, and it keeps a hoard.",
+  26: "A keen-eyed wanderer of these halls, light on coin and quick with a weapon.",
+  27: "A clear mass that fills a square and eats what it rolls over, including a blade's edge.",
+  28: "A shifting shape in the hall. Wound it badly and it may become something else.",
+  29: "A spinning column of air that tears at whatever stands in it.",
+  30: "A crackling creature of the mid-caves. The air around it bites before the claws do.",
+  31: "A violet growth that lashes from the stone. Cut it down and something may be left behind.",
+  32: "A pale shade that drains more than blood. Steel still finds it, barely.",
+  33: "A gaunt hunter of the deep dark, fast and very hard to turn aside.",
+  34: "A strange beast of the lower caves, heavy-hitting and little understood.",
+  35: "It does not only strike. The bite is how it meddles with you.",
+  36: "A shaggy herd-beast of the caves, strong enough to trample and sometimes rich in coin.",
+  37: "A stone-bodied thing that shrugs off blows and hits like a pick.",
+  38: "An elegant corpse with a draining touch. It does not stay down easily.",
+  39: "A presence in an empty-looking square. You only pick it out when you can see the unseen.",
+  40: "Unseen hands that throw the room at you. There is no body to bargain with.",
+  41: "She barely strikes. What she touches loses the enchantment you paid for.",
+  42: "A walking heap of rot and vines that soaks punishment and keeps coming.",
+  43: "A sickly carpet of growth. Disturb it and the spores are worse than the bite.",
+  44: "A hulking burrower. Meeting its eyes leaves you confused, and the claws are worse.",
+  45: "The richest gnome in the caves, and the one least interested in sharing.",
+  46: "It is wearing some other shape. You will not know that from a glance.",
+  47: "A sovereign of the flooded dark. A gusher of water hits harder than the claws.",
+  48: "A metal-scaled dragon with a modest hoard and breath you should not stand in.",
+  49: "A venomous dragon of the deep halls. The claws are only half the problem.",
+  50: "A vast burrower. If it reaches you, there is very little left to discuss.",
+  51: "A vicious fighter of the deep caves, hard to wound and uninterested in your gold.",
+  52: "A spectral serpent of the lowest halls, guarded by magic and a terrible bite.",
+  53: "A bright-scaled dragon with a large hoard and a breath of cold.",
+  54: "The richest of the cave dragons. Its mind hits as hard as its hide.",
+  55: "A spiny ball of the deep. Getting close is how it hurts you.",
+  56: "A fire-breathing dragon with a serious hoard. Give the flame room.",
+  57: "The least of the demon lords, which is still far beyond an ordinary cave beast.",
+  58: "A stronger demon lord of these caves. The square looks empty until you can see it.",
+  59: "A demon lord of the deeper pact. Nothing marks the square until it is revealed.",
+  60: "A greater demon lord. Ordinary sight leaves that square looking bare.",
+  61: "A demon lord whose hide turns ordinary blows aside. Unseen, it is just floor.",
+  62: "One of the last demon lords. The hall looks empty until something lets you see it.",
+  63: "The strongest demon lord. It can drain you, and it does not show itself unaided.",
+  64: "A prince of the demon court. Until you can see it, the square looks unoccupied.",
+  65: "The lord at the bottom of these caves. You only see it when the dark is willing.",
+  66: "A rare, skittish goblin. It runs, it drops whatever it is holding, and it does not stay long.",
+});
+
+// The player already sees a visible creature's name. Hit points are on the
+// live monster, but look, the journal, and the HUD never print that number,
+// so the card does not add it.
+export const monsterCardInfo = (monster) => {
+  if (!monster || monster.known !== true) return null;
+  const description = MONSTER_DESCRIPTIONS[monster.id];
+  const art = monsterArtPath(monster.id);
+  if (!description || !art || !monster.name) return null;
+  return {
+    name: monster.name,
+    description,
+    art,
+  };
+};

@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.31 — Monster hover card
+
+- Hovering a creature you can already see opens a small card with its sprite, its name, and a short original note (Ivan Wong)
+- Hidden creatures and mimics stay as they are: the old label, or nothing new, and no extra facts
+- Floor items keep the one-line ground label
+- Hit points stay off the card. The game does not reveal that number
+
 ## 1.3.30 — Reachable caves
 
 - Every cave and volcano floor can be walked from where you enter (Ivan Wong). A room or hallway with no way in is joined by a door, or it is not built

@@ -654,6 +654,9 @@ window.ularn = {
           mon.symbol = plainText3D(monsterlist[mid].char);
           mon.hp = monster.hitpoints;
           mon.color = monsterlist[mid].color;
+          // Mimics wear another creature's name. The hover card is only for
+          // a creature the player can already identify.
+          mon.known = monster.arg !== MIMIC;
           tile.monster = mon;
           actorRev =
             (Math.imul(actorRev, 16777619) ^
