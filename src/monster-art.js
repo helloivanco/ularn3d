@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { contactDisc } from "./models.js";
 
 // Most species use the original, bundled Ularn sprites. The lemming uses an
 // original rodent illustration in the 3D edition; its engine identity is unchanged.
@@ -55,6 +56,7 @@ export function monsterSprite(monster, invalidate = () => {}) {
     materials.set(path, material);
   }
   const group = new THREE.Group();
+  group.add(contactDisc(0.38));
   const artwork = new THREE.Mesh(plane, materials.get(path));
   const rodent = monster.id === 1;
   const width = rodent ? 0.85 : 0.66;

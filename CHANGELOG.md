@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.32 — Clearer caves
+
+- Hall floors and the rock around them use different tints on the same stone (Ivan Wong). The floor reads lighter than the wall
+- Deeper caves and the volcano use a warmer tint on that stone
+- Stairs, doors, and the town exit carry a small unlit mark. Gold and items sit a little brighter on the pictures they already use
+- A flat dark disc sits under you and under creatures, and you have a thin outline. It is not a cast shadow
+- The wall that drops in front of the camera keeps a shorter lip
+- Balanced play stays evenly lit: no fog when you zoom out, no bloom, and no shadow maps
+
 ## 1.3.31 — Monster hover card
 
 - Hovering a creature you can already see opens a small card with its sprite, its name, and a short original note (Ivan Wong)

@@ -119,6 +119,18 @@ const OPOTION_ID = 42;
 const OSCROLL_ID = 41;
 const UNKNOWN_POTION_ART = "/art/items/potion-unknown.png";
 const UNKNOWN_SCROLL_ART = "/art/items/scroll-unknown.png";
+const GOLD_ART = ITEM_ART[18];
+
+// Flat multiply on the sprite that already exists. Above 1 brightens without a new image.
+export const ITEM_SPRITE_TINT = Object.freeze({
+  gold: Object.freeze([1.62, 1.34, 0.74]),
+  item: Object.freeze([1.24, 1.22, 1.16]),
+});
+
+const spriteTint = (path) => {
+  const [r, g, b] = path === GOLD_ART ? ITEM_SPRITE_TINT.gold : ITEM_SPRITE_TINT.item;
+  return new THREE.Color(r, g, b);
+};
 
 const textures = new Map();
 const materials = new Map();
@@ -227,6 +239,7 @@ export function itemSprite(tile, invalidate = () => {}) {
       path,
       new THREE.MeshBasicMaterial({
         map: texture,
+        color: spriteTint(path),
         transparent: true,
         alphaTest: 0.2,
         side: THREE.DoubleSide,
