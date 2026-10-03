@@ -6,11 +6,11 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, surface, surfaceLambert, surfaceBasic, noise } from "./materials.js";
+import { mat, surface, surfaceLambert, surfaceBasic, noise, stoneTint } from "./materials.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
-import { wallHeight } from "./wall-cut.js";
+import { wallHeight, wallLip } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import {
   box,
@@ -529,6 +529,9 @@ export class World {
         floorMaterial: this.floor.material?.type || null,
         floorMapped: !!this.floor.material?.map,
         wallMapped: !!this.walls.material?.map,
+        floorColor: this.floor.material?.color?.getHexString?.() ?? null,
+        wallColor: this.walls.material?.color?.getHexString?.() ?? null,
+        floorAnisotropy: this.floor.material?.map?.anisotropy ?? null,
         toneMapping: this.renderer.toneMapping,
         dustVisible: !!this.dust?.visible,
         waterVisible: !!this.water?.visible,
@@ -808,6 +811,11 @@ export class World {
     this.caps.receiveShadow = cinematic;
     this.player?.traverse((object) => {
       if (!object.isMesh) return;
+      if (object.userData.flatMark) {
+        object.castShadow = false;
+        object.receiveShadow = false;
+        return;
+      }
       object.castShadow = cinematic;
       object.receiveShadow = cinematic;
     });
@@ -826,21 +834,11 @@ export class World {
       : surfaceLambert(kind, color);
   }
   applyFloorMaterials() {
-    if (!this.state) {
-      this.floor.material = this.floorSurface("stone", 0xffffff);
-      this.grassFloor.material = this.floorSurface("grass", 0xffffff);
-      this.walls.material = this.floorSurface("stone", 0x99aba7);
-      this.caps.material = this.floorSurface("stone", 0xb2bbad);
-      return;
-    }
-    const volcano = this.state.level > 15;
-    this.floor.material = this.floorSurface(
-      "stone",
-      this.state.level === 0 ? 0xffffff : volcano ? 0xa77b62 : 0xc0c8c3,
-    );
+    const tint = stoneTint(this.state?.level ?? 0);
+    this.floor.material = this.floorSurface("stone", tint.floor);
     this.grassFloor.material = this.floorSurface("grass", 0xffffff);
-    this.walls.material = this.floorSurface("stone", 0x99aba7);
-    this.caps.material = this.floorSurface("stone", 0xb2bbad);
+    this.walls.material = this.floorSurface("stone", tint.wall);
+    this.caps.material = this.floorSurface("stone", tint.cap);
   }
   markShadowUpdate() {
     this.renderer.shadowMap.needsUpdate = true;
@@ -1035,7 +1033,7 @@ export class World {
       );
       this.scene.fog.color.copy(this.scene.background);
       this.applyLevelLighting();
-      this.floor.material = this.floorSurface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
+      this.applyFloorMaterials();
       this.water.visible = town;
       this.dust.visible = town;
       this.paths = this.townPaths(state.tiles);
@@ -1213,17 +1211,15 @@ export class World {
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       if (rebuildFloors) {
-        const color = this.scratchColor
-          .set(
-            grass
-              ? 0xa0af80
-              : state.level === 0
-                ? 0xb6b49c
-                : state.level > 15
-                  ? 0xc29b81
-                  : 0xb1c0ba,
-          )
-          .multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
+        const color = this.scratchColor.set(
+          grass ? 0xa0af80 : state.level === 0 ? 0xb6b49c : 0xffffff,
+        );
+        // Dungeon variation stays near white so the material multiply is the tint.
+        color.multiplyScalar(
+          state.level === 0 || grass
+            ? 0.82 + noise(t.x, t.y) * 0.23
+            : 0.96 + noise(t.x, t.y) * 0.08,
+        );
         matrix.makeTranslation(t.x, -0.105, t.y);
         const floor = grass ? this.grassFloor : this.floor,
           index = grass ? grassIndex++ : floorIndex++;
@@ -1504,8 +1500,9 @@ export class World {
         this.scratchScale,
       );
       this.walls.setMatrixAt(i, this.scratchMatrix);
-      this.scratchPosition.y = h + 0.025;
-      this.scratchScale.set(1.015, 0.08, 1.015);
+      const lip = wallLip(h, town);
+      this.scratchPosition.y = lip.y;
+      this.scratchScale.set(lip.overhang, lip.thickness, lip.overhang);
       this.scratchMatrix.compose(
         this.scratchPosition,
         this.identityQ,

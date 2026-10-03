@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mat, surface, noise } from "./materials.js";
+import { mat, matBasic, surface, noise } from "./materials.js";
 export { mat } from "./materials.js";
 const shared = new Map();
 const geometry = (key, create) => {
@@ -91,6 +91,77 @@ export function cylinder(g, color, x, y, z, r, h, n = 6) {
     r,
   );
 }
+const CONTACT_DISC = new THREE.MeshBasicMaterial({
+  color: 0x0c1210,
+  transparent: true,
+  opacity: 0.62,
+  depthWrite: false,
+  toneMapped: false,
+});
+const HERO_OUTLINE = new THREE.MeshBasicMaterial({
+  color: 0x101816,
+  side: THREE.BackSide,
+  toneMapped: false,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+
+/** Flat dark disc. Not a shadow map. */
+export function contactDisc(radius = 0.46) {
+  const mesh = new THREE.Mesh(
+    geometry("contact-disc", () => new THREE.CircleGeometry(1, 20)),
+    CONTACT_DISC,
+  );
+  mesh.name = "contact-disc";
+  mesh.userData.flatMark = true;
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.02;
+  mesh.scale.set(radius, radius, 1);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+const unlitAccent = (group, color, x, y, z, w, h, d, name) => {
+  const mesh = new THREE.Mesh(
+    geometry("unlit-accent", () => new THREE.BoxGeometry(1, 1, 1)),
+    matBasic(color, { toneMapped: false }),
+  );
+  mesh.name = name;
+  mesh.userData.flatMark = true;
+  mesh.position.set(x, y, z);
+  mesh.scale.set(w, h, d);
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  group.add(mesh);
+  return mesh;
+};
+
+const addHeroOutline = (root) => {
+  const meshes = [];
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    let parent = obj;
+    while (parent) {
+      if (parent.name === "weapon") return;
+      parent = parent.parent;
+    }
+    meshes.push(obj);
+  });
+  for (const mesh of meshes) {
+    const shell = new THREE.Mesh(mesh.geometry, HERO_OUTLINE);
+    shell.name = "hero-outline";
+    shell.userData.flatMark = true;
+    shell.scale.set(1.09, 1.09, 1.09);
+    shell.castShadow = false;
+    shell.receiveShadow = false;
+    shell.raycast = () => {};
+    mesh.add(shell);
+  }
+};
+
 export function ring(g, color, r = 0.4, y = 0.025) {
   const m = mesh(
     g,
@@ -274,6 +345,7 @@ export function fillWieldedWeapon(grip, weapon = null) {
 export function hero(character = "Adventurer") {
   const g = new THREE.Group(),
     body = new THREE.Group();
+  g.add(contactDisc(0.5));
   g.add(body);
   body.name = "body";
   const colors = {
@@ -347,6 +419,7 @@ export function hero(character = "Adventurer") {
   if (character === "Dwarf") body.scale.set(1.2, 0.83, 1.12);
   if (character === "Ogre") body.scale.set(1.28, 1.2, 1.18);
   ring(g, 0xe6d091, 0.38, 0.012);
+  addHeroOutline(body);
   return g;
 }
 function windowDetail(g, x, y, z, w = 0.25, h = 0.33) {
@@ -569,6 +642,17 @@ export function itemModel(tile) {
       if (up) beam(g, 0xa6b898, [x, 0.3, 0.42], [x, 0.87, -0.4], 0.035);
       else box(g, 0x5c5748, x, 0.14, 0, 0.075, 0.27, 0.92);
     }
+    unlitAccent(
+      g,
+      id === 93 ? 0xffe08a : up ? 0xb6f0bc : 0xffc078,
+      0,
+      up ? 0.78 : 0.48,
+      up ? -0.42 : 0.36,
+      0.62,
+      0.05,
+      0.1,
+      id === 93 ? "town-exit-accent" : "stair-accent",
+    );
     if (blocked) {
       const landing = new THREE.Group();
       landing.name = "stair-blockage";
@@ -601,6 +685,7 @@ export function itemModel(tile) {
         box(g, 0x303c37, 0, y, 0.07, 0.64, 0.06, 0.07);
       orb(g, 0xccae6a, 0.2, 0.56, 0.1, 0.055);
     }
+    unlitAccent(g, 0xf2d27a, 0, 1.02, 0.14, 0.72, 0.045, 0.05, "door-accent");
     return g;
   }
   if (id === 7 || id === 17) {
@@ -900,6 +985,7 @@ export function itemModel(tile) {
 export function monsterModel(monster) {
   const g = new THREE.Group(),
     n = monster.name.toLowerCase();
+  g.add(contactDisc(0.4));
   let c = 0x918876;
   try {
     if (monster.color) c = new THREE.Color(monster.color);

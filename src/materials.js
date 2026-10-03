@@ -156,3 +156,39 @@ export function surfaceLambert(kind, color, extra = {}) {
 export function surfaceBasic(kind, color, extra = {}) {
   return matBasic(color, { map: texture(kind), ...extra });
 }
+
+/** D11 and below, including the volcano, share one warmer stone multiply. */
+export const WARM_STONE_LEVEL = 11;
+
+// Multiply colors only. The stone/grass images stay; floors read lighter than walls.
+export const STONE_TINT = Object.freeze({
+  townFloor: 0xffffff,
+  townWall: 0x99aba7,
+  townCap: 0xb2bbad,
+  caveFloor: 0xd0d9d3,
+  caveWall: 0x73847d,
+  caveCap: 0x7d8e87,
+  warmFloor: 0xe6d0b4,
+  warmWall: 0x856856,
+  warmCap: 0x8f735c,
+});
+
+export const stoneTint = (level = 0) => {
+  if (!level)
+    return {
+      floor: STONE_TINT.townFloor,
+      wall: STONE_TINT.townWall,
+      cap: STONE_TINT.townCap,
+    };
+  if (level >= WARM_STONE_LEVEL)
+    return {
+      floor: STONE_TINT.warmFloor,
+      wall: STONE_TINT.warmWall,
+      cap: STONE_TINT.warmCap,
+    };
+  return {
+    floor: STONE_TINT.caveFloor,
+    wall: STONE_TINT.caveWall,
+    cap: STONE_TINT.caveCap,
+  };
+};
