@@ -1,9 +1,16 @@
 /** Watch-along. Spectator input never reaches the engine. Fog is the followed player's. */
 
+/** People actually watching: spectators who are still here. Players, the host, banned members, and dropped connections are not. */
+export const watcherCount = (people = []) =>
+  (people || []).filter(
+    (person) => person && person.role === "spectator" && person.banned !== true && person.connected !== false,
+  ).length;
+
 export const createSpectatorView = (players = []) => {
   let index = 0;
   let freeCamera = false;
-  const cast = () => players.filter((player) => player.role !== "spectator");
+  let roster = players || [];
+  const cast = () => roster.filter((player) => player.role !== "spectator");
 
   const followed = () => {
     const people = cast();
@@ -39,7 +46,12 @@ export const createSpectatorView = (players = []) => {
       if (!who || !knowByName) return null;
       return knowByName[who.name] ?? null;
     },
-    badge: (count) => `Spectating ${followed()?.name ?? "…"} · ${count} watching`,
+    /** Replace the room roster. The chip recounts from this list. */
+    setRoster: (people) => {
+      roster = people || [];
+    },
+    watching: () => watcherCount(roster),
+    badge: () => `Spectating ${followed()?.name ?? "…"} · ${watcherCount(roster)} watching`,
   };
 };
 

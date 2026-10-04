@@ -521,7 +521,7 @@ export const mountOnlineUi = () => {
       spectating = true;
       const badge = document.createElement("div");
       badge.id = "spectator-badge";
-      badge.textContent = watch.badge(3);
+      badge.textContent = watch.badge();
       root.append(badge);
       chat.hidden = false;
       chatLog.setChannel("spectators");
@@ -551,7 +551,7 @@ export const mountOnlineUi = () => {
 
   const refreshBadge = () => {
     const badge = root.querySelector("#spectator-badge");
-    if (badge && watch) badge.textContent = watch.badge(root.querySelectorAll("#spectator-badge").length ? 3 : 0);
+    if (badge && watch) badge.textContent = watch.badge();
   };
 
   return {
