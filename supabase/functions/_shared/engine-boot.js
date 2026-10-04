@@ -1,9 +1,38 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import vm from "node:vm";
 import { createHeadlessDom } from "./headless-dom.js";
 import { concatEngineFiles } from "./engine-files.js";
+
+let vmApi = null;
+
+const bindVm = (mod) => {
+  if (!mod) return null;
+  if (typeof mod.createContext === "function") return mod;
+  if (mod.default && typeof mod.default.createContext === "function") return mod.default;
+  return null;
+};
+
+const loadVmSync = () => {
+  if (vmApi) return vmApi;
+  try {
+    if (typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
+      vmApi = bindVm(process.getBuiltinModule("vm"));
+    }
+  } catch {
+    vmApi = null;
+  }
+  return vmApi;
+};
+
+/** The Edge bundler rejects a static node:vm import. Load it when the replay starts. */
+export const ensureVm = async () => {
+  if (loadVmSync()) return vmApi;
+  const loaded = await import("node:" + "vm");
+  vmApi = bindVm(loaded);
+  if (!vmApi) throw new Error("vm missing");
+  return vmApi;
+};
 
 /** Pinned bundle. The hash is the file bytes, so a changed download is refused. */
 export const ENGINE_SOURCE_SHA256 = "53868af2da5fbdc532f9bb9441c3045163a91fe605e15dca10e0bf993bf9f03b";
@@ -75,6 +104,7 @@ const fetchPinnedEngineSource = async () => {
  * the sibling bundle, or the same pinned file when that bundle is not on disk.
  */
 export const ensureEngineSource = async () => {
+  await ensureVm();
   if (cachedSource) return cachedSource;
   cachedSource = repoEngineSource() || siblingEngineSource() || await fetchPinnedEngineSource();
   return cachedSource;
@@ -118,6 +148,8 @@ const copyGlobals = (sandbox) => {
  * before the dungeon is built. Omit `seed` for today's unseeded solo rules.
  */
 export const bootEngine = (options = {}) => {
+  const vm = loadVmSync();
+  if (!vm) throw new Error("engine vm is not loaded");
   const dom = createHeadlessDom();
   const sandbox = {
     document: dom.document,

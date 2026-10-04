@@ -1,4 +1,4 @@
-import { bootEngine, ensureEngineSource } from "./engine-boot.js";
+import { bootEngine, ensureEngineSource, ensureVm } from "./engine-boot.js";
 
 /**
  * Free-plan Edge Functions get about 2 seconds of CPU. A short finished run
@@ -31,6 +31,7 @@ export const replayFinishedRun = async ({
   if (log.length > MAX_REPLAY_TURNS) return { ok: false, reason: "replay_cpu_cap" };
   let api;
   try {
+    await ensureVm();
     await ensureEngineSource();
   } catch (error) {
     console.error("replay source failed", error instanceof Error ? error.message : "error");
