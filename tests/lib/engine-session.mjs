@@ -58,6 +58,7 @@ const ENGINE_FILES = [
   "explore",
   "determinism",
   "party",
+  "encounter",
 ];
 
 const sourceOf = (file) => {

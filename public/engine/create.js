@@ -1602,6 +1602,10 @@ function placeDeferredTreasureLoot(depth) {
 /*
     subroutine to create the objects in the maze for the given level
  */
+function coopScale() {
+  return typeof coopMultiplier === "function" ? coopMultiplier() : 1;
+}
+
 function makeobject(depth) {
   beginLevelLootSet();
   if (depth == 0) {
@@ -1658,24 +1662,24 @@ function makeobject(depth) {
   fillmroom(rnd(3) - 2, OIVDARTRAP, 0);
   fillmroom(rnd(3) - 2, OIVTELETRAP, 0);
 
-  if (depth == 1) 
-    fillmroom(1, OCHEST, depth);
-  else 
-    fillmroom(rund(2), OCHEST, depth);
+  if (depth == 1)
+    fillmroom(1 * coopScale(), OCHEST, depth);
+  else
+    fillmroom(rund(2) * coopScale(), OCHEST, depth);
 
   if (depth < MAXLEVEL) {
-    fillmroom((rund(2)), ODIAMOND, rnd(10 * depth + 1) + 10);
-    fillmroom(rund(2), ORUBY, rnd(6 * depth + 1) + 6);
-    fillmroom(rund(2), OEMERALD, rnd(4 * depth + 1) + 4);
-    fillmroom(rund(2), OSAPPHIRE, rnd(3 * depth + 1) + 2);
+    fillmroom((rund(2)) * coopScale(), ODIAMOND, rnd(10 * depth + 1) + 10);
+    fillmroom(rund(2) * coopScale(), ORUBY, rnd(6 * depth + 1) + 6);
+    fillmroom(rund(2) * coopScale(), OEMERALD, rnd(4 * depth + 1) + 4);
+    fillmroom(rund(2) * coopScale(), OSAPPHIRE, rnd(3 * depth + 1) + 2);
   }
 
   var i;
-  for (i = 0; i < rnd(4) + 3; i++) 
+  for (i = 0; i < (rnd(4) + 3) * coopScale(); i++)
     fillroom(OPOTION, newpotion()); /* make a POTION */
-  for (i = 0; i < rnd(5) + 3; i++) 
+  for (i = 0; i < (rnd(5) + 3) * coopScale(); i++)
     fillroom(OSCROLL, newscroll()); /* make a SCROLL */
-  for (i = 0; i < rnd(12) + 11; i++) 
+  for (i = 0; i < (rnd(12) + 11) * coopScale(); i++)
     fillroom(OGOLDPILE, 12 * rnd(depth + 1) + (depth << 3) + 10); /* make GOLD */
 
   if (depth == (ULARN ? 8 : 5)) 
@@ -1808,6 +1812,8 @@ function fillmroom(n, what, arg) {
 function froom(n, itm, arg) {
   if (rnd(151) < n) {
     fillroom(itm, arg);
+    // Same roll as solo. A second copy is placed only when more than one adventurer is present.
+    if (coopScale() > 1) fillroom(itm, arg);
   }
 }
 
@@ -1930,7 +1936,7 @@ function fillmonst(what, awake) {
     if sethp(1) then wipe out old monsters else leave them there
  */
 function stockNewLevelMonsters() {
-  const nummonsters = rnd(12) + 2 + (level >> 1);
+  const nummonsters = (rnd(12) + 2 + (level >> 1)) * coopScale();
   for (let i = 0; i < nummonsters; i++) {
     fillmonst(makemonst(level));
   }
@@ -1986,7 +1992,7 @@ function sethp(newLevel) {
   if (newLevel) {
     stockNewLevelMonsters();
   } else {
-    const nummonsters = (level >> 1) + 1;
+    const nummonsters = ((level >> 1) + 1) * coopScale();
     for (let i = 0; i < nummonsters; i++) {
       fillmonst(makemonst(level));
     }

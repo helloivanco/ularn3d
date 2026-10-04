@@ -351,6 +351,14 @@ paint = function () {
 };
 
 window.ularn = {
+  party() {
+    if (typeof adventurerSummaries !== "function") return [];
+    return adventurerSummaries();
+  },
+  groups() {
+    if (typeof encounterGroups !== "function") return [];
+    return encounterGroups(this.party().filter((member) => member.alive));
+  },
   setAutoLoot(enabled) {
     const value = !!enabled;
     overridePref("auto_pickup", value);

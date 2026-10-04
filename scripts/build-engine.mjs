@@ -52,6 +52,7 @@ const files = [
   "explore",
   "determinism",
   "party",
+  "encounter",
 ];
 const source = files
   .map(

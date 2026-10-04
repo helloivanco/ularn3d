@@ -453,6 +453,31 @@ function update() {
     );
     $("player-rank").textContent = `LV ${state.rank}`;
     $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
+    const party = typeof engine.party === "function" ? engine.party() : [];
+    const partyHud = $("party-hud");
+    const turnStrip = $("turn-strip");
+    if (partyHud) {
+      partyHud.hidden = party.length < 2;
+      partyHud.replaceChildren(...party.map((member) => {
+        const card = document.createElement("article");
+        const ratio = member.hpmax ? Math.max(0, Math.min(1, member.hp / member.hpmax)) : 0;
+        card.innerHTML = `<strong></strong><div class="meter"><i></i></div><span></span>`;
+        card.querySelector("strong").textContent = member.name || "Ally";
+        card.querySelector("i").style.width = `${Math.round(ratio * 100)}%`;
+        card.querySelector("span").textContent = `Lv ${member.xl || 1} · D${member.dungeon || 0}`;
+        return card;
+      }));
+    }
+    if (turnStrip && typeof engine.groups === "function") {
+      const groups = engine.groups().filter((group) => group.length > 1);
+      turnStrip.hidden = groups.length === 0;
+      turnStrip.replaceChildren(...groups.flatMap((group) => group.map((member, index) => {
+        const chip = document.createElement("span");
+        chip.textContent = index === 0 ? `${member.name} acts` : member.name;
+        if (index === 0) chip.className = "acting";
+        return chip;
+      })));
+    }
     $("health-bar").style.width =
       `${Math.max(0, Math.min(100, (state.hp / state.hpMax) * 100))}%`;
     $("mana-text").textContent = `${state.mana} / ${state.manaMax}`;
@@ -759,6 +784,20 @@ function drawMap() {
     ctx.fillRect(px, py, cell, cell);
     ctx.fillStyle = "#132325";
     ctx.fillText("@", px + cell / 2, py + cell / 2);
+  }
+  const allies = typeof engine.party === "function" ? engine.party() : [];
+  if (allies.length > 1) {
+    for (const ally of allies) {
+      if (!ally.alive || ally.dungeon !== state.level) continue;
+      if (ally.x === state.x && ally.y === state.y) continue;
+      if (ally.x < x0 || ally.y < y0 || ally.x >= x0 + cols || ally.y >= y0 + rows) continue;
+      const ax = (ally.x - x0) * cell;
+      const ay = (ally.y - y0) * cell;
+      ctx.fillStyle = "#9fd7c8";
+      ctx.fillRect(ax, ay, cell, cell);
+      ctx.fillStyle = "#132325";
+      ctx.fillText(String(ally.name || "A").slice(0, 1), ax + cell / 2, ay + cell / 2);
+    }
   }
   canvas.dataset.contentKey = contentKey;
   canvas.dataset.playerKey = playerKey;

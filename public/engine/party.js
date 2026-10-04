@@ -299,6 +299,89 @@ function adventurerSummaries() {
   });
 }
 
+function coopMultiplier() {
+  return partySize() > 1 ? 2 : 1;
+}
+
+var CONFIRM_ALLY_HIT = null;
+
+function allyAt(x, y) {
+  if (!PARTY_ON || ADVENTURERS.length < 2) return null;
+  for (let i = 0; i < ADVENTURERS.length; i++) {
+    const other = ADVENTURERS[i];
+    if (!other || i === ACTIVE_SLOT || !other.alive || !other.player) continue;
+    if (other.level === level && other.player.x === x && other.player.y === y) return other;
+  }
+  return null;
+}
+
+function allyBlocksMove(x, y) {
+  if (!PARTY_ON || ADVENTURERS.length < 2) return false;
+  const ally = allyAt(x, y);
+  if (!ally) {
+    CONFIRM_ALLY_HIT = null;
+    return false;
+  }
+  if (
+    CONFIRM_ALLY_HIT &&
+    CONFIRM_ALLY_HIT.x === x &&
+    CONFIRM_ALLY_HIT.y === y &&
+    CONFIRM_ALLY_HIT.slot === ally.slot
+  ) {
+    CONFIRM_ALLY_HIT = null;
+    const damage = typeof fullhit === "function" ? Math.max(1, fullhit(1)) : 1;
+    ally.player.HP = Math.max(0, ally.player.HP - damage);
+    if (typeof updateLog === "function") updateLog(`${ally.name} is hit.`);
+    if (ally.player.HP <= 0) {
+      ally.alive = false;
+      ally.ghost = true;
+      if (typeof updateLog === "function") updateLog(`${ally.name} falls.`);
+    }
+    return true;
+  }
+  CONFIRM_ALLY_HIT = { x: x, y: y, slot: ally.slot };
+  if (typeof updateLog === "function") updateLog(`That is ${ally.name}. Strike again to confirm.`);
+  return true;
+}
+
+function becomeGhost(reason) {
+  if (!PARTY_ON || ADVENTURERS.length < 2) return false;
+  if (reason === (typeof DIED_WINNER !== "undefined" ? DIED_WINNER : -1)) return false;
+  const slot = ADVENTURERS[ACTIVE_SLOT];
+  if (!slot) return false;
+  slot.alive = false;
+  slot.ghost = true;
+  if (slot.player) slot.player.HP = 0;
+  if (player) player.HP = 0;
+  let living = false;
+  for (let i = 0; i < ADVENTURERS.length; i++) {
+    const other = ADVENTURERS[i];
+    if (i === ACTIVE_SLOT || !other || !other.alive) continue;
+    if (other.player && other.player.HP > 0) living = true;
+  }
+  if (!living) return false;
+  if (typeof updateLog === "function") updateLog(`${slot.name || logname} falls. Their spirit lingers.`);
+  return true;
+}
+
+function reviveAdventurer(slotIndex) {
+  const cost = 250;
+  if (!PARTY_ON || level !== 0) return false;
+  const ghost = ADVENTURERS[slotIndex];
+  if (!ghost || !ghost.ghost || !ghost.player) return false;
+  if (!player || player.HP <= 0 || player.GOLD < cost) return false;
+  player.setGold(player.GOLD - cost);
+  ghost.player.HP = ghost.player.HPMAX || 1;
+  ghost.alive = true;
+  ghost.ghost = false;
+  ghost.level = 0;
+  const spot = occupyTownFloor(findTownEntrance());
+  ghost.player.x = spot.x;
+  ghost.player.y = spot.y;
+  if (typeof updateLog === "function") updateLog(`${ghost.name} returns to life.`);
+  return true;
+}
+
 function capturePartyState(seen) {
   if (!PARTY_ON) return null;
   return {

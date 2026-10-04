@@ -583,6 +583,8 @@ async function died(reason, slain) {
     }
   }
 
+  if (typeof becomeGhost === "function" && becomeGhost(reason)) return;
+
   const winner = reason === DIED_WINNER;
   player.winner = winner;
   player.reason = reason;

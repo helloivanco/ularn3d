@@ -649,6 +649,10 @@ function moveplayer(dir) {
     return 0;
   }
 
+  if (typeof allyBlocksMove === "function" && allyBlocksMove(k, m)) {
+    return 0;
+  }
+
   /* hit a monster */
   if (monster) {
     hitmonster(k, m);
