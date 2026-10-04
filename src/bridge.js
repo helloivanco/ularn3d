@@ -355,6 +355,15 @@ window.ularn = {
     if (typeof adventurerSummaries !== "function") return [];
     return adventurerSummaries();
   },
+  fog(name) {
+    if (typeof adventurerSeen !== "function") return null;
+    return adventurerSeen(name);
+  },
+  applyRest(slot) {
+    if (typeof activateAdventurer === "function" && slot != null) activateAdventurer(slot);
+    if (typeof mainloop === "function") mainloop(null, ".");
+    return true;
+  },
   groups() {
     if (typeof encounterGroups !== "function") return [];
     return encounterGroups(this.party().filter((member) => member.alive));

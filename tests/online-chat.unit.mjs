@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CHAT_LIMIT, createChatLog } from "../src/online/chat.js";
+import { CHAT_LIMIT, createChatLog, mapChatRows } from "../src/online/chat.js";
 
 test("chat keeps history, filters words, and ignores a muted player", async () => {
   let clock = 1_000;
@@ -28,6 +28,24 @@ test("chat keeps history, filters words, and ignores a muted player", async () =
   chat.receive({ id: "m1", channel: "party", name: "Ada", body: "Low HP", userId: "ada" });
   chat.receive({ id: "m1", channel: "party", name: "Ada", body: "Low HP", userId: "ada" });
   assert.equal(chat.unread(), 1);
+});
+
+test("join keeps the newest 50 chat rows", () => {
+  const rows = Array.from({ length: 60 }, (_, index) => ({
+    id: `m${index}`,
+    channel: "party",
+    body: `line ${index}`,
+    user_id: "ada",
+    profiles: { display_name: "Ada" },
+    created_at: `2026-10-04T00:${String(index).padStart(2, "0")}:00.000Z`,
+  }));
+  const chat = createChatLog();
+  chat.history(mapChatRows(rows));
+  const visible = chat.visible();
+  assert.equal(visible.length, 50);
+  assert.equal(visible[0].body, "line 10");
+  assert.equal(visible.at(-1).body, "line 59");
+  assert.equal(visible[0].name, "Ada");
 });
 
 test("typing blocks movement keys and a map ping fades after 4 seconds", () => {

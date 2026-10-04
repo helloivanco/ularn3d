@@ -5,6 +5,16 @@ export const CHAT_LIMIT = 280;
 export const PING_MS = 4000;
 export const HISTORY = 50;
 
+export const mapChatRows = (rows) =>
+  (rows || []).slice(-HISTORY).map((row) => ({
+    id: row.id,
+    channel: row.channel,
+    body: row.body,
+    userId: row.user_id ?? row.userId,
+    name: row.profiles?.display_name || row.name || "Player",
+    at: row.created_at ?? row.at,
+  }));
+
 export const createChatLog = ({ now = () => Date.now(), persist } = {}) => {
   const messages = [];
   const muted = new Set();

@@ -42,3 +42,10 @@ export const createSpectatorView = (players = []) => {
     badge: (count) => `Spectating ${followed()?.name ?? "…"} · ${count} watching`,
   };
 };
+
+/** Null means "not spectating" and leaves every tile. A set hides anything outside it. */
+export const tilesInFog = (tiles, seen) => {
+  if (seen == null) return tiles || [];
+  const allow = seen instanceof Set ? seen : new Set(seen);
+  return (tiles || []).filter((tile) => allow.has(`${tile.x},${tile.y}`));
+};

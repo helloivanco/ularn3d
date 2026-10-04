@@ -21,15 +21,25 @@ export const hostRoom = async ({ displayName, password, isPublic, maxPlayers, tu
   });
 };
 
+export const recentChat = async (roomId) => {
+  const supabase = await getSupabase();
+  if (!supabase || !roomId) return [];
+  const result = await supabase.rpc("recent_chat", { p_room_id: roomId });
+  if (result.error || !Array.isArray(result.data)) return [];
+  return result.data.slice(-50);
+};
+
 export const enterRoom = async ({ code, password, role, characterName, displayName }) => {
   const session = await ensureOnlineSession({ displayName });
   if (!session.ok) return session;
-  return rpc("join_room", {
+  const joined = await rpc("join_room", {
     p_code: code,
     p_password: password || null,
     p_role: role,
     p_character_name: characterName || null,
   });
+  if (!joined?.ok) return joined;
+  return { ...joined, chat: await recentChat(joined.room_id) };
 };
 
 export const listPublicRooms = async () => {

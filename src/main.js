@@ -6,6 +6,7 @@ import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
 import { mountOnlineUi } from "./online/ui.js";
+import { tilesInFog } from "./online/spectator.js";
 mountIcons();
 const onlineUi = mountOnlineUi();
 window.ularnOnline = onlineUi;
@@ -97,6 +98,7 @@ try {
 } catch {}
 let inventorySignature = "", effectsSignature = "";
 let hudSignature = "";
+let hostTurnSeen = null;
 let damageFlashTimer = null;
 const PERF_ENABLED = (() => {
   try {
@@ -417,8 +419,15 @@ function update() {
   const perfStart = ularnPerf.enabled ? performance.now() : 0;
   const next = engine.snapshot();
   if (!next) return;
-  state = next;
+  const fog = window.ularnOnline?.fogMask?.() ?? null;
+  state = fog
+    ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
+    : next;
   world?.update(state);
+  if (state.moves !== hostTurnSeen) {
+    hostTurnSeen = state.moves;
+    window.ularnOnline?.hostBeat?.();
+  }
   const partyNow = typeof engine.party === "function" ? engine.party() : [];
   const hudKey = [
     state.name,

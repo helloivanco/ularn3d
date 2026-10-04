@@ -382,6 +382,36 @@ function reviveAdventurer(slotIndex) {
   return true;
 }
 
+function seenCells(grid) {
+  const cells = [];
+  if (!grid) return cells;
+  for (let x = 0; x < grid.length; x++) {
+    const column = grid[x];
+    if (!column) continue;
+    for (let y = 0; y < column.length; y++) {
+      if (column[y] & HAVESEEN) cells.push(x + "," + y);
+    }
+  }
+  return cells;
+}
+
+/** Explored tiles for one adventurer. The active hero uses the live map. */
+function adventurerSeen(name) {
+  if (!PARTY_ON) return null;
+  let index = -1;
+  for (let i = 0; i < ADVENTURERS.length; i++) {
+    if (ADVENTURERS[i] && ADVENTURERS[i].name === name) index = i;
+  }
+  if (index < 0) return [];
+  if (index === ACTIVE_SLOT) {
+    const floor = LEVELS && LEVELS[level];
+    return seenCells(floor && floor.know);
+  }
+  const slot = ADVENTURERS[index];
+  const grid = slot.know && slot.know[slot.level];
+  return seenCells(grid);
+}
+
 function capturePartyState(seen) {
   if (!PARTY_ON) return null;
   return {

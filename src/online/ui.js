@@ -3,7 +3,8 @@ import { readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
 import { createSpectatorView } from "./spectator.js";
-import { createChatLog } from "./chat.js";
+import { createChatLog, mapChatRows } from "./chat.js";
+import { createHostLoop, createHostSession } from "./protocol.js";
 import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
@@ -38,6 +39,16 @@ export const mountOnlineUi = () => {
     : "Host a room, join with a code, or watch a public game.";
   const hostButton = button("Host a room");
   const joinButton = button("Join with a code");
+  const joinDialog = panel("Join", document.createElement("form"));
+  const joinForm = joinDialog.querySelector(".online-body");
+  joinForm.classList.add("online-form");
+  joinForm.append(
+    field("Code", "join-code", ""),
+    field("Password (optional)", "join-password", ""),
+    field("Display name", "join-name", "Ada"),
+  );
+  const joinSubmit = button("Join room");
+  joinForm.append(joinSubmit);
   const browseButton = button("Browse public rooms");
   const watchButton = button("Watch");
   const boardButton = button("Leaderboard");
@@ -83,6 +94,9 @@ export const mountOnlineUi = () => {
   let spectating = false;
   let watch = null;
   let roomId = null;
+  let roomMembers = [];
+  let hostLoop = null;
+  const knowFor = (name) => (typeof window.ularn?.fog === "function" ? window.ularn.fog(name) : null);
   const chatLog = createChatLog({
     persist: (message) => (roomId ? sendChatMessage(roomId, message.channel, message.body) : null),
   });
@@ -206,13 +220,63 @@ export const mountOnlineUi = () => {
   };
 
   hostButton.addEventListener("click", () => hostDialog.showModal());
-  joinButton.addEventListener("click", async () => {
+  const rememberChat = (rows) => {
+    chatLog.history(mapChatRows(rows));
+    chat.hidden = false;
+    renderChat();
+  };
+
+  const startHost = (members) => {
+    roomMembers = members;
+    hostLoop?.stop();
+    const session = createHostSession({
+      userId: "host",
+      applyInput: (input, from) => {
+        if (input === "." && typeof window.ularn?.applyRest === "function") {
+          window.ularn.applyRest(from?.slot);
+        }
+      },
+      capture: () => ({}),
+      diff: () => ({ same: true }),
+      checksum: () => "0",
+    });
+    hostLoop = createHostLoop(session, {
+      members: () => roomMembers,
+      now: () => Date.now(),
+    });
+    hostLoop.start();
+  };
+
+  joinButton.addEventListener("click", () => {
     if (unavailable) {
       statusOf(menu).textContent = "Online unavailable";
+      menu.showModal();
       return;
     }
-    const named = await ensureOnlineSession({ displayName: "Ada" });
-    statusOf(menu).textContent = named.ok ? "Signed in." : "Online unavailable";
+    joinDialog.showModal();
+  });
+  joinSubmit.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const name = joinForm.querySelector("#join-name").value;
+    const problem = displayNameError(name);
+    if (problem) {
+      statusOf(joinDialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
+      return;
+    }
+    const joined = await enterRoom({
+      code: joinForm.querySelector("#join-code").value,
+      password: joinForm.querySelector("#join-password").value,
+      role: "player",
+      displayName: name,
+    });
+    if (!joined.ok) {
+      statusOf(joinDialog).textContent = joined.error === "unavailable" ? "Online unavailable" : "Could not join that room.";
+      return;
+    }
+    roomId = joined.room_id;
+    rememberChat(joined.chat);
+    joinDialog.close();
+    showLobby([{ name, role: joined.role || "player", ready: false, ping: null }], joinForm.querySelector("#join-code").value);
   });
   browseButton.addEventListener("click", async () => {
     if (unavailable) {
@@ -253,7 +317,9 @@ export const mountOnlineUi = () => {
       return;
     }
     hostDialog.close();
-    showLobby([{ name, role: "host", ready: true, ping: null }], created.join_code);
+    roomId = created.room_id;
+    startHost([{ userId: "host", name, role: "host", connected: true, slot: 0 }]);
+    showLobby(roomMembers, created.join_code);
   });
 
   const preview = (kind) => {
@@ -342,7 +408,15 @@ export const mountOnlineUi = () => {
       return who;
     },
     followed: () => watch?.followed() ?? null,
-    fogMask: () => null,
+    fogMask: () => {
+      if (!spectating) return null;
+      const who = watch?.followed();
+      if (!who) return null;
+      const cells = knowFor(who.name);
+      if (!cells) return null;
+      return new Set(cells);
+    },
+    hostBeat: () => (hostLoop ? hostLoop.beat() : []),
     acceptsInput: () => (spectating ? false : true),
     blocksGameKeys: () => chatLog.blocksGameKeys(),
     mapPings: () => chatLog.pings(),

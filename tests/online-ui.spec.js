@@ -17,13 +17,6 @@ test("online panels can be shown", async ({ page }) => {
     window.ularnOnline.preview("lobby");
   });
   await page.screenshot({ path: `${media}/lobby.png` });
-  await page.evaluate(() => {
-    document.querySelector("dialog[open]")?.close();
-    window.ularnOnline.preview("chat");
-  });
-  await page.screenshot({ path: `${media}/chat.png` });
-  await page.evaluate(() => window.ularnOnline.preview("spectator"));
-  await page.screenshot({ path: `${media}/spectator.png` });
   await page.evaluate(() => window.ularnOnline.preview("leaderboard"));
   await page.screenshot({ path: `${media}/leaderboard.png` });
 });
@@ -70,4 +63,14 @@ test("two adventurers show the turn strip", async ({ page }) => {
   });
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${media}/two-aura-encounter.png` });
+  await page.evaluate(() => {
+    document.querySelector("dialog[open]")?.close();
+    window.ularnOnline.preview("spectator");
+  });
+  await page.screenshot({ path: `${media}/spectator.png` });
+  await page.evaluate(() => {
+    document.querySelector("dialog[open]")?.close();
+    window.ularnOnline.preview("chat");
+  });
+  await page.screenshot({ path: `${media}/chat.png` });
 });

@@ -26,7 +26,11 @@ const apply = (file) => {
 };
 
 test("online rooms migration enforces auth, passwords, chat, and realtime RLS", () => {
-  psqlAdmin(["-d", "postgres", "-v", "ON_ERROR_STOP=1"], `drop database if exists ${database};`);
+  psqlAdmin(["-d", "postgres", "-v", "ON_ERROR_STOP=1"], `
+    select pg_terminate_backend(pid) from pg_stat_activity
+    where datname = '${database}' and pid <> pg_backend_pid();
+    drop database if exists ${database};
+  `);
   psqlAdmin(["-d", "postgres", "-v", "ON_ERROR_STOP=1"], `create database ${database};`);
   apply("tests/sql/harness.sql");
   apply("supabase/migrations/20261004184500_online_rooms.sql");
@@ -34,10 +38,16 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
   apply("supabase/migrations/20261004193000_claim_host.sql");
   apply("supabase/migrations/20261004201000_scores.sql");
   apply("supabase/migrations/20261004201000_scores.sql");
+  apply("supabase/migrations/20261004223000_pg_cron.sql");
+  apply("supabase/migrations/20261004223000_pg_cron.sql");
   const output = applyAndCapture("tests/sql/online-rls.sql");
   assert.match(output, /online rls ok/);
   const scores = applyAndCapture("tests/sql/scores-rls.sql");
   assert.match(scores, /scores rls ok/);
+  const history = applyAndCapture("tests/sql/recent-chat.sql");
+  assert.match(history, /recent chat ok/);
+  const cron = applyAndCapture("tests/sql/pg-cron.sql");
+  assert.match(cron, /pg cron ok/);
 });
 
 const applyAndCapture = (file) =>

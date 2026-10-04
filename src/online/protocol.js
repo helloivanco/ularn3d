@@ -1,4 +1,8 @@
+import { shouldAutoRest } from "./reliability.js";
+
 export const ROOM_EVENTS = ["action", "state", "ack", "ping", "emote", "chat", "snapshot"];
+
+const REST_GAP_MS = 1000;
 
 export const packState = (body, compress) => {
   const json = JSON.stringify(body);
@@ -17,6 +21,7 @@ export const createHostSession = ({ userId, applyInput, capture, diff, checksum,
   const waiting = new Map();
   const log = [];
   const outbound = [];
+  const lastRestAt = new Map();
 
   const emit = (event, payload) => {
     outbound.push({ event, payload });
@@ -70,6 +75,22 @@ export const createHostSession = ({ userId, applyInput, capture, diff, checksum,
         full: true,
         packed: packState({ full: state }, compress),
       });
+    },
+    tick: (members, now = Date.now()) => {
+      const rested = [];
+      for (const member of members || []) {
+        if (!member?.userId || !shouldAutoRest(member, now)) continue;
+        const previous = lastRestAt.get(member.userId) ?? 0;
+        if (now - previous < REST_GAP_MS) continue;
+        lastRestAt.set(member.userId, now);
+        const seq = (applied.get(member.userId) ?? 0) + 1;
+        accept(
+          { userId: member.userId, role: member.role || "player", slot: member.slot },
+          { seq, input: "." },
+        );
+        rested.push(member.userId);
+      }
+      return rested;
     },
     receive: (from, event, payload) => {
       if (event === "snapshot") {
@@ -133,6 +154,28 @@ export const createReplica = ({ checksum, apply, decompress }) => {
       turn = payload.turn;
       currentChecksum = actual;
       needsSnapshot = actual !== payload.checksum;
+    },
+  };
+};
+
+/** Calls session.tick on each scheduled beat and on each new game turn. */
+export const createHostLoop = (session, { members, now = () => Date.now() } = {}) => {
+  let timer = null;
+  let readMembers = members || (() => []);
+  let readNow = now;
+  const beat = () => session.tick(readMembers(), readNow());
+  return {
+    beat,
+    start({ members: nextMembers, now: nextNow, interval = 1000, schedule = setInterval, clear = clearInterval } = {}) {
+      if (nextMembers) readMembers = nextMembers;
+      if (nextNow) readNow = nextNow;
+      if (timer != null) clear(timer);
+      timer = schedule(beat, interval);
+      return beat();
+    },
+    stop(clear = clearInterval) {
+      if (timer != null) clear(timer);
+      timer = null;
     },
   };
 };
