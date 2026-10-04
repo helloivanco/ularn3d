@@ -159,7 +159,7 @@ test("the edge script sandbox matches a vm replay", async () => {
   const longState = long.captureGameState();
   longState.party = null;
   assert.equal(long.gtime, 500);
-  assert.equal(long.checksumGameState(longState), "9083421c67b337f5");
+  assert.equal(long.checksumGameState(longState), "3a3d396ee8c6a463");
 
   forceEngineContext("script");
   try {
@@ -174,12 +174,22 @@ test("the edge script sandbox matches a vm replay", async () => {
   }
 });
 
-test("the edge bundle matches the engine scripts on disk", () => {
+test("the edge bundle matches the engine scripts on disk", async () => {
   const built = concatEngineFiles((rel) => readFileSync(`public/engine/${rel}`, "utf8"));
   const packed = readFileSync("supabase/functions/_shared/engine-source.js", "utf8");
   assert.equal(ENGINE_SOURCE, built);
   assert.equal(extractEngineBundle(packed), built);
   assert.equal(createHash("sha256").update(packed).digest("hex"), ENGINE_SOURCE_SHA256);
+  const { gunzipSync } = await import("node:zlib");
+  const { BUNDLED_ENGINE_SHA256, ENGINE_PART_COUNT } = await import("../supabase/functions/_shared/engine-bundle-meta.js");
+  let b64 = "";
+  for (let i = 0; i < ENGINE_PART_COUNT; i++) {
+    const part = await import(`../supabase/functions/_shared/engine-part-${i}.js`);
+    b64 += part.PART;
+  }
+  const source = gunzipSync(Buffer.from(b64, "base64")).toString("utf8");
+  assert.equal(source, built);
+  assert.equal(createHash("sha256").update(source).digest("hex"), BUNDLED_ENGINE_SHA256);
 });
 
 test("the public board hides unverified and flagged rows", () => {

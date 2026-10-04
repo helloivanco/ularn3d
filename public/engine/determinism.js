@@ -7,7 +7,7 @@
  *
  * Product version stamped for replay. Keep it aligned with package.json.
  */
-var ENGINE_VERSION = "1.3.37";
+var ENGINE_VERSION = "1.3.39";
 
 var ENGINE_INPUT_LOG = [];
 

@@ -1,13 +1,13 @@
 import { displayNameError } from "./words.js";
-import { readOnlineEnv } from "./config.js";
+import { getSupabase, readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
 import { createSpectatorView } from "./spectator.js";
 import { createChatLog, mapChatRows } from "./chat.js";
-import { createHostLoop, createHostSession } from "./protocol.js";
 import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
+import { createLiveRoom, loadScores } from "./live.js";
 
 const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
 
@@ -49,6 +49,20 @@ export const mountOnlineUi = () => {
   );
   const joinSubmit = button("Join room");
   joinForm.append(joinSubmit);
+  const watchDialog = panel("Watch", document.createElement("form"));
+  const watchForm = watchDialog.querySelector(".online-body");
+  watchForm.classList.add("online-form");
+  watchForm.append(
+    field("Code", "watch-code", ""),
+    field("Password (optional)", "watch-password", ""),
+    field("Display name", "watch-name", "Cid"),
+  );
+  const watchSubmit = button("Watch room");
+  watchForm.append(watchSubmit);
+  const scoreBanner = document.createElement("p");
+  scoreBanner.id = "score-banner";
+  scoreBanner.hidden = true;
+  root.append(scoreBanner);
   const browseButton = button("Browse public rooms");
   const watchButton = button("Watch");
   const boardButton = button("Leaderboard");
@@ -95,9 +109,12 @@ export const mountOnlineUi = () => {
   let watch = null;
   let roomId = null;
   let roomMembers = [];
-  let hostLoop = null;
-  let hostSession = null;
-  let auraSeq = 0;
+  let live = null;
+  let displayName = "Ada";
+  let selfId = null;
+  let selfRole = "player";
+  let selfSlot = 0;
+  let started = false;
   const knowFor = (name) => (typeof window.ularn?.fog === "function" ? window.ularn.fog(name) : null);
   const chatLog = createChatLog({
     persist: (message) => (roomId ? sendChatMessage(roomId, message.channel, message.body) : null),
@@ -117,8 +134,9 @@ export const mountOnlineUi = () => {
   };
 
   const sendChat = async (body) => {
-    const sent = await chatLog.post({ body, name: "Ada" });
+    const sent = await chatLog.post({ body, name: displayName, userId: selfId || "local" });
     if (!sent.ok && sent.error === "filtered") statusOf(menu).textContent = "That message is not allowed.";
+    if (sent.ok) live?.say(sent.message);
     renderChat();
   };
 
@@ -142,6 +160,7 @@ export const mountOnlineUi = () => {
   const chatInput = chat.querySelector("#chat-input");
   chatInput.addEventListener("focus", () => chatLog.setTyping(true));
   chatInput.addEventListener("blur", () => chatLog.setTyping(false));
+  chatInput.addEventListener("keydown", (event) => event.stopPropagation());
 
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || chat.hidden) return;
@@ -170,11 +189,19 @@ export const mountOnlineUi = () => {
     body.append(list);
   };
 
+  let lobbyStamp = "";
   const showLobby = (members, codeText = "K7MQ2P") => {
+    if (started) return;
+    const stamp = `${codeText}|${live?.ready?.() ? 1 : 0}|${selfRole}|${members.map((member) => `${member.userId || member.name}:${member.ready}:${member.connected}:${member.role}`).join(",")}`;
+    if (stamp === lobbyStamp && lobby.open) return;
+    lobbyStamp = stamp;
     const body = lobby.querySelector(".online-body");
     body.replaceChildren();
     const code = document.createElement("p");
-    code.textContent = `Code ${codeText}`;
+    code.className = "room-code";
+    const strong = document.createElement("strong");
+    strong.textContent = codeText;
+    code.append("Code ", strong);
     const town = document.createElement("p");
     town.textContent = "Joining a game in progress starts a fresh character in town.";
     const list = document.createElement("ul");
@@ -183,18 +210,45 @@ export const mountOnlineUi = () => {
       item.textContent = `${member.name} · ${member.role}${member.ready ? " · ready" : ""}${member.ping != null ? ` · ${member.ping} ms` : ""}`;
       list.append(item);
     }
-    const ready = button("Ready");
+    const ready = button(live?.ready?.() ? "Ready" : "Not ready");
+    ready.id = "lobby-ready";
     const start = button("Start");
     start.id = "lobby-start";
+    const players = members.filter((member) => member.connected !== false && member.role !== "spectator" && !member.banned);
+    const allReady = players.length >= 2 && players.every((member) => member.ready);
+    start.hidden = selfRole !== "host";
+    start.disabled = !allReady;
+    ready.hidden = selfRole === "spectator";
     ready.addEventListener("click", async () => {
-      ready.setAttribute("aria-pressed", "true");
-      ready.textContent = "Ready";
+      if (!live) {
+        ready.setAttribute("aria-pressed", "true");
+        ready.textContent = "Ready";
+        return;
+      }
+      const result = await live.toggleReady();
+      if (!result?.ok) statusOf(lobby).textContent = "Online unavailable";
     });
-    start.addEventListener("click", () => {
-      statusOf(lobby).textContent = "Starting when everyone is ready.";
+    start.addEventListener("click", async () => {
+      if (!live) {
+        statusOf(lobby).textContent = "Starting when everyone is ready.";
+        return;
+      }
+      const result = await live.start();
+      if (!result?.ok) {
+        statusOf(lobby).textContent = result?.error === "not_host"
+          ? "The host starts the game."
+          : "Online unavailable";
+      }
     });
     body.append(code, town, list, ready, start);
-    lobby.showModal();
+    statusOf(lobby).textContent = selfRole === "spectator"
+      ? "You are watching. You cannot take a turn."
+      : players.length < 2
+        ? "Waiting for another player to join."
+        : allReady
+          ? "Everyone is ready."
+          : "Waiting for everyone to be ready.";
+    if (!started && !lobby.open) lobby.show();
   };
 
   const showBoard = (rows) => {
@@ -217,40 +271,146 @@ export const mountOnlineUi = () => {
       item.textContent = `${index + 1}. ${row.name} · ${row.score}${row.verified ? " · verified" : ""}`;
       table.append(item);
     });
+    if (!publicBoard(rows).length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No verified scores yet.";
+      body.append(empty);
+    }
     body.append(tabs, table);
     board.showModal();
   };
 
-  hostButton.addEventListener("click", () => hostDialog.showModal());
+  const showScore = (result) => {
+    const verified = result?.verified === true;
+    const reason = result?.reason || result?.error;
+    const text = verified
+      ? `Verified score: ${result.score}`
+      : reason === "too_fast"
+        ? "Score rejected: that run finished too quickly to count."
+        : reason === "unavailable"
+          ? "Score rejected: online unavailable."
+          : reason === "replay_failed" || reason === "replay_cpu_cap"
+            ? "Score rejected: the run could not be replayed."
+            : `Score rejected: ${reason || "the run was not accepted."}`;
+    scoreBanner.hidden = false;
+    scoreBanner.textContent = text;
+  };
+
+  const ingestChat = (payload, replace) => {
+    if (replace && Array.isArray(payload)) chatLog.history(mapChatRows(payload));
+    else if (payload && !Array.isArray(payload)) chatLog.receive(mapChatRows([payload])[0]);
+    renderChat();
+  };
+
+  const connectLive = async ({ id, code, role, slot, name }) => {
+    roomId = id;
+    displayName = name;
+    selfRole = role || "player";
+    selfSlot = Number.isInteger(slot) ? slot : 0;
+    spectating = selfRole === "spectator";
+    started = false;
+    const supabase = await getSupabase();
+    const session = supabase ? await supabase.auth.getSession() : null;
+    selfId = session?.data?.session?.user?.id || null;
+    if (!selfId) {
+      statusOf(menu).textContent = "Online unavailable";
+      return { ok: false, error: "unavailable" };
+    }
+    live?.close();
+    live = createLiveRoom({
+      self: { userId: selfId, role: selfRole, slot: selfSlot, name: displayName },
+      roomId,
+      onRoster: (members, room) => {
+        roomMembers = members;
+        const mine = members.find((member) => member.userId === selfId);
+        if (mine?.role) selfRole = mine.role;
+        spectating = selfRole === "spectator";
+        if (live?.started()) return;
+        showLobby(members, room?.join_code || code);
+      },
+      onChat: (payload, replace) => ingestChat(payload, replace),
+      onStatus: (text) => {
+        const dialog = lobby.open ? lobby : menu;
+        statusOf(dialog).textContent = text;
+      },
+      onStarted: () => {
+        started = true;
+        for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
+        const welcome = document.getElementById("welcome");
+        const caption = document.getElementById("scene-caption");
+        const hud = document.getElementById("hud");
+        const pause = document.getElementById("pause");
+        if (welcome) welcome.hidden = true;
+        if (caption) caption.hidden = true;
+        if (hud) hud.hidden = false;
+        if (pause) pause.hidden = false;
+        document.body.classList.add("playing");
+        chat.hidden = false;
+        window.ularnGraphics?.beginExpeditionCamera?.();
+        window.dispatchEvent(new Event("ularn:update"));
+      },
+      onScore: (result) => showScore(result),
+      onClaimed: () => {
+        selfRole = "host";
+        toast.hidden = false;
+        toast.textContent = "You are the host now.";
+      },
+    });
+    const opened = await live.open();
+    if (!opened?.ok) {
+      statusOf(menu).textContent = "Online unavailable";
+      return opened;
+    }
+    chat.hidden = false;
+    return opened;
+  };
+
+  hostButton.addEventListener("click", () => {
+    menu.close();
+    hostDialog.showModal();
+  });
   const rememberChat = (rows) => {
     chatLog.history(mapChatRows(rows));
     chat.hidden = false;
     renderChat();
   };
 
-  const startHost = (members) => {
-    roomMembers = members;
-    hostLoop?.stop();
-    const session = createHostSession({
-      userId: "host",
-      applyInput: (input, from) => {
-        if (input === "." && typeof window.ularn?.applyRest === "function") {
-          window.ularn.applyRest(from?.slot);
-        }
-        if ((input === "aura:on" || input === "aura:off") && typeof window.ularn?.setAura === "function") {
-          window.ularn.setAura(input === "aura:on", from);
-        }
-      },
-      capture: () => ({}),
-      diff: () => ({ same: true }),
-      checksum: () => "0",
+  const joinProblem = (error) => {
+    if (error === "unavailable" || error === "unauthenticated") return "Online unavailable";
+    if (error === "room_not_found") return "That code does not match a room.";
+    if (error === "bad_password") return "That password is wrong.";
+    if (error === "room_full") return "That room is already full.";
+    return "Could not join that room.";
+  };
+
+  const enter = async (form, role) => {
+    const prefix = role === "spectator" ? "watch" : "join";
+    const dialog = role === "spectator" ? watchDialog : joinDialog;
+    const name = form.querySelector(`#${prefix}-name`).value;
+    const problem = displayNameError(name);
+    if (problem) {
+      statusOf(dialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
+      return;
+    }
+    const joined = await enterRoom({
+      code: form.querySelector(`#${prefix}-code`).value,
+      password: form.querySelector(`#${prefix}-password`).value,
+      role,
+      displayName: name,
     });
-    hostSession = session;
-    hostLoop = createHostLoop(session, {
-      members: () => roomMembers,
-      now: () => Date.now(),
+    if (!joined?.ok) {
+      statusOf(dialog).textContent = joinProblem(joined?.error);
+      return;
+    }
+    dialog.close();
+    rememberChat(joined.chat);
+    await connectLive({
+      id: joined.room_id,
+      code: form.querySelector(`#${prefix}-code`).value.trim().toUpperCase(),
+      role: joined.role || role,
+      slot: joined.slot,
+      name,
     });
-    hostLoop.start();
   };
 
   joinButton.addEventListener("click", () => {
@@ -259,30 +419,16 @@ export const mountOnlineUi = () => {
       menu.showModal();
       return;
     }
+    menu.close();
     joinDialog.showModal();
   });
-  joinSubmit.addEventListener("click", async (event) => {
+  joinSubmit.addEventListener("click", (event) => {
     event.preventDefault();
-    const name = joinForm.querySelector("#join-name").value;
-    const problem = displayNameError(name);
-    if (problem) {
-      statusOf(joinDialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
-      return;
-    }
-    const joined = await enterRoom({
-      code: joinForm.querySelector("#join-code").value,
-      password: joinForm.querySelector("#join-password").value,
-      role: "player",
-      displayName: name,
-    });
-    if (!joined.ok) {
-      statusOf(joinDialog).textContent = joined.error === "unavailable" ? "Online unavailable" : "Could not join that room.";
-      return;
-    }
-    roomId = joined.room_id;
-    rememberChat(joined.chat);
-    joinDialog.close();
-    showLobby([{ name, role: joined.role || "player", ready: false, ping: null }], joinForm.querySelector("#join-code").value);
+    enter(joinForm, "player");
+  });
+  watchSubmit.addEventListener("click", (event) => {
+    event.preventDefault();
+    enter(watchForm, "spectator");
   });
   browseButton.addEventListener("click", async () => {
     if (unavailable) {
@@ -291,13 +437,22 @@ export const mountOnlineUi = () => {
     }
     paintBrowse(await listPublicRooms());
   });
-  watchButton.addEventListener("click", () => preview("spectator"));
-  boardButton.addEventListener("click", () => {
+  watchButton.addEventListener("click", () => {
     if (unavailable) {
       statusOf(menu).textContent = "Online unavailable";
       return;
     }
-    showBoard([]);
+    menu.close();
+    watchDialog.showModal();
+  });
+  boardButton.addEventListener("click", async () => {
+    if (unavailable) {
+      statusOf(menu).textContent = "Online unavailable";
+      return;
+    }
+    const supabase = await getSupabase();
+    const session = supabase ? await supabase.auth.getSession() : null;
+    showBoard(await loadScores(session?.data?.session?.user?.id));
   });
   createButton.addEventListener("click", async (event) => {
     event.preventDefault();
@@ -323,9 +478,13 @@ export const mountOnlineUi = () => {
       return;
     }
     hostDialog.close();
-    roomId = created.room_id;
-    startHost([{ userId: "host", name, role: "host", connected: true, slot: 0 }]);
-    showLobby(roomMembers, created.join_code);
+    await connectLive({
+      id: created.room_id,
+      code: created.join_code,
+      role: "host",
+      slot: 0,
+      name,
+    });
   });
 
   const preview = (kind) => {
@@ -422,21 +581,18 @@ export const mountOnlineUi = () => {
       if (!cells) return null;
       return new Set(cells);
     },
-    hostBeat: () => (hostLoop ? hostLoop.beat() : []),
+    hostBeat: () => live?.beat?.() || [],
+    inMatch: () => !!live?.started?.(),
+    sendInput: (input) => live?.sendInput?.(input),
     requestAura: (on) => {
       if (spectating) return;
-      if (hostSession) {
-        auraSeq += 1;
-        hostSession.receive(
-          { userId: "host", role: "host", slot: 0 },
-          "action",
-          { seq: auraSeq, input: on ? "aura:on" : "aura:off" },
-        );
+      if (live?.started?.()) {
+        live.sendInput(on ? "aura:on" : "aura:off");
         return;
       }
       window.ularn?.setAura?.(!!on, { role: "host" });
     },
-    acceptsInput: () => (spectating ? false : true),
+    acceptsInput: () => !spectating,
     blocksGameKeys: () => chatLog.blocksGameKeys(),
     mapPings: () => chatLog.pings(),
     dropPing: (point) => {

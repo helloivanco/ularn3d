@@ -1,4 +1,4 @@
-import { getSupabase } from "./config.js";
+import { getSupabase, readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 
 const rpc = async (name, args) => {
@@ -61,5 +61,35 @@ export const claimAbandonedHost = async (roomId) => rpc("claim_host", { p_room_i
 export const markReady = async (roomId, ready) =>
   rpc("set_ready", { p_room_id: roomId, p_ready: ready });
 
+export const touchRoom = async (roomId, depth = null) =>
+  rpc("touch_room", { p_room_id: roomId, p_depth: depth });
+
 export const sendChatMessage = async (roomId, channel, body) =>
   rpc("post_chat", { p_room_id: roomId, p_channel: channel, p_body: body });
+
+/** Replay the finished log. The function, not the browser, chooses the score. */
+export const submitScore = async ({ runId, log }) => {
+  const config = readOnlineEnv();
+  const supabase = await getSupabase();
+  if (!config || !supabase) return { ok: false, verified: false, reason: "unavailable" };
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token) return { ok: false, verified: false, reason: "unavailable" };
+  let response;
+  try {
+    response = await fetch(`${config.url}/functions/v1/submit-score`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: config.key,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ run_id: runId, log }),
+    });
+  } catch {
+    return { ok: false, verified: false, reason: "unavailable" };
+  }
+  const body = await response.json().catch(() => null);
+  if (!body) return { ok: false, verified: false, reason: "unavailable" };
+  return body;
+};

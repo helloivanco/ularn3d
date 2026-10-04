@@ -2,10 +2,10 @@ import { ROOM_EVENTS } from "./protocol.js";
 
 const PING_MS = 15000;
 
-export const openRoomChannel = (supabase, { roomId, userId, role, onEvent, onPresence }) => {
+export const openRoomChannel = (supabase, { roomId, userId, role, onEvent, onPresence, onStatus }) => {
   const topic = `room:${roomId}`;
   const channel = supabase.channel(topic, {
-    config: { private: true, presence: { key: userId } },
+    config: { private: true, broadcast: { self: false }, presence: { key: userId } },
   });
   for (const event of ROOM_EVENTS) {
     channel.on("broadcast", { event }, (message) => {
@@ -17,6 +17,7 @@ export const openRoomChannel = (supabase, { roomId, userId, role, onEvent, onPre
   });
   let pingTimer = null;
   channel.subscribe((status) => {
+    onStatus?.(status);
     if (status !== "SUBSCRIBED") return;
     channel.track({ userId, role, connected: true });
     pingTimer = setInterval(() => {

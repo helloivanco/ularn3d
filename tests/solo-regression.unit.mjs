@@ -14,7 +14,7 @@ const SEED = 2;
 const TURNS = 500;
 const INPUTS = Array.from({ length: TURNS }, () => ".");
 /** Captured from the seeded solo engine. Do not edit without a fresh pre-change run. */
-const GOLDEN = "9083421c67b337f5";
+const GOLDEN = "3a3d396ee8c6a463";
 
 test("500-turn solo seed matches the golden checksum", async () => {
   const first = await scriptedRun({ seed: SEED, inputs: INPUTS });

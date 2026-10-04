@@ -1,6 +1,14 @@
 // Submit a finished run. The service role key is read from the function secret
 // SUPABASE_SERVICE_ROLE_KEY. Do not put that value in the repo.
 //
+// verify_jwt must stay on. This function trusts the Authorization bearer token
+// and does not sign the caller in itself. Turning verify_jwt off would let an
+// unsigned request pick a user id.
+//
+// The replay engine is bundled as gzip parts (see engine-boot.js). A cold start
+// does not download it from GitHub. Hosted isolates that cannot fit those parts
+// read the same bytes from private.replay_engine_part.
+//
 // The function replays the log in a headless engine and inserts that score.
 // The request body does not choose the number. A log that cannot finish inside
 // the free-plan CPU budget is rejected as replay_cpu_cap. Other runs still verify.
@@ -13,10 +21,16 @@ import {
 } from "../_shared/submit.js";
 import { replayFinishedRun } from "../_shared/replay.js";
 
+const corsHeaders = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-methods": "POST, OPTIONS",
+};
+
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...corsHeaders },
   });
 
 export const decide = (input) => handleSubmit(input);
@@ -163,6 +177,7 @@ const userIdFrom = (header) => {
 
 if (typeof Deno !== "undefined" && typeof Deno.serve === "function") {
   Deno.serve(async (request) => {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
     if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
     const callerId = userIdFrom(request.headers.get("Authorization"));
     if (!callerId) return json({ ok: false, error: "unauthenticated" }, 401);

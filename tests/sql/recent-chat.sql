@@ -53,6 +53,15 @@ begin
   if jsonb_array_length(result) <> 50 then
     raise exception 'member history: %', jsonb_array_length(result);
   end if;
+
+  result := public.leave_room(rid);
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'history leave: %', result;
+  end if;
+  result := public.recent_chat(rid);
+  if result <> '[]'::jsonb then
+    raise exception 'left member still read chat: %', result;
+  end if;
 end
 $history$;
 
