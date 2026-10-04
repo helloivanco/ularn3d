@@ -1,11 +1,9 @@
 // Submit a finished run. The service role key is read from the function secret
 // SUPABASE_SERVICE_ROLE_KEY. Do not put that value in the repo.
 //
-// The classic engine is a browser script. Replaying it inside this isolate
-// needs Node's vm plus a DOM stand-in, and a long run can pass the free-plan
-// 2 second CPU cap. This function therefore records the log and rejects the
-// run with replay_unavailable unless a replay hook is injected by tests.
-// Rejected and unverified runs are not inserted into the public scores table.
+// The function replays the log in a headless engine and inserts that score.
+// The request body does not choose the number. A log that cannot finish inside
+// the free-plan CPU budget is rejected as replay_cpu_cap. Other runs still verify.
 
 import {
   callerIsCurrentHost,
@@ -13,6 +11,7 @@ import {
   handleSubmit,
   rejectionUpdatesRun,
 } from "../_shared/submit.js";
+import { replayFinishedRun } from "../_shared/replay.js";
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -22,12 +21,74 @@ const json = (body, status = 200) =>
 
 export const decide = (input) => handleSubmit(input);
 
+const publishVerifiedScore = async (admin, run, decision) => {
+  const profile = await admin.from("profiles").select("display_name").eq("user_id", run.user_id).maybeSingle();
+  if (profile?.error) {
+    return {
+      decision: { ok: false, status: "rejected", verified: false, reason: "unavailable" },
+      updateRun: false,
+    };
+  }
+  const displayName = profile?.data?.display_name;
+  if (!displayName) {
+    await admin.from("runs").update({
+      status: "rejected",
+      reject_reason: "missing_profile",
+      input_hash: null,
+    }).eq("id", run.id).eq("status", "started");
+    return {
+      decision: { ok: false, status: "rejected", verified: false, reason: "missing_profile" },
+      updateRun: true,
+    };
+  }
+  const inserted = await admin.from("scores").insert({
+    run_id: run.id,
+    user_id: run.user_id,
+    display_name: displayName,
+    mode: run.mode,
+    party_size: run.party_size || 1,
+    score: decision.score,
+    depth_reached: decision.depth ?? 0,
+    turns: decision.turns ?? 0,
+    won: !!decision.won,
+    killed_by: decision.killedBy || "",
+    engine_version: decision.engineVersion || run.engine_version || "",
+    verified: true,
+    flagged: false,
+  });
+  if (inserted?.error && inserted.error.code !== "23505") {
+    return {
+      decision: { ok: false, status: "rejected", verified: false, reason: "unavailable" },
+      updateRun: false,
+    };
+  }
+  const updated = await admin.from("runs").update({
+    status: "verified",
+    reject_reason: null,
+    input_hash: decision.checksum || null,
+  }).eq("id", run.id).eq("status", "started");
+  if (updated?.error) {
+    return {
+      decision: { ok: false, status: "rejected", verified: false, reason: "unavailable" },
+      updateRun: false,
+    };
+  }
+  return { decision, updateRun: true };
+};
+
 /**
- * Load the run, recognize the room's current host, and record a score attempt
- * in private.score_submits. Unauthorized callers and the rate limit do not
- * change the run. Replay stays unavailable unless a test injects one.
+ * Load the run, recognize the room's current host, replay the log, and insert
+ * the verified score. Unauthorized callers and the rate limit do not change
+ * the run. Pass `replay` only from tests that need a stand-in.
  */
-export const acceptScore = async ({ admin, body, callerId, now = Date.now(), ip = "", replay }) => {
+export const acceptScore = async ({
+  admin,
+  body,
+  callerId,
+  now = Date.now(),
+  ip = "",
+  replay = replayFinishedRun,
+}) => {
   const loaded = await admin.from("runs").select("*").eq("id", body?.run_id).maybeSingle();
   const run = loaded?.data ?? null;
   let hostUserId = null;
@@ -71,6 +132,10 @@ export const acceptScore = async ({ admin, body, callerId, now = Date.now(), ip 
     bodySeed: body?.seed,
     replay,
   });
+  if (decision.verified) {
+    const published = await publishVerifiedScore(admin, run, decision);
+    return { decision: published.decision, updateRun: published.updateRun, isHost };
+  }
   const updateRun = decision.status === "rejected"
     && rejectionUpdatesRun({ run, callerId, isHost, reason: decision.reason });
   if (updateRun) {
@@ -114,7 +179,6 @@ if (typeof Deno !== "undefined" && typeof Deno.serve === "function") {
       body,
       callerId,
       ip,
-      replay: async () => ({ ok: false, reason: "replay_unavailable" }),
     });
     if (outcome.decision.reason === "unavailable") return json({ ok: false, error: "unavailable" }, 503);
     return json({ ok: outcome.decision.verified === true, ...outcome.decision });

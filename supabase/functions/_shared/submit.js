@@ -90,6 +90,8 @@ export const handleSubmit = async ({
     turns: played.turns,
     won: !!played.won,
     killedBy: played.killedBy || "",
+    checksum: played.checksum || null,
+    engineVersion: played.engineVersion || "",
     seed: run.seed,
   };
 };

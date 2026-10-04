@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.37 — Verified scores
+
+- A finished run is replayed on the server. The number on the public board is the score that replay produced
+- A run that is too long to replay is refused. Shorter runs still count
+- A changed log, a run used twice, someone else's run, a co-op score from anyone but the host, and a run that finished too fast are still refused
+
 ## 1.3.36 — Score submit checks
 
 - A co-op score submission is checked against the current host of that room

@@ -115,6 +115,17 @@
         </p>
 
         <ol class="changelog-list">
+          <li id="v1-3-37">
+            <header>
+              <span class="changelog-version">v1.3.37</span>
+              <h3>Verified scores</h3>
+            </header>
+            <ul>
+              <li>A finished run is replayed on the server. The number on the public board is the score that replay produced</li>
+              <li>A run that is too long to replay is refused. Shorter runs still count</li>
+              <li>A changed log, a run used twice, someone else's run, a co-op score from anyone but the host, and a run that finished too fast are still refused</li>
+            </ul>
+          </li>
           <li id="v1-3-36">
             <header>
               <span class="changelog-version">v1.3.36</span>
