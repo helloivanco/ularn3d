@@ -12,7 +12,7 @@ Saves and preferences live in `%APPDATA%\Ularn` and survive app restarts and upg
 
 ## Build locally
 
-Requires Node.js 22.12 or newer and npm. Install and launch the built desktop game:
+Requires Node.js 22.12 or newer and npm. Optional online play reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from the environment while Vite builds the renderer. Copy `.env.example` to `.env` before packaging if the desktop build should include online rooms. The package never receives a service-role key. Install and launch the built desktop game:
 
 ```sh
 npm ci

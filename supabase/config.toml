@@ -1,0 +1,34 @@
+# Local Supabase config. The hosted project is rysazeizsuefshazbwyh.
+# Do not add the `private` schema here. Privileged functions live there so
+# PostgREST cannot call them directly.
+
+project_id = "ularn3d"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[realtime]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["https://ularn3d.vercel.app"]
+enable_signup = true
+enable_anonymous_sign_ins = true
+
+[auth.captcha]
+enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"

@@ -23,6 +23,7 @@
     "version": "node scripts/sync-version.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "three": "^0.186.0"
   },
   "devDependencies": {

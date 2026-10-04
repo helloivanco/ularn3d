@@ -67,7 +67,22 @@ Open **Menu → Graphics** to choose Cinematic or Balanced. Balanced is the defa
 
 A compressed, versioned autosave is stored locally after completed turns. Changes are coalesced over two seconds to avoid recompressing every explored floor on each keystroke; manual saves and page exit save immediately. Continue restores position, generated maps, monsters, inventory, stats, and game time. New saves preserve exact equipped inventory slots even when items are identical, and resumed games preserve the selected difficulty for newly generated monsters. Menus and unfinished prompts do not replace the last stable save. Storage failures display an explicit message. Resume validates saved map dimensions and player state before loading. Legacy checkpoint, backup, and end-of-run save slots use a separate 3D namespace, preserving classic saves during play as well as on reload. Death or victory deletes the resumable expedition. Beginning another expedition replaces the current autosave. Saves belong to the exact web origin and device; preview and production domains have separate saves.
 
-No account, database, API key, remotely hosted assets, analytics, or score server is required by the 3D edition. Scores remain local. Global leaderboards, live broadcasts, weekly challenges, and remote replays from larn.org are intentionally not connected.
+Solo play needs no account, database, API key, remotely hosted assets, or analytics. Scores stay on this device until you submit a finished run. The classic larn.org score socket is unchanged and does not feed the online board.
+
+## Online play
+
+Online rooms, chat, and the verified leaderboard are optional. The game loads the Supabase client only after you open Multiplayer, Watch, Chat, or Leaderboard, or after a finished run is submitted. If those values are missing or the service cannot be reached, those menus say “Online unavailable” and solo play is unchanged.
+
+Copy `.env.example` to `.env` before `npm run dev` or `npm run build`:
+
+```sh
+VITE_SUPABASE_URL=https://rysazeizsuefshazbwyh.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_keXMN2GiqTPVZ9WlRtIYkw_AmndgmgW
+```
+
+The publishable key is the only client key. Never put a service-role or secret key in `.env`, the repo, or the Electron package. `npm run build` bakes `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` into the renderer, and the desktop scripts run that build, so a packaged game uses the same values. Sign-in is anonymous. Display names are 3–16 characters and are rejected when they contain a blocked word.
+
+Turnstile CAPTCHA for anonymous sign-in is off unless `VITE_SUPABASE_CAPTCHA=true` and `VITE_TURNSTILE_SITE_KEY` are set, and CAPTCHA is enabled in the Supabase Auth dashboard. Leave both unset for local play.
 
 ## Build and Vercel
 
