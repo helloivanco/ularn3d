@@ -1,24 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handleSubmit, publicBoard } from "../supabase/functions/_shared/submit.js";
-import { bootEngine, playInputs, scriptedRun } from "./lib/engine-session.mjs";
+import { replayFinishedRun } from "../supabase/functions/_shared/replay.js";
+import { bootEngine, playInputs } from "./lib/engine-session.mjs";
+import { readFileSync } from "node:fs";
+import { concatEngineFiles } from "../supabase/functions/_shared/engine-files.js";
+import { ENGINE_SOURCE } from "../supabase/functions/_shared/engine-source.js";
 
 const scoreOf = (api) => (api.player.GOLD || 0) + (api.player.BANKACCOUNT || 0);
 
-const replayLog = async ({ seed, log }) => {
-  const played = await scriptedRun({
-    seed,
-    inputs: log.map((row) => row.action),
-  });
-  return {
-    ok: true,
-    score: scoreOf(played.api),
-    depth: played.level,
-    turns: played.gtime,
-    won: false,
-    checksum: played.checksum,
-  };
-};
+const replayLog = (input) => replayFinishedRun({ ...input, mode: input.mode || "solo" });
 
 const started = "2026-10-04T00:00:00.000Z";
 const later = Date.parse(started) + 60_000;
@@ -112,7 +103,35 @@ test("a recorded solo run and a recorded co-op run replay to the same score", as
     await playInputs(api, inputs);
     return scoreOf(api);
   };
-  assert.equal(await coop(), await coop());
+  const nodeCoop = await coop();
+  assert.equal(nodeCoop, await coop());
+  const hosted = await replayFinishedRun({ seed: 2, log, mode: "coop" });
+  assert.equal(hosted.ok, true);
+  assert.equal(hosted.score, nodeCoop);
+  const decided = await handleSubmit({
+    run: {
+      user_id: "ada",
+      mode: "coop",
+      status: "started",
+      seed: 2,
+      started_at: started,
+      snapshotChecksum: hosted.checksum,
+    },
+    log,
+    now: later,
+    callerId: "ada",
+    isHost: true,
+    claimedScore: 999999,
+    replay: replayFinishedRun,
+  });
+  assert.equal(decided.verified, true);
+  assert.equal(decided.score, nodeCoop);
+  assert.notEqual(decided.score, 999999);
+});
+
+test("the edge bundle matches the engine scripts on disk", () => {
+  const built = concatEngineFiles((rel) => readFileSync(`public/engine/${rel}`, "utf8"));
+  assert.equal(ENGINE_SOURCE, built);
 });
 
 test("the public board hides unverified and flagged rows", () => {
