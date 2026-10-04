@@ -20,6 +20,7 @@ export const assessSubmission = ({
   if (run.status !== "started") return reject("reused");
   if (run.mode === "coop" && !isHost) return reject("not_host");
   if (callerId && run.user_id !== callerId && !isHost) return reject("not_owner");
+  if (recentSubmits >= SUBMIT_LIMIT) return reject("rate_limited");
   if (!Array.isArray(log)) return reject("bad_log");
   if (JSON.stringify(log).length > MAX_LOG_CHARS) return reject("too_large");
   const started = Date.parse(run.started_at);
@@ -27,8 +28,33 @@ export const assessSubmission = ({
   if (log.length > 0 && Number.isFinite(started) && now - started < log.length * MIN_MS_PER_TURN) {
     return reject("too_fast");
   }
-  if (recentSubmits >= SUBMIT_LIMIT) return reject("rate_limited");
   return { ok: true, turns: log.length };
+};
+
+/** The room's current host: rooms.host_user_id, still seated as host. */
+export const callerIsCurrentHost = ({ callerId, hostUserId, member }) => {
+  if (!callerId || !hostUserId || callerId !== hostUserId) return false;
+  if (!member || member.role !== "host" || member.banned === true) return false;
+  return true;
+};
+
+/** Solo owner, or the current host of a co-op room. Banned callers are not allowed. */
+export const callerMaySubmit = ({ run, callerId, isHost, banned = false }) => {
+  if (banned || !run || !callerId) return false;
+  if (run.mode === "coop") return isHost === true;
+  return run.user_id === callerId;
+};
+
+/**
+ * Only an allowed submitter's own bad log rejects the run.
+ * not_owner, not_host, and the rate limit leave status untouched.
+ */
+export const rejectionUpdatesRun = ({ run, callerId, isHost, banned = false, reason }) => {
+  if (!callerMaySubmit({ run, callerId, isHost, banned })) return false;
+  if (reason === "not_owner" || reason === "not_host" || reason === "rate_limited" || reason === "unavailable") {
+    return false;
+  }
+  return true;
 };
 
 export const handleSubmit = async ({

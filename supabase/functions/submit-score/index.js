@@ -7,7 +7,12 @@
 // run with replay_unavailable unless a replay hook is injected by tests.
 // Rejected and unverified runs are not inserted into the public scores table.
 
-import { handleSubmit } from "../_shared/submit.js";
+import {
+  callerIsCurrentHost,
+  callerMaySubmit,
+  handleSubmit,
+  rejectionUpdatesRun,
+} from "../_shared/submit.js";
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -16,6 +21,67 @@ const json = (body, status = 200) =>
   });
 
 export const decide = (input) => handleSubmit(input);
+
+/**
+ * Load the run, recognize the room's current host, and record a score attempt
+ * in private.score_submits. Unauthorized callers and the rate limit do not
+ * change the run. Replay stays unavailable unless a test injects one.
+ */
+export const acceptScore = async ({ admin, body, callerId, now = Date.now(), ip = "", replay }) => {
+  const loaded = await admin.from("runs").select("*").eq("id", body?.run_id).maybeSingle();
+  const run = loaded?.data ?? null;
+  let hostUserId = null;
+  let member = null;
+  if (run?.mode === "coop" && run.room_id) {
+    const room = await admin.from("rooms").select("host_user_id").eq("id", run.room_id).maybeSingle();
+    hostUserId = room?.data?.host_user_id ?? null;
+    const seated = await admin
+      .from("room_members")
+      .select("role,banned")
+      .eq("room_id", run.room_id)
+      .eq("user_id", callerId)
+      .maybeSingle();
+    member = seated?.data ?? null;
+  }
+  const isHost = callerIsCurrentHost({ callerId, hostUserId, member });
+  const allowed = callerMaySubmit({ run, callerId, isHost });
+  let recentSubmits = 0;
+  if (allowed && run?.status === "started") {
+    const noted = await admin.rpc("note_score_submit", {
+      p_user_id: callerId,
+      p_ip: ip || "",
+    });
+    if (noted?.error) {
+      return {
+        decision: { ok: false, status: "rejected", verified: false, reason: "unavailable" },
+        updateRun: false,
+        isHost,
+      };
+    }
+    recentSubmits = Number(noted?.data ?? 0);
+  }
+  const decision = await handleSubmit({
+    run,
+    log: body?.log,
+    now,
+    callerId,
+    isHost,
+    recentSubmits,
+    claimedScore: body?.score,
+    bodySeed: body?.seed,
+    replay,
+  });
+  const updateRun = decision.status === "rejected"
+    && rejectionUpdatesRun({ run, callerId, isHost, reason: decision.reason });
+  if (updateRun) {
+    await admin.from("runs").update({
+      status: "rejected",
+      reject_reason: decision.reason,
+      input_hash: null,
+    }).eq("id", run.id).eq("status", "started");
+  }
+  return { decision, updateRun, isHost };
+};
 
 const userIdFrom = (header) => {
   if (!header || !header.startsWith("Bearer ")) return null;
@@ -41,25 +107,16 @@ if (typeof Deno !== "undefined" && typeof Deno.serve === "function") {
     if (!url || !key) return json({ ok: false, error: "unavailable" }, 503);
     const { createClient } = await import("npm:@supabase/supabase-js@2");
     const admin = createClient(url, key, { auth: { persistSession: false } });
-    const loaded = await admin.from("runs").select("*").eq("id", body.run_id).maybeSingle();
-    const run = loaded.data;
-    const decision = await decide({
-      run,
-      log: body.log,
-      now: Date.now(),
+    const forwarded = request.headers.get("x-forwarded-for") || "";
+    const ip = forwarded.split(",")[0].trim();
+    const outcome = await acceptScore({
+      admin,
+      body,
       callerId,
-      isHost: false,
-      claimedScore: body.score,
-      bodySeed: body.seed,
+      ip,
       replay: async () => ({ ok: false, reason: "replay_unavailable" }),
     });
-    if (run && decision.status === "rejected") {
-      await admin.from("runs").update({
-        status: "rejected",
-        reject_reason: decision.reason,
-        input_hash: null,
-      }).eq("id", run.id).eq("status", "started");
-    }
-    return json({ ok: decision.verified === true, ...decision });
+    if (outcome.decision.reason === "unavailable") return json({ ok: false, error: "unavailable" }, 503);
+    return json({ ok: outcome.decision.verified === true, ...outcome.decision });
   });
 }

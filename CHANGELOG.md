@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.36 — Score submit checks
+
+- A co-op score submission is checked against the current host of that room
+- Knowing another player's run id does not throw that run away
+- Too many score submissions in an hour are refused, and the run stays as it was
+
 ## 1.3.35 — Unknown finds and the aura switch
 
 - Picking up a potion or a scroll no longer tells you what it is. Drinking, reading, and an identify scroll still do. The shop still names what you buy

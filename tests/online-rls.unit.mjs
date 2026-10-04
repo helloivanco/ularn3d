@@ -40,6 +40,15 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
   apply("supabase/migrations/20261004201000_scores.sql");
   apply("supabase/migrations/20261004223000_pg_cron.sql");
   apply("supabase/migrations/20261004223000_pg_cron.sql");
+  psqlAdmin(["-d", database, "-v", "ON_ERROR_STOP=1"], `
+    create or replace function public.rls_auto_enable()
+    returns event_trigger
+    language plpgsql
+    as $fn$ begin end $fn$;
+    grant execute on function public.rls_auto_enable() to public, anon, authenticated;
+  `);
+  apply("supabase/migrations/20261004233000_revoke_rls_auto_enable.sql");
+  apply("supabase/migrations/20261004233000_revoke_rls_auto_enable.sql");
   const output = applyAndCapture("tests/sql/online-rls.sql");
   assert.match(output, /online rls ok/);
   const scores = applyAndCapture("tests/sql/scores-rls.sql");
@@ -48,6 +57,8 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
   assert.match(history, /recent chat ok/);
   const cron = applyAndCapture("tests/sql/pg-cron.sql");
   assert.match(cron, /pg cron ok/);
+  const guards = applyAndCapture("tests/sql/submit-guards.sql");
+  assert.match(guards, /submit guards ok/);
 });
 
 const applyAndCapture = (file) =>
