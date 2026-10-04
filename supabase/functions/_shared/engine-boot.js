@@ -1,9 +1,55 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createHeadlessDom } from "./headless-dom.js";
 import { concatEngineFiles } from "./engine-files.js";
 import { createScriptEngine } from "./script-context.js";
+import { BUNDLED_ENGINE_SHA256, ENGINE_PART_COUNT } from "./engine-bundle-meta.js";
+
+const builtin = (name) => {
+  try {
+    if (typeof process !== "undefined" && typeof process.getBuiltinModule === "function") {
+      return process.getBuiltinModule(name);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const decodeBundle = async (b64) => {
+  if (typeof b64 !== "string" || b64.length < 1000) return null;
+  const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const text = await new Response(stream).text();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (hex !== BUNDLED_ENGINE_SHA256) throw new Error("engine bundle checksum");
+  return text;
+};
+
+const bundledEngineSource = async () => {
+  try {
+    let b64 = "";
+    for (let i = 0; i < ENGINE_PART_COUNT; i++) {
+      const mod = await import(`./engine-part-${i}.js`);
+      b64 += mod.PART || "";
+    }
+    return await decodeBundle(b64);
+  } catch {
+    return null;
+  }
+};
+
+const hostedEngineSource = async () => {
+  const env = globalThis.Deno?.env;
+  if (!env?.get) return null;
+  const url = env.get("SUPABASE_URL");
+  const key = env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  const { createClient } = await import("npm:@supabase/supabase-js@2");
+  const admin = createClient(url, key, { auth: { persistSession: false } });
+  const { data, error } = await admin.rpc("replay_engine_bundle");
+  if (error) return null;
+  return decodeBundle(data);
+};
 
 let vmApi = null;
 
@@ -35,20 +81,10 @@ export const ensureVm = async () => {
   return vmApi;
 };
 
-/** Pinned bundle. The hash is the file bytes, so a changed download is refused. */
-export const ENGINE_SOURCE_SHA256 = "53868af2da5fbdc532f9bb9441c3045163a91fe605e15dca10e0bf993bf9f03b";
-const ENGINE_COMMIT = "caa0b28145ab4ca8db87b4c0cf9c86e81a5dcc9b";
-const ENGINE_SOURCE_URLS = [
-  `https://raw.githubusercontent.com/helloivanco/ularn3d/${ENGINE_COMMIT}/supabase/functions/_shared/engine-source.js`,
-  `https://cdn.jsdelivr.net/gh/helloivanco/ularn3d@${ENGINE_COMMIT}/supabase/functions/_shared/engine-source.js`,
-];
+/** Hash of the bundled engine-source.js. A changed bundle is refused by the unit test. */
+export const ENGINE_SOURCE_SHA256 = "bebb9a8dfc02671491ac1184818f3d9cd7f816fdc7b5d69ff951a73166889e77";
 
 let cachedSource = null;
-
-const sha256 = async (text) => {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-};
 
 /** Pull the engine string out of the generated module. */
 export const extractEngineBundle = (text) => {
@@ -63,10 +99,14 @@ export const extractEngineBundle = (text) => {
 
 const repoEngineSource = () => {
   try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const root = join(here, "../../../public/engine");
-    if (!existsSync(join(root, "determinism.js"))) return null;
-    return concatEngineFiles((rel) => readFileSync(join(root, rel), "utf8"));
+    const fs = builtin("fs");
+    const path = builtin("path");
+    const url = builtin("url");
+    if (!fs?.existsSync || !path || !url?.fileURLToPath) return null;
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const root = path.join(here, "../../../public/engine");
+    if (!fs.existsSync(path.join(root, "determinism.js"))) return null;
+    return concatEngineFiles((rel) => fs.readFileSync(path.join(root, rel), "utf8"));
   } catch {
     return null;
   }
@@ -74,40 +114,36 @@ const repoEngineSource = () => {
 
 const siblingEngineSource = () => {
   try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const path = join(here, "engine-source.js");
-    if (!existsSync(path)) return null;
-    return extractEngineBundle(readFileSync(path, "utf8"));
+    const fs = builtin("fs");
+    const path = builtin("path");
+    const url = builtin("url");
+    if (!fs?.existsSync || !path || !url?.fileURLToPath) return null;
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const file = path.join(here, "engine-source.js");
+    if (!fs.existsSync(file)) return null;
+    return extractEngineBundle(fs.readFileSync(file, "utf8"));
   } catch {
     return null;
   }
 };
 
-const fetchPinnedEngineSource = async () => {
-  let lastError = null;
-  for (const url of ENGINE_SOURCE_URLS) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`engine bundle ${response.status}`);
-      const text = await response.text();
-      const hash = await sha256(text);
-      if (hash !== ENGINE_SOURCE_SHA256) throw new Error("engine bundle hash");
-      return extractEngineBundle(text);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError || new Error("engine bundle fetch");
-};
-
 /**
- * Repo scripts when this process can see public/engine. The Edge isolate uses
- * the sibling bundle, or the same pinned file when that bundle is not on disk.
+ * The replay engine ships as gzip parts next to this file. A cold start does
+ * not download it from GitHub. The hosted function reads those same parts from
+ * private.replay_engine_part (service role only) when the parts are not in the
+ * isolate. submit-score relies on verify_jwt staying enabled: it reads the
+ * caller from that JWT and does not sign anyone in itself.
  */
 export const ensureEngineSource = async () => {
   await ensureVm();
   if (cachedSource) return cachedSource;
-  cachedSource = repoEngineSource() || siblingEngineSource() || await fetchPinnedEngineSource();
+  const bundled = await bundledEngineSource() || await hostedEngineSource();
+  if (typeof bundled === "string" && bundled.length > 1000) {
+    cachedSource = bundled;
+    return cachedSource;
+  }
+  cachedSource = repoEngineSource() || siblingEngineSource();
+  if (!cachedSource) throw new Error("engine bundle missing");
   return cachedSource;
 };
 

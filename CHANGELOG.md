@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.39 — Live multiplayer rooms
+
+- Hosting, joining, and watching open the room and keep the lobby, chat, and turns in sync
+- Ready and Start talk to the room. If the host is gone, the next player can take the room
+- A finished co-op run is sent in for a verified or rejected score, and the leaderboard shows verified rows
+- Chat history stays with the people still in the room
+
 ## 1.3.37 — Verified scores
 
 - A finished run is replayed on the server. The number on the public board is the score that replay produced

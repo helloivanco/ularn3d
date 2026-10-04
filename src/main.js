@@ -878,6 +878,12 @@ function stopTravel() {
 }
 function command(key, shift = false) {
   stopTravel();
+  if (document.activeElement?.id === "chat-input") return;
+  if (window.ularnOnline?.inMatch?.()) {
+    if (window.ularnOnline.acceptsInput?.() === false) return;
+    window.ularnOnline.sendInput?.(shift && key.length === 1 ? key.toUpperCase() : key);
+    return;
+  }
   if (!state || graphicsLost) return;
   const before = `${state.level}:${state.x},${state.y}`;
   engine.key(key, shift);
@@ -903,6 +909,7 @@ const keyMap = {
   End: "end",
 };
 window.addEventListener("keydown", (event) => {
+  if (event.target?.id === "chat-input") return;
   if (window.ularnOnline?.blocksGameKeys?.()) return;
   if (event.key === "Tab" && window.ularnOnline?.spectating?.()) {
     event.preventDefault();

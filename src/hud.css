@@ -239,6 +239,13 @@
   background: rgba(16, 28, 32, 0.92); color: #f3d48a; border: 1px solid rgba(232, 196, 122, 0.45);
   padding: 8px 12px; border-radius: 999px;
 }
+.room-code { margin: 0; font-size: 28px; letter-spacing: 0.14em; }
+.room-code strong { color: #f3d48a; }
+#score-banner {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
+  background: rgba(16, 28, 32, 0.94); color: #f3d48a; border: 1px solid rgba(232, 196, 122, 0.5);
+  padding: 12px 16px; border-radius: 10px; font-size: 20px;
+}
 .board-list { margin: 0; padding-left: 18px; }
 .board-list .yours { color: #f3d48a; }
 .chat-tabs .acting { color: #f3d48a; }
