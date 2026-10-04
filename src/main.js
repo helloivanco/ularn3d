@@ -693,13 +693,20 @@ function drawMap() {
     }
     contentKey = `${contentHash}:${cssW}x${cssH}`;
   }
-  if (canvas.dataset.contentKey === contentKey && canvas.dataset.playerKey === playerKey)
+  const pings = window.ularnOnline?.mapPings?.() ?? [];
+  const pingKey = pings.map((ping) => `${ping.x},${ping.y}`).join(";");
+  if (
+    canvas.dataset.contentKey === contentKey &&
+    canvas.dataset.playerKey === playerKey &&
+    canvas.dataset.pingKey === pingKey
+  )
     return;
   // Walking only moves @. Redraw the old and new cell instead of 57×20 fillRects.
   if (
     canvas.dataset.contentKey === contentKey &&
     canvas.dataset.playerKey &&
-    canvas.dataset.playerKey !== playerKey
+    canvas.dataset.playerKey !== playerKey &&
+    canvas.dataset.pingKey === pingKey
   ) {
     const [ox, oy] = canvas.dataset.playerKey.split(",").map(Number);
     const paintCell = (x, y, isPlayer) => {
@@ -748,6 +755,7 @@ function drawMap() {
     paintCell(ox, oy, false);
     paintCell(state.x, state.y, true);
     canvas.dataset.playerKey = playerKey;
+    canvas.dataset.pingKey = pingKey;
     return;
   }
   ctx.fillStyle = "#0a1214";
@@ -812,8 +820,16 @@ function drawMap() {
       ctx.fillText(String(ally.name || "A").slice(0, 1), ax + cell / 2, ay + cell / 2);
     }
   }
+  for (const ping of pings) {
+    if (ping.x < x0 || ping.y < y0 || ping.x >= x0 + cols || ping.y >= y0 + rows) continue;
+    const px = (ping.x - x0) * cell;
+    const py = (ping.y - y0) * cell;
+    ctx.strokeStyle = "#f3d48a";
+    ctx.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+  }
   canvas.dataset.contentKey = contentKey;
   canvas.dataset.playerKey = playerKey;
+  canvas.dataset.pingKey = pingKey;
   const sizeKey = `${nextWidth}x${nextHeight}:${cssW}x${cssH}`;
   if (canvas.dataset.sizeKey !== sizeKey) {
     canvas.dataset.sizeKey = sizeKey;
@@ -860,6 +876,7 @@ const keyMap = {
   End: "end",
 };
 window.addEventListener("keydown", (event) => {
+  if (window.ularnOnline?.blocksGameKeys?.()) return;
   if (event.key === "Tab" && window.ularnOnline?.spectating?.()) {
     event.preventDefault();
     window.ularnOnline.cycleFollow();

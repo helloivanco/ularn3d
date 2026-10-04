@@ -50,3 +50,6 @@ export const claimAbandonedHost = async (roomId) => rpc("claim_host", { p_room_i
 
 export const markReady = async (roomId, ready) =>
   rpc("set_ready", { p_room_id: roomId, p_ready: ready });
+
+export const sendChatMessage = async (roomId, channel, body) =>
+  rpc("post_chat", { p_room_id: roomId, p_channel: channel, p_body: body });

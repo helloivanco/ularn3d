@@ -3,6 +3,8 @@ import { readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
 import { createSpectatorView } from "./spectator.js";
+import { createChatLog } from "./chat.js";
+import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
 
 const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
@@ -77,31 +79,29 @@ export const mountOnlineUi = () => {
   }
 
   const board = panel("Leaderboard", document.createElement("div"));
-  let channel = "party";
-  let messages = [];
-  let unread = 0;
   let spectating = false;
   let watch = null;
+  let roomId = null;
+  const chatLog = createChatLog({
+    persist: (message) => (roomId ? sendChatMessage(roomId, message.channel, message.body) : null),
+  });
 
   const renderChat = () => {
     const log = chat.querySelector("#chat-log");
     log.replaceChildren();
-    for (const message of messages.filter((entry) => entry.channel === channel).slice(-50)) {
+    for (const message of chatLog.visible()) {
       const row = document.createElement("p");
       row.textContent = `${message.name}: ${message.body}`;
       log.append(row);
     }
     const badge = chat.querySelector("#chat-unread");
-    badge.hidden = unread < 1;
-    badge.textContent = String(unread);
+    badge.hidden = chatLog.unread() < 1;
+    badge.textContent = String(chatLog.unread());
   };
 
-  const sendChat = (body) => {
-    const problem = displayNameError("Ada");
-    if (!body.trim() || body.length > 280) return;
-    if (problem && body.toLowerCase().includes("shit")) return;
-    messages.push({ channel, name: "Ada", body: body.trim() });
-    unread = 0;
+  const sendChat = async (body) => {
+    const sent = await chatLog.post({ body, name: "Ada" });
+    if (!sent.ok && sent.error === "filtered") statusOf(menu).textContent = "That message is not allowed.";
     renderChat();
   };
 
@@ -113,9 +113,8 @@ export const mountOnlineUi = () => {
   });
   chat.querySelectorAll(".chat-tabs button").forEach((tab) => {
     tab.addEventListener("click", () => {
-      channel = tab.dataset.channel;
+      chatLog.setChannel(tab.dataset.channel);
       chat.querySelectorAll(".chat-tabs button").forEach((other) => other.classList.toggle("acting", other === tab));
-      unread = 0;
       renderChat();
     });
   });
@@ -123,12 +122,16 @@ export const mountOnlineUi = () => {
     chat.hidden = true;
   });
 
+  const chatInput = chat.querySelector("#chat-input");
+  chatInput.addEventListener("focus", () => chatLog.setTyping(true));
+  chatInput.addEventListener("blur", () => chatLog.setTyping(false));
+
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || chat.hidden) return;
     if (event.target.matches("input, textarea")) return;
     event.preventDefault();
     event.stopPropagation();
-    chat.querySelector("#chat-input").focus();
+    chatInput.focus();
   }, true);
 
   const paintBrowse = (rooms) => {
@@ -262,10 +265,11 @@ export const mountOnlineUi = () => {
     }
     if (kind === "chat") {
       chat.hidden = false;
-      messages = [
-        { channel: "party", name: "Bea", body: "Follow me" },
-        { channel: "party", name: "Ada", body: "Wait" },
-      ];
+      chatLog.setChannel("party");
+      chatLog.history([
+        { channel: "party", name: "Bea", body: "Follow me", userId: "bea" },
+        { channel: "party", name: "Ada", body: "Wait", userId: "ada" },
+      ]);
       renderChat();
     }
     if (kind === "leaderboard") {
@@ -286,8 +290,8 @@ export const mountOnlineUi = () => {
       badge.textContent = watch.badge(3);
       root.append(badge);
       chat.hidden = false;
-      messages = [{ channel: "spectators", name: "Cid", body: "The stairs are east." }];
-      channel = "spectators";
+      chatLog.setChannel("spectators");
+      chatLog.history([{ channel: "spectators", name: "Cid", body: "The stairs are east.", userId: "cid" }]);
       renderChat();
     }
     if (kind === "menu") menu.showModal();
@@ -339,6 +343,11 @@ export const mountOnlineUi = () => {
     followed: () => watch?.followed() ?? null,
     fogMask: () => null,
     acceptsInput: () => (spectating ? false : true),
+    blocksGameKeys: () => chatLog.blocksGameKeys(),
+    mapPings: () => chatLog.pings(),
+    dropPing: (point) => {
+      chatLog.ping(point);
+    },
   };
 };
 
