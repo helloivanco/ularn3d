@@ -31,6 +31,7 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
   apply("tests/sql/harness.sql");
   apply("supabase/migrations/20261004184500_online_rooms.sql");
   apply("supabase/migrations/20261004184500_online_rooms.sql");
+  apply("supabase/migrations/20261004193000_claim_host.sql");
   const output = applyAndCapture("tests/sql/online-rls.sql");
   assert.match(output, /online rls ok/);
 });

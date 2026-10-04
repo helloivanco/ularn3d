@@ -5,7 +5,10 @@ import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
+import { mountOnlineUi } from "./online/ui.js";
 mountIcons();
+const onlineUi = mountOnlineUi();
+window.ularnOnline = onlineUi;
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
 const classes = [
@@ -416,6 +419,7 @@ function update() {
   if (!next) return;
   state = next;
   world?.update(state);
+  const partyNow = typeof engine.party === "function" ? engine.party() : [];
   const hudKey = [
     state.name,
     state.character,
@@ -442,6 +446,7 @@ function update() {
     state.maze,
     state.prompt,
     state.saveError || "",
+    partyNow.map((member) => `${member.slot}:${member.name}:${member.hp}:${member.dungeon}`).join(","),
   ].join("|");
   if (hudKey !== hudSignature) {
     hudSignature = hudKey;
@@ -453,7 +458,7 @@ function update() {
     );
     $("player-rank").textContent = `LV ${state.rank}`;
     $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
-    const party = typeof engine.party === "function" ? engine.party() : [];
+    const party = partyNow;
     const partyHud = $("party-hud");
     const turnStrip = $("turn-strip");
     if (partyHud) {

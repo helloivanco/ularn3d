@@ -304,6 +304,83 @@ begin
 end
 $channel$;
 
+do $rejoin$
+declare
+  late uuid := '66666666-6666-4666-8666-666666666666';
+  hid uuid;
+  code text;
+  rid uuid;
+  result jsonb;
+begin
+  select scenario.host_id into hid from scenario;
+  perform set_config('request.jwt.claim.sub', hid::text, true);
+  result := public.create_room(null, false, 4, 0, null);
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'spare room: %', result;
+  end if;
+  code := result ->> 'join_code';
+  rid := (result ->> 'room_id')::uuid;
+  insert into auth.users (id) values (late);
+  perform set_config('request.jwt.claim.sub', late::text, true);
+  result := public.set_display_name('Late');
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'late name: %', result;
+  end if;
+  result := public.join_room(code, null, 'player', null);
+  if result ->> 'ok' is distinct from 'true' or result ->> 'resumed' is distinct from 'false' then
+    raise exception 'late join: %', result;
+  end if;
+  result := public.leave_room(rid);
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'late leave: %', result;
+  end if;
+  update public.room_members set left_at = now() - interval '3 minutes' where user_id = late and room_id = rid;
+  result := public.join_room(code, null, 'player', 'Nova');
+  if result ->> 'ok' is distinct from 'true' or result ->> 'resumed' is distinct from 'false' then
+    raise exception 'expired rejoin should be a new character: %', result;
+  end if;
+  result := public.leave_room(rid);
+  update public.room_members
+  set left_at = now() - interval '30 seconds', connected = false
+  where user_id = late and room_id = rid;
+  result := public.join_room(code, null, 'player', null);
+  if result ->> 'resumed' is distinct from 'true' then
+    raise exception 'grace rejoin: %', result;
+  end if;
+  result := public.set_ready(rid, true);
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'set ready: %', result;
+  end if;
+end
+$rejoin$;
+
+do $claim$
+declare
+  rid uuid;
+  hid uuid;
+  aid uuid;
+  result jsonb;
+begin
+  select scenario.room_id, scenario.host_id, scenario.ally_id into rid, hid, aid from scenario;
+  update public.room_members as member
+  set last_seen = now() - interval '20 seconds'
+  where member.room_id = rid and member.user_id = aid;
+  update public.room_members as member
+  set connected = true
+  where member.room_id = rid and member.user_id = hid;
+  perform set_config('request.jwt.claim.sub', hid::text, true);
+  result := public.claim_host(rid);
+  if result ->> 'ok' is distinct from 'true' then
+    raise exception 'claim host: %', result;
+  end if;
+  perform set_config('request.jwt.claim.sub', aid::text, true);
+  result := public.set_hide_spectator_chat(rid, true);
+  if result ->> 'error' is distinct from 'not_host' then
+    raise exception 'old host hid chat: %', result;
+  end if;
+end
+$claim$;
+
 do $cleanup$
 declare
   rid uuid;

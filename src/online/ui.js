@@ -1,0 +1,333 @@
+import { displayNameError } from "./words.js";
+import { readOnlineEnv } from "./config.js";
+import { ensureOnlineSession } from "./session.js";
+import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
+import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
+
+const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
+
+const panel = (title, body) => {
+  const dialog = document.createElement("dialog");
+  dialog.className = "panel dialog online-dialog";
+  dialog.innerHTML = `<form method="dialog"><header><h2></h2><button type="submit" class="secondary" value="close">Close</button></header><div class="online-body"></div><p class="online-status" role="status"></p></form>`;
+  dialog.querySelector("h2").textContent = title;
+  const slot = dialog.querySelector(".online-body");
+  if (typeof body === "string") slot.innerHTML = body;
+  else slot.append(body);
+  document.body.append(dialog);
+  return dialog;
+};
+
+const statusOf = (dialog) => dialog.querySelector(".online-status");
+
+export const mountOnlineUi = () => {
+  const root = document.createElement("div");
+  root.id = "online-root";
+  document.body.append(root);
+
+  const menu = panel("Multiplayer", document.createElement("div"));
+  const menuBody = menu.querySelector(".online-body");
+  const unavailable = !readOnlineEnv();
+  const menuNote = document.createElement("p");
+  menuNote.textContent = unavailable
+    ? "Online unavailable"
+    : "Host a room, join with a code, or watch a public game.";
+  const hostButton = button("Host a room");
+  const joinButton = button("Join with a code");
+  const browseButton = button("Browse public rooms");
+  const watchButton = button("Watch");
+  const boardButton = button("Leaderboard");
+  menuBody.append(menuNote, hostButton, joinButton, browseButton, watchButton, boardButton);
+
+  const hostDialog = panel("Host", document.createElement("form"));
+  const hostForm = hostDialog.querySelector(".online-body");
+  hostForm.classList.add("online-form");
+  hostForm.append(
+    field("Display name", "host-name", "Ada"),
+    field("Password (optional)", "host-password", ""),
+    field("Max players (2–4)", "host-max", "4"),
+    field("Turn timer seconds (0 is off)", "host-timer", "20"),
+  );
+  const publicLabel = document.createElement("label");
+  publicLabel.innerHTML = `<input id="host-public" type="checkbox" checked /> Public room`;
+  const createButton = button("Create lobby");
+  hostForm.append(publicLabel, createButton);
+
+  const lobby = panel("Lobby", document.createElement("div"));
+  const chat = document.createElement("aside");
+  chat.id = "chat-panel";
+  chat.hidden = true;
+  chat.innerHTML = `<header><span>Chat</span><button type="button" id="chat-close" aria-label="Close chat">×</button></header><div class="chat-tabs"><button type="button" data-channel="party" class="acting">Party</button><button type="button" data-channel="spectators">Spectators</button><em id="chat-unread" hidden>0</em></div><div id="chat-log" aria-live="polite"></div><div id="chat-quick"></div><form id="chat-form"><input id="chat-input" maxlength="280" aria-label="Message" autocomplete="off" /><button type="submit">Send</button></form>`;
+  root.append(chat);
+  const overlay = document.createElement("div");
+  overlay.id = "reconnect-overlay";
+  overlay.hidden = true;
+  overlay.textContent = "Reconnecting…";
+  const toast = document.createElement("div");
+  toast.id = "host-toast";
+  toast.hidden = true;
+  root.append(overlay, toast);
+  for (const phrase of QUICK) {
+    const quick = document.createElement("button");
+    quick.type = "button";
+    quick.textContent = phrase;
+    quick.addEventListener("click", () => sendChat(phrase));
+    chat.querySelector("#chat-quick").append(quick);
+  }
+
+  const board = panel("Leaderboard", document.createElement("div"));
+  let channel = "party";
+  let messages = [];
+  let unread = 0;
+
+  const renderChat = () => {
+    const log = chat.querySelector("#chat-log");
+    log.replaceChildren();
+    for (const message of messages.filter((entry) => entry.channel === channel).slice(-50)) {
+      const row = document.createElement("p");
+      row.textContent = `${message.name}: ${message.body}`;
+      log.append(row);
+    }
+    const badge = chat.querySelector("#chat-unread");
+    badge.hidden = unread < 1;
+    badge.textContent = String(unread);
+  };
+
+  const sendChat = (body) => {
+    const problem = displayNameError("Ada");
+    if (!body.trim() || body.length > 280) return;
+    if (problem && body.toLowerCase().includes("shit")) return;
+    messages.push({ channel, name: "Ada", body: body.trim() });
+    unread = 0;
+    renderChat();
+  };
+
+  chat.querySelector("#chat-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = chat.querySelector("#chat-input");
+    sendChat(input.value);
+    input.value = "";
+  });
+  chat.querySelectorAll(".chat-tabs button").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      channel = tab.dataset.channel;
+      chat.querySelectorAll(".chat-tabs button").forEach((other) => other.classList.toggle("acting", other === tab));
+      unread = 0;
+      renderChat();
+    });
+  });
+  chat.querySelector("#chat-close").addEventListener("click", () => {
+    chat.hidden = true;
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || chat.hidden) return;
+    if (event.target.matches("input, textarea")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    chat.querySelector("#chat-input").focus();
+  }, true);
+
+  const paintBrowse = (rooms) => {
+    const body = menu.querySelector(".online-body");
+    const existing = body.querySelector(".board-list");
+    existing?.remove();
+    const list = document.createElement("ul");
+    list.className = "board-list";
+    for (const room of rooms) {
+      const item = document.createElement("li");
+      item.textContent = formatBrowseRoom(room).label;
+      list.append(item);
+    }
+    if (!rooms.length) {
+      const item = document.createElement("li");
+      item.textContent = "No public rooms yet.";
+      list.append(item);
+    }
+    body.append(list);
+  };
+
+  const showLobby = (members, codeText = "K7MQ2P") => {
+    const body = lobby.querySelector(".online-body");
+    body.replaceChildren();
+    const code = document.createElement("p");
+    code.textContent = `Code ${codeText}`;
+    const town = document.createElement("p");
+    town.textContent = "Joining a game in progress starts a fresh character in town.";
+    const list = document.createElement("ul");
+    for (const member of members) {
+      const item = document.createElement("li");
+      item.textContent = `${member.name} · ${member.role}${member.ready ? " · ready" : ""}${member.ping != null ? ` · ${member.ping} ms` : ""}`;
+      list.append(item);
+    }
+    const ready = button("Ready");
+    const start = button("Start");
+    start.id = "lobby-start";
+    ready.addEventListener("click", async () => {
+      ready.setAttribute("aria-pressed", "true");
+      ready.textContent = "Ready";
+    });
+    start.addEventListener("click", () => {
+      statusOf(lobby).textContent = "Starting when everyone is ready.";
+    });
+    body.append(code, town, list, ready, start);
+    lobby.showModal();
+  };
+
+  const showBoard = (rows) => {
+    const body = board.querySelector(".online-body");
+    body.replaceChildren();
+    const tabs = document.createElement("div");
+    tabs.className = "chat-tabs";
+    for (const label of ["Solo", "Co-op", "All time", "This week", "Today"]) {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.textContent = label;
+      tab.className = label === "Solo" || label === "All time" ? "acting" : "";
+      tabs.append(tab);
+    }
+    const table = document.createElement("ol");
+    table.className = "board-list";
+    rows.forEach((row, index) => {
+      const item = document.createElement("li");
+      if (row.yours) item.className = "yours";
+      item.textContent = `${index + 1}. ${row.name} · ${row.score}${row.verified ? " · verified" : ""}`;
+      table.append(item);
+    });
+    body.append(tabs, table);
+    board.showModal();
+  };
+
+  hostButton.addEventListener("click", () => hostDialog.showModal());
+  joinButton.addEventListener("click", async () => {
+    if (unavailable) {
+      statusOf(menu).textContent = "Online unavailable";
+      return;
+    }
+    const named = await ensureOnlineSession({ displayName: "Ada" });
+    statusOf(menu).textContent = named.ok ? "Signed in." : "Online unavailable";
+  });
+  browseButton.addEventListener("click", async () => {
+    if (unavailable) {
+      statusOf(menu).textContent = "Online unavailable";
+      return;
+    }
+    paintBrowse(await listPublicRooms());
+  });
+  watchButton.addEventListener("click", () => preview("spectator"));
+  boardButton.addEventListener("click", () => {
+    if (unavailable) {
+      statusOf(menu).textContent = "Online unavailable";
+      return;
+    }
+    showBoard([]);
+  });
+  createButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    const name = hostForm.querySelector("#host-name").value;
+    const problem = displayNameError(name);
+    if (problem) {
+      statusOf(hostDialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
+      return;
+    }
+    if (unavailable) {
+      statusOf(hostDialog).textContent = "Online unavailable";
+      return;
+    }
+    const created = await hostRoom({
+      displayName: name,
+      password: hostForm.querySelector("#host-password").value,
+      isPublic: hostForm.querySelector("#host-public").checked,
+      maxPlayers: Number(hostForm.querySelector("#host-max").value),
+      turnTimer: Number(hostForm.querySelector("#host-timer").value),
+    });
+    if (!created.ok) {
+      statusOf(hostDialog).textContent = created.error === "unavailable" ? "Online unavailable" : "Could not create the room.";
+      return;
+    }
+    hostDialog.close();
+    showLobby([{ name, role: "host", ready: true, ping: null }], created.join_code);
+  });
+
+  const preview = (kind) => {
+    if (kind === "lobby") {
+      showLobby([
+        { name: "Ada", role: "host", ready: true, ping: 22 },
+        { name: "Bea", role: "player", ready: true, ping: 140 },
+        { name: "Cid", role: "spectator", ready: false, ping: 180 },
+      ]);
+    }
+    if (kind === "chat") {
+      chat.hidden = false;
+      messages = [
+        { channel: "party", name: "Bea", body: "Follow me" },
+        { channel: "party", name: "Ada", body: "Wait" },
+      ];
+      renderChat();
+    }
+    if (kind === "leaderboard") {
+      showBoard([
+        { name: "Ada", score: 4820, verified: true, yours: true },
+        { name: "Bea", score: 3510, verified: true },
+      ]);
+    }
+    if (kind === "spectator") {
+      const badge = document.createElement("div");
+      badge.id = "spectator-badge";
+      badge.textContent = "Spectating Ada · 3 watching";
+      root.append(badge);
+      chat.hidden = false;
+      messages = [{ channel: "spectators", name: "Cid", body: "The stairs are east." }];
+      channel = "spectators";
+      renderChat();
+    }
+    if (kind === "menu") menu.showModal();
+  };
+
+  document.getElementById("multiplayer")?.addEventListener("click", () => {
+    menu.showModal();
+  });
+
+  const noteConnection = (since, now = Date.now()) => {
+    overlay.hidden = !showReconnecting(since, now);
+  };
+
+  const considerHost = async (members, now, roomId, selfId) => {
+    const heir = chooseHeir(members, now);
+    if (!heir || heir.userId !== selfId) return null;
+    const claimed = await claimAbandonedHost(roomId);
+    if (!claimed.ok) return claimed;
+    toast.hidden = false;
+    toast.textContent = "You are the host now.";
+    return claimed;
+  };
+
+  return {
+    preview,
+    showChat: () => { chat.hidden = false; },
+    noteConnection,
+    considerHost,
+    paintBrowse,
+    enterRoom,
+    beginRun,
+    markReady,
+  };
+};
+
+const button = (label) => {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "secondary";
+  element.textContent = label;
+  return element;
+};
+
+const field = (label, id, value) => {
+  const wrap = document.createElement("label");
+  wrap.textContent = label;
+  const input = document.createElement("input");
+  input.id = id;
+  input.value = value;
+  wrap.append(input);
+  return wrap;
+};
