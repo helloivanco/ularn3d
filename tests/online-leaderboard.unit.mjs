@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { concatEngineFiles } from "../supabase/functions/_shared/engine-files.js";
 import { ENGINE_SOURCE } from "../supabase/functions/_shared/engine-source.js";
-import { ENGINE_SOURCE_SHA256, extractEngineBundle } from "../supabase/functions/_shared/engine-boot.js";
+import { ENGINE_SOURCE_SHA256, extractEngineBundle, forceEngineContext } from "../supabase/functions/_shared/engine-boot.js";
 
 const scoreOf = (api) => (api.player.GOLD || 0) + (api.player.BANKACCOUNT || 0);
 
@@ -129,6 +129,49 @@ test("a recorded solo run and a recorded co-op run replay to the same score", as
   assert.equal(decided.verified, true);
   assert.equal(decided.score, nodeCoop);
   assert.notEqual(decided.score, 999999);
+});
+
+test("the edge script sandbox matches a vm replay", async () => {
+  const inputs = [".", ".", ".", "."];
+  const vm = bootEngine({ seed: 2, context: "vm" });
+  await playInputs(vm, inputs);
+  const vmState = vm.captureGameState();
+  vmState.party = null;
+  const script = bootEngine({ seed: 2, context: "script" });
+  await playInputs(script, inputs);
+  const scriptState = script.captureGameState();
+  scriptState.party = null;
+  assert.equal(script.checksumGameState(scriptState), vm.checksumGameState(vmState));
+  assert.equal(script.__replayScore().score, vm.__replayScore().score);
+
+  const coopVm = bootEngine({ seed: 2, context: "vm" });
+  coopVm.enablePartyOfOne();
+  coopVm.addAdventurer("Bea");
+  await playInputs(coopVm, inputs);
+  const coopScript = bootEngine({ seed: 2, context: "script" });
+  coopScript.enablePartyOfOne();
+  coopScript.addAdventurer("Bea");
+  await playInputs(coopScript, inputs);
+  assert.equal(coopScript.__replayScore().score, coopVm.__replayScore().score);
+
+  const long = bootEngine({ seed: 2, context: "script" });
+  await playInputs(long, Array.from({ length: 500 }, () => "."));
+  const longState = long.captureGameState();
+  longState.party = null;
+  assert.equal(long.gtime, 500);
+  assert.equal(long.checksumGameState(longState), "9083421c67b337f5");
+
+  forceEngineContext("script");
+  try {
+    const played = await replayFinishedRun({ seed: 2, log: inputs, mode: "solo" });
+    assert.equal(played.ok, true);
+    assert.equal(played.checksum, vm.checksumGameState(vmState));
+    const coop = await replayFinishedRun({ seed: 2, log: inputs, mode: "coop" });
+    assert.equal(coop.ok, true);
+    assert.equal(coop.score, coopVm.__replayScore().score);
+  } finally {
+    forceEngineContext(null);
+  }
 });
 
 test("the edge bundle matches the engine scripts on disk", () => {

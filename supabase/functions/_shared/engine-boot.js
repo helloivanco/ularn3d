@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHeadlessDom } from "./headless-dom.js";
 import { concatEngineFiles } from "./engine-files.js";
+import { createScriptEngine } from "./script-context.js";
 
 let vmApi = null;
 
@@ -143,11 +144,31 @@ const copyGlobals = (sandbox) => {
   sandbox.Node = function Node() {};
 };
 
-/**
- * Boot the classic engine in a fresh vm. `seed` installs one RNG stream
- * before the dungeon is built. Omit `seed` for today's unseeded solo rules.
- */
-export const bootEngine = (options = {}) => {
+let vmContextsWork = null;
+let forcedContext = null;
+
+/** Node can contextify vm. The edge isolate cannot, so replay uses the script sandbox. */
+const contextsWork = () => {
+  if (vmContextsWork != null) return vmContextsWork;
+  const vm = loadVmSync();
+  if (!vm) return (vmContextsWork = false);
+  try {
+    const probe = {};
+    vm.createContext(probe);
+    vm.runInContext("var __ularnProbe = 1;", probe);
+    vmContextsWork = probe.__ularnProbe === 1;
+  } catch {
+    vmContextsWork = false;
+  }
+  return vmContextsWork;
+};
+
+/** Tests pin "script" so a replay uses the same sandbox the edge isolate uses. */
+export const forceEngineContext = (mode = null) => {
+  forcedContext = mode;
+};
+
+const bootVm = (source) => {
   const vm = loadVmSync();
   if (!vm) throw new Error("engine vm is not loaded");
   const dom = createHeadlessDom();
@@ -169,7 +190,7 @@ export const bootEngine = (options = {}) => {
   sandbox.globalThis = sandbox.window;
   sandbox.self = sandbox.window;
   vm.createContext(sandbox);
-  vm.runInContext(loadEngineSource(), sandbox, { filename: "engine-headless.js" });
+  vm.runInContext(source, sandbox, { filename: "engine-headless.js" });
   vm.runInContext(
     "globalThis.__replayScore = function () {\n" +
       "  var card = new LocalScore();\n" +
@@ -178,7 +199,16 @@ export const bootEngine = (options = {}) => {
     sandbox,
     { filename: "replay-score.js" },
   );
-  const api = sandbox;
+  return sandbox;
+};
+
+/**
+ * Boot the classic engine. `seed` installs one RNG stream before the dungeon
+ * is built. Omit `seed` for today's unseeded solo rules.
+ */
+export const bootEngine = (options = {}) => {
+  const mode = options.context || forcedContext || (contextsWork() ? "vm" : "script");
+  const api = mode === "script" ? createScriptEngine(loadEngineSource()) : bootVm(loadEngineSource());
   if (options.seed != null) {
     api.installEngineHost(api.createEngineHost(options.seed, {
       skipPaint: options.skipPaint !== false,
