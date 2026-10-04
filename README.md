@@ -84,6 +84,8 @@ The publishable key is the only client key. Never put a service-role or secret k
 
 Turnstile CAPTCHA for anonymous sign-in is off unless `VITE_SUPABASE_CAPTCHA=true` and `VITE_TURNSTILE_SITE_KEY` are set, and CAPTCHA is enabled in the Supabase Auth dashboard. Leave both unset for local play.
 
+The public leaderboard shows only rows the `submit-score` Edge Function has marked verified. The function reads `SUPABASE_SERVICE_ROLE_KEY` from Supabase function secrets. The classic engine is not replayed inside that isolate (it needs a DOM stand-in and can exceed the free-plan CPU cap), so a hosted submission is rejected with `replay_unavailable` and stays off the board. The same replay runs in Node for the leaderboard tests.
+
 ## Build and Vercel
 
 ```sh

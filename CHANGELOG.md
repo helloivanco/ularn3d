@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.34 — Online co-op
+
+- Optional multiplayer: host or join a room, watch a game, and chat with the party
+- Solo play is the same expedition. Online menus say “Online unavailable” when the service cannot be reached
+- A verified leaderboard is ready for scores the server has replayed. Unverified runs stay off the board
+
 ## 1.3.33 — Cooperation aura
 
 - A flat bubble follows you on the dungeon floor (Ivan Wong). It is 20 tiles wide and 10 tiles tall, centered on you with the extra tile to the east and north

@@ -32,8 +32,12 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
   apply("supabase/migrations/20261004184500_online_rooms.sql");
   apply("supabase/migrations/20261004184500_online_rooms.sql");
   apply("supabase/migrations/20261004193000_claim_host.sql");
+  apply("supabase/migrations/20261004201000_scores.sql");
+  apply("supabase/migrations/20261004201000_scores.sql");
   const output = applyAndCapture("tests/sql/online-rls.sql");
   assert.match(output, /online rls ok/);
+  const scores = applyAndCapture("tests/sql/scores-rls.sql");
+  assert.match(scores, /scores rls ok/);
 });
 
 const applyAndCapture = (file) =>

@@ -32,3 +32,6 @@ enabled = false
 [edge_runtime]
 enabled = true
 policy = "oneshot"
+
+[functions.submit-score]
+verify_jwt = true

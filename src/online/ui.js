@@ -4,6 +4,7 @@ import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
 import { createSpectatorView } from "./spectator.js";
 import { createChatLog } from "./chat.js";
+import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
 
@@ -194,7 +195,7 @@ export const mountOnlineUi = () => {
     }
     const table = document.createElement("ol");
     table.className = "board-list";
-    rows.forEach((row, index) => {
+    publicBoard(rows).forEach((row, index) => {
       const item = document.createElement("li");
       if (row.yours) item.className = "yours";
       item.textContent = `${index + 1}. ${row.name} · ${row.score}${row.verified ? " · verified" : ""}`;

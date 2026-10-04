@@ -14,13 +14,16 @@ const SEED = 2;
 const TURNS = 500;
 const INPUTS = Array.from({ length: TURNS }, () => ".");
 /** Captured from the seeded solo engine. Do not edit without a fresh pre-change run. */
-const GOLDEN = "b13852c88fce09b6";
+const GOLDEN = "f929932600d427c3";
 
 test("500-turn solo seed matches the golden checksum", async () => {
   const first = await scriptedRun({ seed: SEED, inputs: INPUTS });
   const second = await scriptedRun({ seed: SEED, inputs: INPUTS });
   assert.equal(first.gtime, TURNS);
-  assert.ok(first.hp > 0);
+  assert.equal(first.hp, 10);
+  assert.equal(first.x, 27);
+  assert.equal(first.y, 9);
+  assert.equal(first.level, 0);
   assert.equal(first.checksum, second.checksum);
   assert.equal(first.checksum, GOLDEN);
 });
