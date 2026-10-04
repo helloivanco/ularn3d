@@ -468,6 +468,14 @@ function update() {
         const ratio = member.hpmax ? Math.max(0, Math.min(1, member.hp / member.hpmax)) : 0;
         card.innerHTML = `<strong></strong><div class="meter"><i></i></div><span></span>`;
         card.querySelector("strong").textContent = member.name || "Ally";
+        card.tabIndex = 0;
+        card.setAttribute("role", "button");
+        card.setAttribute("aria-label", `Follow ${member.name || "ally"}`);
+        const handleFollow = () => window.ularnOnline?.follow?.(member.name);
+        card.addEventListener("click", handleFollow);
+        card.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") handleFollow();
+        });
         card.querySelector("i").style.width = `${Math.round(ratio * 100)}%`;
         card.querySelector("span").textContent = `Lv ${member.xl || 1} · D${member.dungeon || 0}`;
         return card;
@@ -852,6 +860,15 @@ const keyMap = {
   End: "end",
 };
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Tab" && window.ularnOnline?.spectating?.()) {
+    event.preventDefault();
+    window.ularnOnline.cycleFollow();
+    return;
+  }
+  if (window.ularnOnline?.acceptsInput?.() === false && !event.target.matches("input, textarea")) {
+    event.preventDefault();
+    return;
+  }
   if (
     !state ||
     event.ctrlKey ||

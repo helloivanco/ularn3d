@@ -2,6 +2,7 @@ import { displayNameError } from "./words.js";
 import { readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
+import { createSpectatorView } from "./spectator.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
 
 const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
@@ -79,6 +80,8 @@ export const mountOnlineUi = () => {
   let channel = "party";
   let messages = [];
   let unread = 0;
+  let spectating = false;
+  let watch = null;
 
   const renderChat = () => {
     const log = chat.querySelector("#chat-log");
@@ -272,9 +275,15 @@ export const mountOnlineUi = () => {
       ]);
     }
     if (kind === "spectator") {
+      watch = createSpectatorView([
+        { name: "Ada", role: "player", dungeon: 1 },
+        { name: "Bea", role: "player", dungeon: 1 },
+        { name: "Cid", role: "spectator", dungeon: 1 },
+      ]);
+      spectating = true;
       const badge = document.createElement("div");
       badge.id = "spectator-badge";
-      badge.textContent = "Spectating Ada · 3 watching";
+      badge.textContent = watch.badge(3);
       root.append(badge);
       chat.hidden = false;
       messages = [{ channel: "spectators", name: "Cid", body: "The stairs are east." }];
@@ -302,6 +311,11 @@ export const mountOnlineUi = () => {
     return claimed;
   };
 
+  const refreshBadge = () => {
+    const badge = root.querySelector("#spectator-badge");
+    if (badge && watch) badge.textContent = watch.badge(root.querySelectorAll("#spectator-badge").length ? 3 : 0);
+  };
+
   return {
     preview,
     showChat: () => { chat.hidden = false; },
@@ -311,6 +325,20 @@ export const mountOnlineUi = () => {
     enterRoom,
     beginRun,
     markReady,
+    spectating: () => spectating,
+    cycleFollow: () => {
+      const who = watch?.next();
+      refreshBadge();
+      return who;
+    },
+    follow: (name) => {
+      const who = watch?.follow(name);
+      refreshBadge();
+      return who;
+    },
+    followed: () => watch?.followed() ?? null,
+    fogMask: () => null,
+    acceptsInput: () => (spectating ? false : true),
   };
 };
 
