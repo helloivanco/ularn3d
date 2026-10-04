@@ -25,6 +25,7 @@ const files = [
   "buttons",
   "scores",
   "inventory",
+  "aura",
   "movem",
   "action",
   "io",
