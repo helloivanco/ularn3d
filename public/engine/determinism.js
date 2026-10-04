@@ -7,7 +7,7 @@
  *
  * Product version stamped for replay. Keep it aligned with package.json.
  */
-var ENGINE_VERSION = "1.3.34";
+var ENGINE_VERSION = "1.3.35";
 
 var ENGINE_INPUT_LOG = [];
 
@@ -174,6 +174,8 @@ function captureGameState() {
     spheres: plainData(spheres, seen),
     levels: levels,
     party: typeof capturePartyState === "function" ? capturePartyState(seen) : null,
+    multiplayer: typeof partySize === "function" && partySize() > 1,
+    aura: typeof cooperationAuraOn === "function" ? cooperationAuraOn() : false,
   };
   return state;
 }

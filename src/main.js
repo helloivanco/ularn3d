@@ -7,6 +7,7 @@ import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
 import { mountOnlineUi } from "./online/ui.js";
 import { tilesInFog } from "./online/spectator.js";
+import { auraControl } from "./cooperation-aura.js";
 mountIcons();
 const onlineUi = mountOnlineUi();
 window.ularnOnline = onlineUi;
@@ -456,6 +457,8 @@ function update() {
     state.prompt,
     state.saveError || "",
     partyNow.map((member) => `${member.slot}:${member.name}:${member.hp}:${member.dungeon}`).join(","),
+    state.multiplayer ? "mp" : "solo",
+    state.aura ? "aura" : "no-aura",
   ].join("|");
   if (hudKey !== hudSignature) {
     hudSignature = hudKey;
@@ -471,8 +474,9 @@ function update() {
     const partyHud = $("party-hud");
     const turnStrip = $("turn-strip");
     if (partyHud) {
+      const auraNow = auraControl(state);
       partyHud.hidden = party.length < 2;
-      partyHud.replaceChildren(...party.map((member) => {
+      const cards = party.map((member) => {
         const card = document.createElement("article");
         const ratio = member.hpmax ? Math.max(0, Math.min(1, member.hp / member.hpmax)) : 0;
         card.innerHTML = `<strong></strong><div class="meter"><i></i></div><span></span>`;
@@ -488,7 +492,21 @@ function update() {
         card.querySelector("i").style.width = `${Math.round(ratio * 100)}%`;
         card.querySelector("span").textContent = `Lv ${member.xl || 1} · D${member.dungeon || 0}`;
         return card;
-      }));
+      });
+      if (auraNow.control) {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.id = "aura-toggle";
+        toggle.className = "aura-toggle";
+        toggle.textContent = auraNow.label;
+        toggle.setAttribute("aria-pressed", String(auraNow.overlay));
+        toggle.addEventListener("click", () => {
+          if (window.ularnOnline?.acceptsInput && !window.ularnOnline.acceptsInput()) return;
+          window.ularnOnline?.requestAura?.(!auraNow.overlay);
+        });
+        cards.push(toggle);
+      }
+      partyHud.replaceChildren(...cards);
     }
     if (turnStrip && typeof engine.groups === "function") {
       const groups = engine.groups().filter((group) => group.length > 1);

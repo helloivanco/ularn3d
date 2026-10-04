@@ -364,6 +364,12 @@ window.ularn = {
     if (typeof mainloop === "function") mainloop(null, ".");
     return true;
   },
+  setAura(on, from) {
+    if (typeof hostSetCooperationAura !== "function") return { ok: false, aura: false, multiplayer: false };
+    const result = hostSetCooperationAura(!!on, from || { role: "player" });
+    window.dispatchEvent(new Event("ularn:update"));
+    return result;
+  },
   groups() {
     if (typeof encounterGroups !== "function") return [];
     return encounterGroups(this.party().filter((member) => member.alive));
@@ -745,6 +751,8 @@ window.ularn = {
       wc: player.WCLASS,
       weapon: weaponView3D(),
       autoLoot: !!getPref("auto_pickup"),
+      multiplayer: typeof partySize === "function" && partySize() > 1,
+      aura: typeof cooperationAuraOn === "function" ? cooperationAuraOn() : false,
       moves: player.MOVESMADE,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
       log: logViewForSnapshot3D(),

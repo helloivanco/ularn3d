@@ -25,6 +25,37 @@ var PARTY_ON = false;
 var ADVENTURERS = [];
 var ACTIVE_SLOT = 0;
 var cooperationActingAdventurers = null;
+/** Host-owned. Default on, and only consulted while more than one adventurer is present. */
+var COOP_AURA_ON = true;
+
+function cooperationAuraOn() {
+  return partySize() > 1 && COOP_AURA_ON;
+}
+
+/**
+ * The host applies a player's aura toggle. Spectators cannot change it.
+ * Solo play clears any previous choice so the next multiplayer game starts on.
+ */
+function hostSetCooperationAura(on, from) {
+  if (from && from.role === "spectator") {
+    return { ok: false, reason: "spectator", aura: cooperationAuraOn(), multiplayer: partySize() > 1 };
+  }
+  if (partySize() < 2) {
+    COOP_AURA_ON = true;
+    return { ok: false, reason: "solo", aura: false, multiplayer: false };
+  }
+  COOP_AURA_ON = !!on;
+  return { ok: true, aura: COOP_AURA_ON, multiplayer: true };
+}
+
+/** Back to one hero. The live globals stay. The aura control and its off state go away. */
+function disbandParty() {
+  PARTY_ON = false;
+  ADVENTURERS = [];
+  ACTIVE_SLOT = 0;
+  cooperationActingAdventurers = null;
+  COOP_AURA_ON = true;
+}
 
 function partySize() {
   return PARTY_ON ? ADVENTURERS.length : 1;

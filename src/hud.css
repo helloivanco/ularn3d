@@ -209,6 +209,16 @@
 .party-hud .meter { height: 6px; background: #24343a; border-radius: 99px; overflow: hidden; }
 .party-hud .meter i { display: block; height: 100%; background: #d4574e; }
 .turn-strip .acting { color: #f3d48a; }
+.aura-toggle {
+  background: rgba(16, 28, 32, 0.88);
+  color: #f3d48a;
+  border: 1px solid rgba(232, 196, 122, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 92px;
+  font: inherit;
+  cursor: pointer;
+}
 .online-dialog { width: min(440px, calc(100vw - 32px)); }
 .online-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .online-dialog h2 { margin: 0; font-size: 18px; }

@@ -96,6 +96,8 @@ export const mountOnlineUi = () => {
   let roomId = null;
   let roomMembers = [];
   let hostLoop = null;
+  let hostSession = null;
+  let auraSeq = 0;
   const knowFor = (name) => (typeof window.ularn?.fog === "function" ? window.ularn.fog(name) : null);
   const chatLog = createChatLog({
     persist: (message) => (roomId ? sendChatMessage(roomId, message.channel, message.body) : null),
@@ -235,11 +237,15 @@ export const mountOnlineUi = () => {
         if (input === "." && typeof window.ularn?.applyRest === "function") {
           window.ularn.applyRest(from?.slot);
         }
+        if ((input === "aura:on" || input === "aura:off") && typeof window.ularn?.setAura === "function") {
+          window.ularn.setAura(input === "aura:on", from);
+        }
       },
       capture: () => ({}),
       diff: () => ({ same: true }),
       checksum: () => "0",
     });
+    hostSession = session;
     hostLoop = createHostLoop(session, {
       members: () => roomMembers,
       now: () => Date.now(),
@@ -417,6 +423,19 @@ export const mountOnlineUi = () => {
       return new Set(cells);
     },
     hostBeat: () => (hostLoop ? hostLoop.beat() : []),
+    requestAura: (on) => {
+      if (spectating) return;
+      if (hostSession) {
+        auraSeq += 1;
+        hostSession.receive(
+          { userId: "host", role: "host", slot: 0 },
+          "action",
+          { seq: auraSeq, input: on ? "aura:on" : "aura:off" },
+        );
+        return;
+      }
+      window.ularn?.setAura?.(!!on, { role: "host" });
+    },
     acceptsInput: () => (spectating ? false : true),
     blocksGameKeys: () => chatLog.blocksGameKeys(),
     mapPings: () => chatLog.pings(),

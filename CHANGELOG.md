@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.35 — Unknown finds and the aura switch
+
+- Picking up a potion or a scroll no longer tells you what it is. Drinking, reading, and an identify scroll still do. The shop still names what you buy
+- The floor bubble is only there in a multiplayer game, and it starts on. **AURA: ON** / **AURA: OFF** hides it. Off means creatures do not take that bubble's turn
+- A solo expedition has no bubble and no switch. Creatures still take their usual turn
+
 ## 1.3.34 — Online co-op
 
 - Optional multiplayer: host or join a room, watch a game, and chat with the party

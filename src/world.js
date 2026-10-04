@@ -12,6 +12,7 @@ import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from ".
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight, wallLip } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
+import { auraControl } from "./cooperation-aura.js";
 import {
   createCooperationAura,
   placeCooperationAura,
@@ -1480,7 +1481,7 @@ export class World {
   }
   syncCooperationAura(state) {
     if (!this.cooperationAura) return;
-    const show = cooperationAuraShown(state?.level);
+    const show = cooperationAuraShown(state?.level) && auraControl(state).overlay;
     this.cooperationAura.visible = show;
     const allies = typeof window.ularn?.party === "function" ? window.ularn.party() : [];
     const others = show

@@ -61,6 +61,18 @@ function monsterInAdventurerAura(adventurer, monster) {
  * A monster that is only inside someone who did not just move is absent
  * from the list, so it does not act.
  */
+/**
+ * What every client draws. The host state wins. A local wish cannot show
+ * the aura while the host has it off, and solo never gets the control.
+ */
+function auraControl(hostState) {
+  if (!hostState || hostState.multiplayer !== true) {
+    return { control: false, overlay: false, label: "" };
+  }
+  const on = hostState.aura === true;
+  return { control: true, overlay: on, label: on ? "AURA: ON" : "AURA: OFF" };
+}
+
 function monstersActingFor(adventurers, monsters) {
   const acting = [];
   const seen = new Set();

@@ -12,6 +12,7 @@ import {
   AURA_WIDTH,
   auraBoundingBox,
   auraCenter,
+  auraControl,
   monsterInAdventurerAura,
   monstersActingFor,
   tileInAura,
@@ -107,6 +108,8 @@ test("a monster on another dungeon level never acts", () => {
   engine.player.y = 8;
   const upstairs = engine.makeMonster("other-level");
   engine.LEVELS[2].monsters[10][8] = upstairs;
+  engine.partyCount = 2;
+  engine.auraOn = true;
   engine.cooperationActingAdventurers = () => [{ x: 10, y: 8, dungeon: 1 }];
   engine.movemonst();
   assert.deepEqual(engine.calls, []);
@@ -124,6 +127,8 @@ test("movemonst follows the acting adventurer list, not the other player's aura"
   engine.LEVELS[1].monsters[40][8] = onlyB;
   const upstairs = engine.makeMonster("other-level");
   engine.LEVELS[2].monsters[10][8] = upstairs;
+  engine.partyCount = 2;
+  engine.auraOn = true;
   engine.cooperationActingAdventurers = () => [{ x: 10, y: 8, dungeon: 1 }];
   engine.movemonst();
   assert.deepEqual(
@@ -162,22 +167,31 @@ test("movemonst follows the acting adventurer list, not the other player's aura"
   );
 });
 
-test("single player aura is the local hero when no acting list is installed", () => {
+test("solo uses the classic window, and a last-hit monster outside the ellipse still acts", () => {
   const engine = bootMonsterTurns();
   engine.level = 3;
   engine.player.x = 10;
   engine.player.y = 8;
+  engine.partyCount = 1;
+  engine.lasthx = 40;
+  engine.lasthy = 8;
   engine.cooperationActingAdventurers = undefined;
   const here = engine.makeMonster("here");
   const away = engine.makeMonster("away");
+  const bystander = engine.makeMonster("bystander");
   engine.LEVELS[3].monsters[10][8] = here;
   engine.LEVELS[3].monsters[40][8] = away;
+  engine.LEVELS[3].monsters[50][8] = bystander;
+  assert.equal(engine.tileInAura(10, 8, 40, 8), false);
   engine.movemonst();
   assert.deepEqual(
     engine.calls.map((call) => call.id),
-    ["here"],
+    ["away", "here"],
   );
+  assert.equal(bystander.moved, false);
   assert.equal(engine.noticeCalls, 1);
+  assert.equal(auraControl({ multiplayer: false, aura: true }).control, false);
+  assert.equal(auraControl({ multiplayer: false, aura: true }).overlay, false);
 });
 
 test("cooperation aura mesh is an unlit MeshBasic ellipse with no light and no shadow", () => {
@@ -230,6 +244,8 @@ const bootMonsterTurns = () => {
     level: 1,
     lasthx: -1,
     lasthy: -1,
+    partyCount: 1,
+    auraOn: true,
     player: {
       x: 10,
       y: 8,
@@ -264,6 +280,8 @@ const bootMonsterTurns = () => {
     arg: 1,
     mimiccounter: 0,
   });
+  context.partySize = () => context.partyCount;
+  context.cooperationAuraOn = () => context.partyCount > 1 && context.auraOn !== false;
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(readFileSync("public/engine/aura.js", "utf8"), context);
