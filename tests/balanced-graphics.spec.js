@@ -207,15 +207,23 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
         wallColor: metrics.wallColor,
         pixelRatio: metrics.pixelRatio,
         anisotropy: metrics.floorAnisotropy,
+        auraMaterial: metrics.auraMaterial,
+        auraVisible: metrics.auraVisible,
+        auraCastShadow: metrics.auraCastShadow,
+        pointLights: metrics.pointLights,
       };
     };
-    return { shallow: read(1), deep: read(12), volcano: read(16) };
+    return { shallow: read(1), deep: read(12), volcano: read(16), town: read(0) };
   });
   for (const row of [stats.shallow, stats.deep, stats.volcano]) {
     expect(row.quality).toBe("balanced");
     expect(row.fogDensity).toBe(0);
     expect(row.shadowMapEnabled).toBe(false);
     expect(row.bloom).toBe(false);
+    expect(row.auraMaterial).toBe("MeshBasicMaterial");
+    expect(row.auraVisible).toBe(true);
+    expect(row.auraCastShadow).toBe(false);
+    expect(row.pointLights).toBe(0);
     expect(row.floorMapped).toBe(true);
     expect(row.wallMapped).toBe(true);
     expect(row.floorMaterial).toBe("MeshBasicMaterial");
@@ -226,6 +234,10 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
   expect(stats.deep.floorColor).toBe(stats.volcano.floorColor);
   expect(stats.deep.wallColor).toBe(stats.volcano.wallColor);
   expect(stats.deep.floorColor).not.toBe(stats.shallow.floorColor);
+  expect(stats.town.auraVisible).toBe(false);
+  expect(stats.town.shadowMapEnabled).toBe(false);
+  expect(stats.town.bloom).toBe(false);
+  expect(stats.town.pointLights).toBe(0);
 });
 
 test("the same corridor stays as bright zoomed out as zoomed in", async ({

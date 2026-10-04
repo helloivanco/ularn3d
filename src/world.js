@@ -13,6 +13,11 @@ import { CombatEffects } from "./combat-effects.js";
 import { wallHeight, wallLip } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import {
+  createCooperationAura,
+  placeCooperationAura,
+  cooperationAuraShown,
+} from "./cooperation-aura-mesh.js";
+import {
   box,
   block,
   orb,
@@ -269,6 +274,8 @@ export class World {
     this.grassFloor.count = 0;
     this.grassFloor.receiveShadow = true;
     this.scene.add(this.grassFloor);
+    this.cooperationAura = createCooperationAura();
+    this.scene.add(this.cooperationAura);
     const wallGeo = new THREE.BoxGeometry(1, 1, 1);
     this.walls = new THREE.InstancedMesh(
       wallGeo,
@@ -527,6 +534,13 @@ export class World {
         wallCastShadow: this.walls.castShadow,
         floorReceiveShadow: this.floor.receiveShadow,
         floorMaterial: this.floor.material?.type || null,
+        auraMaterial:
+          this.cooperationAura?.getObjectByName("cooperation-aura-fill")
+            ?.material?.type || null,
+        auraVisible: !!this.cooperationAura?.visible,
+        auraCastShadow: !!this.cooperationAura?.getObjectByName(
+          "cooperation-aura-fill",
+        )?.castShadow,
         floorMapped: !!this.floor.material?.map,
         wallMapped: !!this.walls.material?.map,
         floorColor: this.floor.material?.color?.getHexString?.() ?? null,
@@ -818,6 +832,11 @@ export class World {
       }
       object.castShadow = cinematic;
       object.receiveShadow = cinematic;
+    });
+    this.cooperationAura?.traverse((object) => {
+      if (!object.isMesh) return;
+      object.castShadow = false;
+      object.receiveShadow = false;
     });
     this.applyFloorMaterials();
     this.applyLevelLighting();
@@ -1456,7 +1475,15 @@ export class World {
       );
     }
     this.disablePointLights();
+    this.syncCooperationAura(state);
     this.updateWalls();
+  }
+  syncCooperationAura(state) {
+    if (!this.cooperationAura) return;
+    const show = cooperationAuraShown(state?.level);
+    this.cooperationAura.visible = show;
+    if (!show) return;
+    placeCooperationAura(this.cooperationAura, state.x, state.y);
   }
   updateWalls() {
     if (!this.state) return;
@@ -1725,6 +1752,11 @@ export class World {
       this.aimGrid.removeFromParent();
       this.aimGrid = null;
     }
+    this.cooperationAura?.traverse((object) => {
+      if (!object.isMesh) return;
+      object.material?.dispose();
+    });
+    this.cooperationAura = null;
     this.releaseLostResources(true);
     destroy(this.scene);
     this.renderer.dispose();

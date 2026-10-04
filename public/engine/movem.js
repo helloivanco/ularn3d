@@ -8,8 +8,88 @@ let move_yh = -1;
 let move_xl = -1;
 let move_xh = -1;
 
+/*
+ * Who just took this turn. Single player is a one-element list: the local
+ * hero. A second player is added only when they are the one who acted, so
+ * their aura is the only one that wakes monsters. Overlap still acts once
+ * because monstersActingFor dedupes. Not a network session.
+ */
+function actingAdventurers() {
+  if (typeof cooperationActingAdventurers === "function") {
+    const listed = cooperationActingAdventurers();
+    if (Array.isArray(listed)) return listed;
+  }
+  return [{ x: player.x, y: player.y, dungeon: level }];
+}
+
+function heroIsActing(adventurers) {
+  for (let i = 0; i < adventurers.length; i++) {
+    const adventurer = adventurers[i];
+    if (
+      adventurer &&
+      adventurer.x === player.x &&
+      adventurer.y === player.y &&
+      adventurer.dungeon === level
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Monsters on this dungeon level whose tile is inside an acting aura. */
+function auraMonsterSpots(adventurers) {
+  const candidates = [];
+  const seen = new Set();
+  move_xl = MAXX;
+  move_xh = 0;
+  move_yl = MAXY;
+  move_yh = 0;
+  let any = false;
+  for (let a = 0; a < adventurers.length; a++) {
+    const adventurer = adventurers[a];
+    if (!adventurer || adventurer.dungeon !== level) continue;
+    any = true;
+    const box = auraBoundingBox(adventurer.x, adventurer.y);
+    if (box.x0 < move_xl) move_xl = box.x0;
+    if (box.x1 + 1 > move_xh) move_xh = box.x1 + 1;
+    if (box.y0 < move_yl) move_yl = box.y0;
+    if (box.y1 + 1 > move_yh) move_yh = box.y1 + 1;
+    const y0 = Math.max(0, box.y0);
+    const y1 = Math.min(MAXY - 1, box.y1);
+    const x0 = Math.max(0, box.x0);
+    const x1 = Math.min(MAXX - 1, box.x1);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const key = x + y * MAXX;
+        if (seen.has(key)) continue;
+        const monster = monsterAt(x, y);
+        if (!monster) continue;
+        seen.add(key);
+        candidates.push({ x, y, dungeon: level, monster });
+      }
+    }
+  }
+  if (!any) {
+    move_xl = 0;
+    move_xh = 0;
+    move_yl = 0;
+    move_yh = 0;
+  }
+  if (move_yl < 0) move_yl = 0;
+  if (move_yh > MAXY) move_yh = MAXY;
+  if (move_xl < 0) move_xl = 0;
+  if (move_xh > MAXX) move_xh = MAXX;
+  return monstersActingFor(adventurers, candidates);
+}
+
 /* =============================================================================
  * FUNCTION: movemonst
+ *
+ * Only monsters inside the acting adventurer's cooperation aura take a
+ * turn. The tile test lives in aura.js (the ellipse of the 20×10 box).
+ * Monsters on another dungeon level are never scanned. Each monster is
+ * moved at most once per call.
  */
 function movemonst() {
   if (!player) return;
@@ -27,43 +107,25 @@ function movemonst() {
   /* no action if monsters are held */
   if (player.HOLDMONST) return;
 
-  if (player.AGGRAVATE) {
-    /* determine window of monsters to move */
-    move_yl = player.y - 5;
-    move_yh = player.y + 6;
-    move_xl = player.x - 10;
-    move_xh = player.x + 11;
-    distance = 40; /* depth of intelligent monster movement */
-  } else {
-    move_yl = player.y - 3;
-    move_yh = player.y + 4;
-    move_xl = player.x - 5;
-    move_xh = player.x + 6;
-    distance = 17; /* depth of intelligent monster movement */
+  const adventurers = actingAdventurers();
+  distance = player.AGGRAVATE ? 40 : 17; /* depth of intelligent monster movement */
+  const acting = auraMonsterSpots(adventurers);
+  const actingKey = new Set();
+  for (let n = 0; n < acting.length; n++) {
+    actingKey.add(acting[n].x + acting[n].y * MAXX);
   }
 
-  if (move_yl < 0) move_yl = 0;
-  if (move_yh > MAXY) move_yh = MAXY;
-  if (move_xl < 0) move_xl = 0;
-  if (move_xh > MAXX) move_xh = MAXX;
-
   /* now reset monster moved flags */
-  for (let j = move_yl; j < move_yh; j++) {
-    for (let i = move_xl; i < move_xh; i++) {
-      let tmpMonst = monsterAt(i, j);
-      if (tmpMonst) tmpMonst.moved = false;
-    }
+  for (let n = 0; n < acting.length; n++) {
+    const tmpMonst = monsterAt(acting[n].x, acting[n].y);
+    if (tmpMonst) tmpMonst.moved = false;
   }
 
   /*
-   * Move the last monster hit by the player
-   * This is mainly to make monster hit by spells move towards the player,
-   * even if out of the normal movement range.
-   * If the last monster hit by the player no longer exists then
-   * last_monst_hx and last_monst_hy will be out of the map range
-   * (actually set to -1).
+   * Move the last monster hit by the player first, but only when that
+   * tile is inside the acting aura. Outside the aura it does not act.
    */
-  if (inBounds(lasthx, lasthy)) {
+  if (inBounds(lasthx, lasthy) && actingKey.has(lasthx + lasthy * MAXX)) {
     let last_monst = monsterAt(lasthx, lasthy);
     if (last_monst) {
       last_monst.moved = false;
@@ -73,32 +135,32 @@ function movemonst() {
     }
   }
 
-  // ULARN TODO / LARN UPGRADE -> do this in a spiral out from the player 
-  for (let j = move_yl; j < move_yh; j++) {
-    for (let i = move_xl; i < move_xh; i++) {
-      let monster = monsterAt(i, j);
+  for (let n = 0; n < acting.length; n++) {
+    const i = acting[n].x;
+    const j = acting[n].y;
+    let monster = monsterAt(i, j);
 
-      if (ULARN && monster && monster.arg == MIMIC) {
-        if (monster.mimiccounter % 10 == 0) {
-          monster.mimicarg = createMimicArg();
-        }
-        monster.mimiccounter++;
+    if (ULARN && monster && monster.arg == MIMIC) {
+      if (monster.mimiccounter % 10 == 0) {
+        monster.mimicarg = createMimicArg();
       }
+      monster.mimiccounter++;
+    }
 
-      if (monster && !monster.moved) {
-        /* if there is a monster to move and it isn't already moved */
-        if (player.AGGRAVATE || !player.STEALTH || monster.awake) {
-          movemt(i, j);
-        }
+    if (monster && !monster.moved) {
+      /* if there is a monster to move and it isn't already moved */
+      if (player.AGGRAVATE || !player.STEALTH || monster.awake) {
+        movemt(i, j);
       }
     }
   }
 
   /*
    v12.4.5:
-   randomly wake up monsters next to our hero, even in stealth mode
+   randomly wake up monsters next to our hero, even in stealth mode.
+   Only when the local hero is the adventurer who just acted.
  */
-  noticeplayer();
+  if (heroIsActing(adventurers)) noticeplayer();
 
 }
 

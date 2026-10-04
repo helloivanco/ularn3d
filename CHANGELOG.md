@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.33 — Cooperation aura
+
+- A flat bubble follows you on the dungeon floor (Ivan Wong). It is 20 tiles wide and 10 tiles tall, centered on you with the extra tile to the east and north
+- The bubble is the ellipse of that rectangle. A creature on your floor is inside when its tile sits in the ellipse. The corners of the rectangle are outside it
+- When you take a turn, only creatures inside your bubble take a turn. Creatures outside stay put, and a creature on another floor never acts
+- Each creature acts once for the person who just moved. You have to stand together if you want the same creature to answer both of you
+- The bubble is a flat unlit shape. Balanced play stays evenly lit: no fog, no bloom, no shadow map, and no extra light
+- Town is unchanged
+
 ## 1.3.32 — Clearer caves
 
 - Hall floors and the rock around them use different tints on the same stone (Ivan Wong). The floor reads lighter than the wall

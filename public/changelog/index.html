@@ -115,6 +115,20 @@
         </p>
 
         <ol class="changelog-list">
+          <li id="v1-3-33">
+            <header>
+              <span class="changelog-version">v1.3.33</span>
+              <h3>Cooperation aura</h3>
+            </header>
+            <ul>
+              <li>A flat bubble follows you on the dungeon floor. It is 20 tiles wide and 10 tiles tall, centered on you with the extra tile to the east and north</li>
+              <li>The bubble is the ellipse of that rectangle. A creature on your floor is inside when its tile sits in the ellipse. The corners of the rectangle are outside it</li>
+              <li>When you take a turn, only creatures inside your bubble take a turn. Creatures outside stay put, and a creature on another floor never acts</li>
+              <li>Each creature acts once for the person who just moved</li>
+              <li>The bubble is a flat unlit shape. Balanced play stays evenly lit: no fog, no bloom, no shadow map, and no extra light</li>
+              <li>Town is unchanged</li>
+            </ul>
+          </li>
           <li id="v1-3-32">
             <header>
               <span class="changelog-version">v1.3.32</span>
