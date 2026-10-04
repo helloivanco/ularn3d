@@ -380,6 +380,8 @@ window.ularn = {
     character = "Adventurer",
     difficulty = 0,
     resume = false,
+    seed = null,
+    skipPaint = false,
   } = {}) {
     if (initialized3D) return;
     ULARN = true;
@@ -483,6 +485,11 @@ window.ularn = {
           "This expedition could not be restored. Start a new expedition to play.",
         );
       }
+    }
+    if (seed != null) {
+      installEngineHost(
+        createEngineHost(seed, { skipPaint: !!skipPaint, skipDelay: true }),
+      );
     }
     logname =
       name

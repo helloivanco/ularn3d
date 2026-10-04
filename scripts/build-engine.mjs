@@ -50,6 +50,8 @@ const files = [
   "devmode",
   "gotw",
   "explore",
+  "determinism",
+  "party",
 ];
 const source = files
   .map(

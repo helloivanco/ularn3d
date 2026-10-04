@@ -9,6 +9,10 @@ const KNOWALL = (HAVESEEN | KNOWHERE);
 
 
 function paint() {
+  if (ENGINE_HOST && ENGINE_HOST.skipPaint) {
+    DEBUG_PAINT++;
+    return;
+  }
   if (mazeMode) {
     drawmaze();
     botside();

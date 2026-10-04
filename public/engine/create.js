@@ -75,6 +75,11 @@ function mulberry32(seed) {
 }
 
 function drawLevelSeed() {
+  // One stream: the recorded per-level seed is drawn from the game RNG,
+  // and generation keeps consuming that same stream (no second generator).
+  if (ENGINE_HOST && ENGINE_HOST.singleStream && typeof ENGINE_HOST.random === "function") {
+    return (Math.floor(ENGINE_HOST.random() * 0xffffffff) >>> 0) || 1;
+  }
   if (typeof crypto !== "undefined" && crypto.getRandomValues) {
     const buf = new Uint32Array(1);
     crypto.getRandomValues(buf);
@@ -85,6 +90,7 @@ function drawLevelSeed() {
 
 function beginLevelAttempt(seed) {
   const chosen = (seed >>> 0) || 1;
+  if (ENGINE_HOST && ENGINE_HOST.singleStream) return chosen;
   setLevelRng(mulberry32(chosen));
   return chosen;
 }

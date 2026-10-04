@@ -583,6 +583,7 @@ function revealLevel() {
 
 
 async function nap(time) {
+  if (ENGINE_HOST && ENGINE_HOST.skipDelay) return;
   if (NONAP) time = 10;
   return new Promise(resolve => {
     setTimeout(() => { resolve('resolved'); }, time);
