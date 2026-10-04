@@ -96,6 +96,16 @@ const scriptSandbox = () => {
   for (const name of intrinsics) {
     if (globalThis[name] !== undefined) sandbox[name] = globalThis[name];
   }
+  // Deno timer functions reject a foreign `this`. Calls inside `with` supply the sandbox.
+  sandbox.setTimeout = (fn, ms, ...args) => globalThis.setTimeout(fn, ms, ...args);
+  sandbox.clearTimeout = (id) => globalThis.clearTimeout(id);
+  sandbox.setInterval = (fn, ms, ...args) => globalThis.setInterval(fn, ms, ...args);
+  sandbox.clearInterval = (id) => globalThis.clearInterval(id);
+  if (typeof globalThis.atob === "function") sandbox.atob = (value) => globalThis.atob(value);
+  if (typeof globalThis.btoa === "function") sandbox.btoa = (value) => globalThis.btoa(value);
+  if (typeof globalThis.queueMicrotask === "function") {
+    sandbox.queueMicrotask = (fn) => globalThis.queueMicrotask(fn);
+  }
   for (const name of hidden) sandbox[name] = undefined;
   sandbox.window = Object.assign(sandbox, dom.window);
   sandbox.window.window = sandbox.window;
