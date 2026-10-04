@@ -81,7 +81,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await expect(page.locator("#about-game")).toHaveText("About");
   await expect(page.getByRole("link", { name: "New", exact: true })).toHaveAttribute("href", "/changelog/");
   await expect(page.getByRole("link", { name: "History", exact: true })).toHaveAttribute("href", "/about/#history");
-  await expect(page.getByRole("link", { name: "Verify Download", exact: true })).toHaveAttribute("href", "/downloads/SHA256SUMS.txt");
+  await expect(page.getByRole("link", { name: "Verify", exact: true })).toHaveAttribute("href", "/downloads/SHA256SUMS.txt");
   await expect(page.getByRole("link", { name: /About & controls|What’s new|History & creators|Verify download|Site home/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator(".site-links .github-link svg")).toBeVisible();

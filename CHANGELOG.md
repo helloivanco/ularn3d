@@ -14,7 +14,7 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 ## 1.3.38 — Clearer chrome
 
 - Multiplayer, the lobby, and the leaderboard close with a round X. The title stays
-- Links under Download for Windows read About, New, History, a GitHub icon, and Verify Download, each on one line
+- Links under Download for Windows read About, New, History, Verify, then a GitHub icon, each on one line
 - The spectating line sits under the header on a blurred dark chip. The number is people watching, not the players or the host
 
 ## 1.3.37 — Verified scores
