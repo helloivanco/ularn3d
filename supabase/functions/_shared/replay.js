@@ -1,4 +1,4 @@
-import { bootEngine } from "./engine-boot.js";
+import { bootEngine, ensureEngineSource } from "./engine-boot.js";
 
 /**
  * Free-plan Edge Functions get about 2 seconds of CPU. A short finished run
@@ -29,9 +29,13 @@ export const replayFinishedRun = async ({
 }) => {
   if (!Array.isArray(log)) return { ok: false, reason: "bad_log" };
   if (log.length > MAX_REPLAY_TURNS) return { ok: false, reason: "replay_cpu_cap" };
-  const started = clock();
-  const overBudget = () => clock() - started > budgetMs;
   let api;
+  try {
+    await ensureEngineSource();
+  } catch (error) {
+    console.error("replay source failed", error instanceof Error ? error.message : "error");
+    return { ok: false, reason: "unavailable" };
+  }
   try {
     if (typeof onBoot === "function") onBoot();
     api = bootEngine({ seed: Number(seed), skipPaint: true });
@@ -43,7 +47,8 @@ export const replayFinishedRun = async ({
     console.error("replay boot failed", error instanceof Error ? error.message : "error");
     return { ok: false, reason: "replay_failed" };
   }
-  if (overBudget()) return { ok: false, reason: "replay_cpu_cap" };
+  const started = clock();
+  const overBudget = () => clock() - started > budgetMs;
   for (let seq = 0; seq < log.length; seq++) {
     if (overBudget()) return { ok: false, reason: "replay_cpu_cap" };
     const row = log[seq];

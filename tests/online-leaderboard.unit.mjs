@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { handleSubmit, publicBoard } from "../supabase/functions/_shared/submit.js";
 import { replayFinishedRun } from "../supabase/functions/_shared/replay.js";
 import { bootEngine, playInputs } from "./lib/engine-session.mjs";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { concatEngineFiles } from "../supabase/functions/_shared/engine-files.js";
 import { ENGINE_SOURCE } from "../supabase/functions/_shared/engine-source.js";
+import { ENGINE_SOURCE_SHA256, extractEngineBundle } from "../supabase/functions/_shared/engine-boot.js";
 
 const scoreOf = (api) => (api.player.GOLD || 0) + (api.player.BANKACCOUNT || 0);
 
@@ -131,7 +133,10 @@ test("a recorded solo run and a recorded co-op run replay to the same score", as
 
 test("the edge bundle matches the engine scripts on disk", () => {
   const built = concatEngineFiles((rel) => readFileSync(`public/engine/${rel}`, "utf8"));
+  const packed = readFileSync("supabase/functions/_shared/engine-source.js", "utf8");
   assert.equal(ENGINE_SOURCE, built);
+  assert.equal(extractEngineBundle(packed), built);
+  assert.equal(createHash("sha256").update(packed).digest("hex"), ENGINE_SOURCE_SHA256);
 });
 
 test("the public board hides unverified and flagged rows", () => {

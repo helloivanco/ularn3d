@@ -4,9 +4,32 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { createHeadlessDom } from "./headless-dom.js";
 import { concatEngineFiles } from "./engine-files.js";
-import { ENGINE_SOURCE } from "./engine-source.js";
+
+/** Pinned bundle. The hash is the file bytes, so a changed download is refused. */
+export const ENGINE_SOURCE_SHA256 = "53868af2da5fbdc532f9bb9441c3045163a91fe605e15dca10e0bf993bf9f03b";
+const ENGINE_COMMIT = "caa0b28145ab4ca8db87b4c0cf9c86e81a5dcc9b";
+const ENGINE_SOURCE_URLS = [
+  `https://raw.githubusercontent.com/helloivanco/ularn3d/${ENGINE_COMMIT}/supabase/functions/_shared/engine-source.js`,
+  `https://cdn.jsdelivr.net/gh/helloivanco/ularn3d@${ENGINE_COMMIT}/supabase/functions/_shared/engine-source.js`,
+];
 
 let cachedSource = null;
+
+const sha256 = async (text) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+/** Pull the engine string out of the generated module. */
+export const extractEngineBundle = (text) => {
+  const marker = "export const ENGINE_SOURCE = ";
+  const at = text.indexOf(marker);
+  if (at < 0) throw new Error("engine bundle shape");
+  const literal = text.slice(at + marker.length).trim().replace(/;\s*$/, "");
+  const source = JSON.parse(literal);
+  if (typeof source !== "string" || source.length < 1000) throw new Error("engine bundle empty");
+  return source;
+};
 
 const repoEngineSource = () => {
   try {
@@ -19,10 +42,49 @@ const repoEngineSource = () => {
   }
 };
 
-/** Repo scripts when they are on disk. The bundled copy is what the Edge isolate runs. */
-export const loadEngineSource = () => {
+const siblingEngineSource = () => {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const path = join(here, "engine-source.js");
+    if (!existsSync(path)) return null;
+    return extractEngineBundle(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+};
+
+const fetchPinnedEngineSource = async () => {
+  let lastError = null;
+  for (const url of ENGINE_SOURCE_URLS) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`engine bundle ${response.status}`);
+      const text = await response.text();
+      const hash = await sha256(text);
+      if (hash !== ENGINE_SOURCE_SHA256) throw new Error("engine bundle hash");
+      return extractEngineBundle(text);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("engine bundle fetch");
+};
+
+/**
+ * Repo scripts when this process can see public/engine. The Edge isolate uses
+ * the sibling bundle, or the same pinned file when that bundle is not on disk.
+ */
+export const ensureEngineSource = async () => {
   if (cachedSource) return cachedSource;
-  cachedSource = repoEngineSource() || ENGINE_SOURCE;
+  cachedSource = repoEngineSource() || siblingEngineSource() || await fetchPinnedEngineSource();
+  return cachedSource;
+};
+
+const loadEngineSource = () => {
+  if (cachedSource) return cachedSource;
+  const source = repoEngineSource() || siblingEngineSource();
+  if (!source) throw new Error("engine source is not loaded");
+  cachedSource = source;
   return cachedSource;
 };
 
