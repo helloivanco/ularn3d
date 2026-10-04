@@ -229,11 +229,8 @@ function take(item) {
       }
       if (item.matches(OPOTION) && item.arg == 21) player.hasPickedUpPotion = true;
       if (item.matches(OLARNEYE)) player.hasPickedUpEye = true;
-      // Buying or finding naturally discovers consumables for the player.
-      if (mazeMode) {
-        if (item.matches(OSCROLL)) learnScroll(item);
-        if (item.matches(OPOTION)) learnPotion(item);
-      }
+      // Pickup never identifies. Drinking, reading, an identify scroll, and
+      // buying from the shop are the paths that learn a potion or scroll.
       debug(`take(): ` + item);
       player.adjustcvalues(item, true);
       player.inventory[i] = item;

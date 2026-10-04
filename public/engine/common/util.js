@@ -1,17 +1,33 @@
 'use strict';
 
 /*
- * Optional level-generation stream. Null uses Math.random.
- * Set only for the duration of one cave-generation attempt.
+ * Optional level-generation stream. Null uses the game stream, or Math.random.
+ * Set only for the duration of one cave-generation attempt when the game
+ * is not on a single seeded stream.
  */
 let levelRngUnit = null;
+
+/*
+ * Browser and headless hosts install this. Solo play leaves it null, so
+ * rngUnit, millis, and nap stay on Math.random, Date.now, and setTimeout.
+ */
+var ENGINE_HOST = null;
+
+function installEngineHost(host) {
+  ENGINE_HOST = host || null;
+  if (ENGINE_HOST && ENGINE_HOST.seed != null) {
+    gameID = "seed" + ENGINE_HOST.seed.toString(36);
+  }
+}
 
 function setLevelRng(nextUnit) {
   levelRngUnit = nextUnit;
 }
 
 function rngUnit() {
-  return levelRngUnit ? levelRngUnit() : Math.random();
+  if (levelRngUnit) return levelRngUnit();
+  if (ENGINE_HOST && typeof ENGINE_HOST.random === "function") return ENGINE_HOST.random();
+  return Math.random();
 }
 
 
@@ -466,6 +482,7 @@ function padString(str, width, lastHighlightTime, color) {
 
 
 function millis() {
+  if (ENGINE_HOST && typeof ENGINE_HOST.now === "function") return ENGINE_HOST.now();
   return Date.now();
 }
 

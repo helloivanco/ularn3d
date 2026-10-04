@@ -12,6 +12,7 @@ import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from ".
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight, wallLip } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
+import { auraControl } from "./cooperation-aura.js";
 import {
   createCooperationAura,
   placeCooperationAura,
@@ -1480,8 +1481,24 @@ export class World {
   }
   syncCooperationAura(state) {
     if (!this.cooperationAura) return;
-    const show = cooperationAuraShown(state?.level);
+    const show = cooperationAuraShown(state?.level) && auraControl(state).overlay;
     this.cooperationAura.visible = show;
+    const allies = typeof window.ularn?.party === "function" ? window.ularn.party() : [];
+    const others = show
+      ? allies.filter((member) => member.alive && member.dungeon === state.level && (member.x !== state.x || member.y !== state.y))
+      : [];
+    if (!this.allyAuras) this.allyAuras = [];
+    while (this.allyAuras.length < others.length) {
+      const aura = createCooperationAura();
+      aura.name = "cooperation-aura-ally";
+      this.scene.add(aura);
+      this.allyAuras.push(aura);
+    }
+    this.allyAuras.forEach((aura, index) => {
+      const member = others[index];
+      aura.visible = !!member;
+      if (member) placeCooperationAura(aura, member.x, member.y);
+    });
     if (!show) return;
     placeCooperationAura(this.cooperationAura, state.x, state.y);
   }

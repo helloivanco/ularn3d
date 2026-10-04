@@ -9,11 +9,57 @@ let move_xl = -1;
 let move_xh = -1;
 
 /*
- * Who just took this turn. Single player is a one-element list: the local
- * hero. A second player is added only when they are the one who acted, so
- * their aura is the only one that wakes monsters. Overlap still acts once
- * because monstersActingFor dedupes. Not a network session.
+ * Who just took this turn. Used only while the multiplayer aura is on.
+ * A second player is added only when they are the one who acted, so their
+ * aura is the only one that wakes monsters. Overlap still acts once
+ * because monstersActingFor dedupes.
  */
+
+function auraTurnMode() {
+  const multiplayer = typeof partySize === "function" && partySize() > 1;
+  if (!multiplayer) return "level";
+  const on = typeof cooperationAuraOn === "function" ? cooperationAuraOn() : true;
+  return on ? "aura" : "off";
+}
+
+/*
+ * Classic Ularn window. It is not the 20×10 ellipse. The last monster the
+ * player hit is added even when it sits outside that window, which is how
+ * a creature outside the ellipse still gets a turn.
+ */
+function levelMonsterSpots() {
+  if (player.AGGRAVATE) {
+    move_yl = player.y - 5;
+    move_yh = player.y + 6;
+    move_xl = player.x - 10;
+    move_xh = player.x + 11;
+    distance = 40;
+  } else {
+    move_yl = player.y - 3;
+    move_yh = player.y + 4;
+    move_xl = player.x - 5;
+    move_xh = player.x + 6;
+    distance = 17;
+  }
+  if (move_yl < 0) move_yl = 0;
+  if (move_yh > MAXY) move_yh = MAXY;
+  if (move_xl < 0) move_xl = 0;
+  if (move_xh > MAXX) move_xh = MAXX;
+  const spots = [];
+  const seen = new Set();
+  const add = (x, y) => {
+    if (!inBounds(x, y)) return;
+    const key = x + y * MAXX;
+    if (seen.has(key) || !monsterAt(x, y)) return;
+    seen.add(key);
+    spots.push({ x: x, y: y, dungeon: level });
+  };
+  for (let y = move_yl; y < move_yh; y++) {
+    for (let x = move_xl; x < move_xh; x++) add(x, y);
+  }
+  add(lasthx, lasthy);
+  return spots;
+}
 function actingAdventurers() {
   if (typeof cooperationActingAdventurers === "function") {
     const listed = cooperationActingAdventurers();
@@ -86,10 +132,12 @@ function auraMonsterSpots(adventurers) {
 /* =============================================================================
  * FUNCTION: movemonst
  *
- * Only monsters inside the acting adventurer's cooperation aura take a
- * turn. The tile test lives in aura.js (the ellipse of the 20×10 box).
- * Monsters on another dungeon level are never scanned. Each monster is
- * moved at most once per call.
+ * Solo: the classic movement window, not the 20×10 ellipse. The last
+ * monster hit still acts when it stands outside that window.
+ * Multiplayer with the aura on: only monsters inside the acting
+ * adventurer's ellipse act, each at most once.
+ * Multiplayer with the aura off: the player's action already happened.
+ * No monster is run through the aura, and the level is not scanned instead.
  */
 function movemonst() {
   if (!player) return;
@@ -107,9 +155,12 @@ function movemonst() {
   /* no action if monsters are held */
   if (player.HOLDMONST) return;
 
+  const mode = auraTurnMode();
+  if (mode === "off") return;
+
   const adventurers = actingAdventurers();
   distance = player.AGGRAVATE ? 40 : 17; /* depth of intelligent monster movement */
-  const acting = auraMonsterSpots(adventurers);
+  const acting = mode === "aura" ? auraMonsterSpots(adventurers) : levelMonsterSpots();
   const actingKey = new Set();
   for (let n = 0; n < acting.length; n++) {
     actingKey.add(acting[n].x + acting[n].y * MAXX);
@@ -122,8 +173,9 @@ function movemonst() {
   }
 
   /*
-   * Move the last monster hit by the player first, but only when that
-   * tile is inside the acting aura. Outside the aura it does not act.
+   * Move the last monster hit by the player first, when that tile is in
+   * this turn's set. Solo includes the whole level. Aura-on includes the
+   * ellipse. Aura-off returned above and does not reach here.
    */
   if (inBounds(lasthx, lasthy) && actingKey.has(lasthx + lasthy * MAXX)) {
     let last_monst = monsterAt(lasthx, lasthy);
@@ -160,7 +212,7 @@ function movemonst() {
    randomly wake up monsters next to our hero, even in stealth mode.
    Only when the local hero is the adventurer who just acted.
  */
-  if (heroIsActing(adventurers)) noticeplayer();
+  if (mode === "level" || heroIsActing(adventurers)) noticeplayer();
 
 }
 

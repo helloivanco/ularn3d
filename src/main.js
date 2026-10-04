@@ -5,7 +5,12 @@ import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
+import { mountOnlineUi } from "./online/ui.js";
+import { tilesInFog } from "./online/spectator.js";
+import { auraControl } from "./cooperation-aura.js";
 mountIcons();
+const onlineUi = mountOnlineUi();
+window.ularnOnline = onlineUi;
 const $ = (id) => document.getElementById(id),
   engine = window.ularn;
 const classes = [
@@ -94,6 +99,7 @@ try {
 } catch {}
 let inventorySignature = "", effectsSignature = "";
 let hudSignature = "";
+let hostTurnSeen = null;
 let damageFlashTimer = null;
 const PERF_ENABLED = (() => {
   try {
@@ -414,8 +420,16 @@ function update() {
   const perfStart = ularnPerf.enabled ? performance.now() : 0;
   const next = engine.snapshot();
   if (!next) return;
-  state = next;
+  const fog = window.ularnOnline?.fogMask?.() ?? null;
+  state = fog
+    ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
+    : next;
   world?.update(state);
+  if (state.moves !== hostTurnSeen) {
+    hostTurnSeen = state.moves;
+    window.ularnOnline?.hostBeat?.();
+  }
+  const partyNow = typeof engine.party === "function" ? engine.party() : [];
   const hudKey = [
     state.name,
     state.character,
@@ -442,6 +456,9 @@ function update() {
     state.maze,
     state.prompt,
     state.saveError || "",
+    partyNow.map((member) => `${member.slot}:${member.name}:${member.hp}:${member.dungeon}`).join(","),
+    state.multiplayer ? "mp" : "solo",
+    state.aura ? "aura" : "no-aura",
   ].join("|");
   if (hudKey !== hudSignature) {
     hudSignature = hudKey;
@@ -453,6 +470,54 @@ function update() {
     );
     $("player-rank").textContent = `LV ${state.rank}`;
     $("health-text").textContent = `${Math.max(0, state.hp)} / ${state.hpMax}`;
+    const party = partyNow;
+    const partyHud = $("party-hud");
+    const turnStrip = $("turn-strip");
+    if (partyHud) {
+      const auraNow = auraControl(state);
+      partyHud.hidden = party.length < 2;
+      const cards = party.map((member) => {
+        const card = document.createElement("article");
+        const ratio = member.hpmax ? Math.max(0, Math.min(1, member.hp / member.hpmax)) : 0;
+        card.innerHTML = `<strong></strong><div class="meter"><i></i></div><span></span>`;
+        card.querySelector("strong").textContent = member.name || "Ally";
+        card.tabIndex = 0;
+        card.setAttribute("role", "button");
+        card.setAttribute("aria-label", `Follow ${member.name || "ally"}`);
+        const handleFollow = () => window.ularnOnline?.follow?.(member.name);
+        card.addEventListener("click", handleFollow);
+        card.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") handleFollow();
+        });
+        card.querySelector("i").style.width = `${Math.round(ratio * 100)}%`;
+        card.querySelector("span").textContent = `Lv ${member.xl || 1} · D${member.dungeon || 0}`;
+        return card;
+      });
+      if (auraNow.control) {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.id = "aura-toggle";
+        toggle.className = "aura-toggle";
+        toggle.textContent = auraNow.label;
+        toggle.setAttribute("aria-pressed", String(auraNow.overlay));
+        toggle.addEventListener("click", () => {
+          if (window.ularnOnline?.acceptsInput && !window.ularnOnline.acceptsInput()) return;
+          window.ularnOnline?.requestAura?.(!auraNow.overlay);
+        });
+        cards.push(toggle);
+      }
+      partyHud.replaceChildren(...cards);
+    }
+    if (turnStrip && typeof engine.groups === "function") {
+      const groups = engine.groups().filter((group) => group.length > 1);
+      turnStrip.hidden = groups.length === 0;
+      turnStrip.replaceChildren(...groups.flatMap((group) => group.map((member, index) => {
+        const chip = document.createElement("span");
+        chip.textContent = index === 0 ? `${member.name} acts` : member.name;
+        if (index === 0) chip.className = "acting";
+        return chip;
+      })));
+    }
     $("health-bar").style.width =
       `${Math.max(0, Math.min(100, (state.hp / state.hpMax) * 100))}%`;
     $("mana-text").textContent = `${state.mana} / ${state.manaMax}`;
@@ -655,13 +720,20 @@ function drawMap() {
     }
     contentKey = `${contentHash}:${cssW}x${cssH}`;
   }
-  if (canvas.dataset.contentKey === contentKey && canvas.dataset.playerKey === playerKey)
+  const pings = window.ularnOnline?.mapPings?.() ?? [];
+  const pingKey = pings.map((ping) => `${ping.x},${ping.y}`).join(";");
+  if (
+    canvas.dataset.contentKey === contentKey &&
+    canvas.dataset.playerKey === playerKey &&
+    canvas.dataset.pingKey === pingKey
+  )
     return;
   // Walking only moves @. Redraw the old and new cell instead of 57×20 fillRects.
   if (
     canvas.dataset.contentKey === contentKey &&
     canvas.dataset.playerKey &&
-    canvas.dataset.playerKey !== playerKey
+    canvas.dataset.playerKey !== playerKey &&
+    canvas.dataset.pingKey === pingKey
   ) {
     const [ox, oy] = canvas.dataset.playerKey.split(",").map(Number);
     const paintCell = (x, y, isPlayer) => {
@@ -710,6 +782,7 @@ function drawMap() {
     paintCell(ox, oy, false);
     paintCell(state.x, state.y, true);
     canvas.dataset.playerKey = playerKey;
+    canvas.dataset.pingKey = pingKey;
     return;
   }
   ctx.fillStyle = "#0a1214";
@@ -760,8 +833,30 @@ function drawMap() {
     ctx.fillStyle = "#132325";
     ctx.fillText("@", px + cell / 2, py + cell / 2);
   }
+  const allies = typeof engine.party === "function" ? engine.party() : [];
+  if (allies.length > 1) {
+    for (const ally of allies) {
+      if (!ally.alive || ally.dungeon !== state.level) continue;
+      if (ally.x === state.x && ally.y === state.y) continue;
+      if (ally.x < x0 || ally.y < y0 || ally.x >= x0 + cols || ally.y >= y0 + rows) continue;
+      const ax = (ally.x - x0) * cell;
+      const ay = (ally.y - y0) * cell;
+      ctx.fillStyle = "#9fd7c8";
+      ctx.fillRect(ax, ay, cell, cell);
+      ctx.fillStyle = "#132325";
+      ctx.fillText(String(ally.name || "A").slice(0, 1), ax + cell / 2, ay + cell / 2);
+    }
+  }
+  for (const ping of pings) {
+    if (ping.x < x0 || ping.y < y0 || ping.x >= x0 + cols || ping.y >= y0 + rows) continue;
+    const px = (ping.x - x0) * cell;
+    const py = (ping.y - y0) * cell;
+    ctx.strokeStyle = "#f3d48a";
+    ctx.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+  }
   canvas.dataset.contentKey = contentKey;
   canvas.dataset.playerKey = playerKey;
+  canvas.dataset.pingKey = pingKey;
   const sizeKey = `${nextWidth}x${nextHeight}:${cssW}x${cssH}`;
   if (canvas.dataset.sizeKey !== sizeKey) {
     canvas.dataset.sizeKey = sizeKey;
@@ -808,6 +903,16 @@ const keyMap = {
   End: "end",
 };
 window.addEventListener("keydown", (event) => {
+  if (window.ularnOnline?.blocksGameKeys?.()) return;
+  if (event.key === "Tab" && window.ularnOnline?.spectating?.()) {
+    event.preventDefault();
+    window.ularnOnline.cycleFollow();
+    return;
+  }
+  if (window.ularnOnline?.acceptsInput?.() === false && !event.target.matches("input, textarea")) {
+    event.preventDefault();
+    return;
+  }
   if (
     !state ||
     event.ctrlKey ||

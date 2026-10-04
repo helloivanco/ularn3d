@@ -351,6 +351,29 @@ paint = function () {
 };
 
 window.ularn = {
+  party() {
+    if (typeof adventurerSummaries !== "function") return [];
+    return adventurerSummaries();
+  },
+  fog(name) {
+    if (typeof adventurerSeen !== "function") return null;
+    return adventurerSeen(name);
+  },
+  applyRest(slot) {
+    if (typeof activateAdventurer === "function" && slot != null) activateAdventurer(slot);
+    if (typeof mainloop === "function") mainloop(null, ".");
+    return true;
+  },
+  setAura(on, from) {
+    if (typeof hostSetCooperationAura !== "function") return { ok: false, aura: false, multiplayer: false };
+    const result = hostSetCooperationAura(!!on, from || { role: "player" });
+    window.dispatchEvent(new Event("ularn:update"));
+    return result;
+  },
+  groups() {
+    if (typeof encounterGroups !== "function") return [];
+    return encounterGroups(this.party().filter((member) => member.alive));
+  },
   setAutoLoot(enabled) {
     const value = !!enabled;
     overridePref("auto_pickup", value);
@@ -380,6 +403,8 @@ window.ularn = {
     character = "Adventurer",
     difficulty = 0,
     resume = false,
+    seed = null,
+    skipPaint = false,
   } = {}) {
     if (initialized3D) return;
     ULARN = true;
@@ -483,6 +508,11 @@ window.ularn = {
           "This expedition could not be restored. Start a new expedition to play.",
         );
       }
+    }
+    if (seed != null) {
+      installEngineHost(
+        createEngineHost(seed, { skipPaint: !!skipPaint, skipDelay: true }),
+      );
     }
     logname =
       name
@@ -721,6 +751,8 @@ window.ularn = {
       wc: player.WCLASS,
       weapon: weaponView3D(),
       autoLoot: !!getPref("auto_pickup"),
+      multiplayer: typeof partySize === "function" && partySize() > 1,
+      aura: typeof cooperationAuraOn === "function" ? cooperationAuraOn() : false,
       moves: player.MOVESMADE,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
       log: logViewForSnapshot3D(),

@@ -4,6 +4,24 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.36 — Score submit checks
+
+- A co-op score submission is checked against the current host of that room
+- Knowing another player's run id does not throw that run away
+- Too many score submissions in an hour are refused, and the run stays as it was
+
+## 1.3.35 — Unknown finds and the aura switch
+
+- Picking up a potion or a scroll no longer tells you what it is. Drinking, reading, and an identify scroll still do. The shop still names what you buy
+- The floor bubble is only there in a multiplayer game, and it starts on. **AURA: ON** / **AURA: OFF** hides it. Off means creatures do not take that bubble's turn
+- A solo expedition has no bubble and no switch. Creatures still take their usual turn
+
+## 1.3.34 — Online co-op
+
+- Optional multiplayer: host or join a room, watch a game, and chat with the party
+- Solo play is the same expedition. Online menus say “Online unavailable” when the service cannot be reached
+- A verified leaderboard is ready for scores the server has replayed. Unverified runs stay off the board
+
 ## 1.3.33 — Cooperation aura
 
 - A flat bubble follows you on the dungeon floor (Ivan Wong). It is 20 tiles wide and 10 tiles tall, centered on you with the extra tile to the east and north

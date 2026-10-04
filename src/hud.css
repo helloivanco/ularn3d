@@ -188,3 +188,57 @@
   .playing #inventory-panel { display: none !important; }
   .playing #effects-panel { top: 128px; }
 }
+.party-hud, .turn-strip {
+  position: fixed;
+  z-index: 6;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  color: #e7efe9;
+  font-size: 12px;
+}
+.party-hud { top: 64px; }
+.turn-strip { top: 112px; }
+.party-hud article, .turn-strip span {
+  background: rgba(16, 28, 32, 0.88);
+  border: 1px solid rgba(232, 196, 122, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 92px;
+}
+.party-hud .meter { height: 6px; background: #24343a; border-radius: 99px; overflow: hidden; }
+.party-hud .meter i { display: block; height: 100%; background: #d4574e; }
+.turn-strip .acting { color: #f3d48a; }
+.aura-toggle {
+  background: rgba(16, 28, 32, 0.88);
+  color: #f3d48a;
+  border: 1px solid rgba(232, 196, 122, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 92px;
+  font: inherit;
+  cursor: pointer;
+}
+.online-dialog { width: min(440px, calc(100vw - 32px)); }
+.online-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.online-dialog h2 { margin: 0; font-size: 18px; }
+.online-body { display: grid; gap: 8px; margin-top: 12px; }
+.online-form label { display: grid; gap: 4px; font-size: 12px; }
+.online-form input { background: #101c20; color: #e7efe9; border: 1px solid #cbb07970; padding: 8px; }
+#chat-panel {
+  position: fixed; right: 12px; bottom: 88px; z-index: 7; width: min(320px, calc(100vw - 24px));
+  background: rgba(16, 28, 32, 0.94); color: #e7efe9; border: 1px solid rgba(232, 196, 122, 0.35);
+  border-radius: 10px; padding: 10px; display: grid; gap: 8px;
+}
+#chat-panel header, #chat-quick, .chat-tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#chat-log { max-height: 160px; overflow: auto; font-size: 13px; }
+#chat-form { display: flex; gap: 6px; }
+#chat-input { flex: 1; background: #101c20; color: #e7efe9; border: 1px solid #cbb07970; padding: 8px; }
+#spectator-badge, #reconnect-overlay, #host-toast {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 8;
+  background: rgba(16, 28, 32, 0.92); color: #f3d48a; border: 1px solid rgba(232, 196, 122, 0.45);
+  padding: 8px 12px; border-radius: 999px;
+}
+.board-list { margin: 0; padding-left: 18px; }
+.board-list .yours { color: #f3d48a; }
+.chat-tabs .acting { color: #f3d48a; }

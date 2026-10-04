@@ -213,7 +213,13 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
         pointLights: metrics.pointLights,
       };
     };
-    return { shallow: read(1), deep: read(12), volcano: read(16), town: read(0) };
+    return {
+      shallow: read(1),
+      deep: read(12),
+      volcano: read(16),
+      town: read(0),
+      auraButton: !!document.querySelector("#aura-toggle"),
+    };
   });
   for (const row of [stats.shallow, stats.deep, stats.volcano]) {
     expect(row.quality).toBe("balanced");
@@ -221,7 +227,7 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
     expect(row.shadowMapEnabled).toBe(false);
     expect(row.bloom).toBe(false);
     expect(row.auraMaterial).toBe("MeshBasicMaterial");
-    expect(row.auraVisible).toBe(true);
+    expect(row.auraVisible).toBe(false);
     expect(row.auraCastShadow).toBe(false);
     expect(row.pointLights).toBe(0);
     expect(row.floorMapped).toBe(true);
@@ -235,6 +241,35 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
   expect(stats.deep.wallColor).toBe(stats.volcano.wallColor);
   expect(stats.deep.floorColor).not.toBe(stats.shallow.floorColor);
   expect(stats.town.auraVisible).toBe(false);
+  expect(stats.auraButton).toBe(false);
+  const multiplayer = await page.evaluate(() => {
+    addAdventurer("Bea");
+    newcavelevel(1);
+    paint();
+    return {
+      on: ularnGraphics.metrics().auraVisible,
+      buttonOn: document.querySelector("#aura-toggle")?.textContent ?? "",
+    };
+  });
+  expect(multiplayer.on).toBe(true);
+  expect(multiplayer.buttonOn).toBe("AURA: ON");
+  await page.locator("#aura-toggle").click();
+  const turnedOff = await page.evaluate(() => ({
+    off: ularnGraphics.metrics().auraVisible,
+    buttonOff: document.querySelector("#aura-toggle")?.textContent ?? "",
+  }));
+  expect(turnedOff.off).toBe(false);
+  expect(turnedOff.buttonOff).toBe("AURA: OFF");
+  const left = await page.evaluate(() => {
+    disbandParty();
+    paint();
+    return {
+      solo: ularnGraphics.metrics().auraVisible,
+      buttonGone: !document.querySelector("#aura-toggle"),
+    };
+  });
+  expect(left.solo).toBe(false);
+  expect(left.buttonGone).toBe(true);
   expect(stats.town.shadowMapEnabled).toBe(false);
   expect(stats.town.bloom).toBe(false);
   expect(stats.town.pointLights).toBe(0);

@@ -9,6 +9,10 @@ const KNOWALL = (HAVESEEN | KNOWHERE);
 
 
 function paint() {
+  if (ENGINE_HOST && ENGINE_HOST.skipPaint) {
+    DEBUG_PAINT++;
+    return;
+  }
   if (mazeMode) {
     drawmaze();
     botside();
@@ -642,6 +646,10 @@ function moveplayer(dir) {
     player.y = Math.floor((b.y0 + b.y1) / 2);
     newcavelevel(0);
     moveNear(OENTRANCE, false);
+    return 0;
+  }
+
+  if (typeof allyBlocksMove === "function" && allyBlocksMove(k, m)) {
     return 0;
   }
 
