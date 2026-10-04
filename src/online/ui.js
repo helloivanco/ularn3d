@@ -1,3 +1,4 @@
+import { mountIcons } from "../icons.js";
 import { displayNameError } from "./words.js";
 import { getSupabase, readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
@@ -14,8 +15,9 @@ const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
 const panel = (title, body) => {
   const dialog = document.createElement("dialog");
   dialog.className = "panel dialog online-dialog";
-  dialog.innerHTML = `<form method="dialog"><header><h2></h2><button type="submit" class="secondary" value="close">Close</button></header><div class="online-body"></div><p class="online-status" role="status"></p></form>`;
+  dialog.innerHTML = `<form method="dialog"><header><h2></h2><button type="submit" class="dialog-x" value="close" aria-label="Close"><span data-icon="close"></span></button></header><div class="online-body"></div><p class="online-status" role="status"></p></form>`;
   dialog.querySelector("h2").textContent = title;
+  mountIcons(dialog);
   const slot = dialog.querySelector(".online-body");
   if (typeof body === "string") slot.innerHTML = body;
   else slot.append(body);

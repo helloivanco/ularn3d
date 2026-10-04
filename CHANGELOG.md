@@ -11,6 +11,12 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 - A finished co-op run is sent in for a verified or rejected score, and the leaderboard shows verified rows
 - Chat history stays with the people still in the room
 
+## 1.3.38 — Clearer chrome
+
+- Multiplayer, the lobby, and the leaderboard close with a round X. The title stays
+- Links under Download for Windows stay on one line. GitHub is an icon, and Site home is gone from that row
+- The spectating line sits under the header on a blurred dark chip, so the place name stays readable
+
 ## 1.3.37 — Verified scores
 
 - A finished run is replayed on the server. The number on the public board is the score that replay produced
