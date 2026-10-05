@@ -257,7 +257,11 @@ export class World {
     this.aimGrid.visible = false;
     this.aimGrid.frustumCulled = false;
     this.scene.add(this.aimGrid);
-    const floorGeo = new THREE.BoxGeometry(0.993, 0.18, 0.993);
+    // 0.993 left a gap between cells. A close view looks through that gap onto
+    // the dark dungeon slab, which reads as a black seam. Tiles overlap a little
+    // so the seam stays covered. Tops are coplanar, so the overlap does not flicker.
+    // The stone map is unchanged.
+    const floorGeo = new THREE.BoxGeometry(1.02, 0.18, 1.02);
     this.floor = new THREE.InstancedMesh(
       floorGeo,
       surface("stone", 0xffffff),
@@ -528,6 +532,7 @@ export class World {
         monsterActors: this.monsters.size,
         propGroups: this.objects.size,
         floorInstances: this.floor.count + this.grassFloor.count,
+        floorSpan: this.floor.geometry?.parameters?.width ?? null,
         wallInstances: this.walls.count,
         shadowUpdates: this.shadowUpdates,
         shadowMapEnabled: this.renderer.shadowMap.enabled,
