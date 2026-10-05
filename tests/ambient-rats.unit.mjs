@@ -94,6 +94,11 @@ test("ambient rats have a head, ears, body, and tail in flat color", () => {
   assert.equal(ears.length, 2);
   assert.ok(Math.min(...ears) < -0.04);
   assert.ok(Math.max(...ears) > 0.04);
+  mesh.traverse((object) => {
+    if (object.name !== "rat-ear") return;
+    assert.ok(object.geometry.parameters.height > object.geometry.parameters.depth);
+    assert.ok(object.geometry.parameters.height > 0.04);
+  });
   assert.ok(headZ > bodyZ);
   assert.ok(tailZ < bodyZ);
   rats.dispose();

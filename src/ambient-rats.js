@@ -5,12 +5,12 @@ import { WALL_FULL } from "./wall-cut.js";
 export const AMBIENT_RAT_POOL = 4;
 export const AMBIENT_RAT_KIND = "ambient-rat";
 
-const BODY = 0x7a4e32;
-const HEAD = 0x64402a;
-const SNOUT = 0x3d291c;
-const EAR = 0xc48978;
-const TAIL = 0x2c1c12;
-const EYE = 0x140e0c;
+const BODY = 0x8a5a38;
+const HEAD = 0x6e452c;
+const SNOUT = 0x4a301f;
+const EAR = 0xe0a090;
+const TAIL = 0xc48b74;
+const EYE = 0x1a100c;
 const NEAR_SQ = 14 * 14;
 const THINK_INTERVAL = 0.22;
 const SCURRY_SPEED = 2.4;
@@ -40,33 +40,34 @@ const makeRatMesh = () => {
     interactive: false,
     decorative: true,
   };
-  // Plan-view silhouette. Local +Z is the way the rat scurries, so the
-  // overhead camera sees a head, two ears, a body, and a trailing tail.
-  const add = (name, color, w, h, d, x, y, z, rotY = 0) => {
+  // Local +Z is the way the rat scurries. Parts are sized for the steep
+  // overhead camera: standing ears, a pointed head, and a bare tail that
+  // swings out to the side so it still shows when the rat faces the camera.
+  const add = (name, color, w, h, d, x, y, z, rot = {}) => {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
       new THREE.MeshBasicMaterial({ color }),
     );
     mesh.name = name;
     mesh.position.set(x, y, z);
-    mesh.rotation.y = rotY;
+    mesh.rotation.set(rot.x || 0, rot.y || 0, rot.z || 0);
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.raycast = emptyRaycast;
     group.add(mesh);
     return mesh;
   };
-  add("rat-body", BODY, 0.14, 0.05, 0.18, 0, 0.032, -0.01);
-  add("rat-body", BODY, 0.16, 0.046, 0.08, 0, 0.03, -0.07);
-  add("rat-head", HEAD, 0.09, 0.046, 0.08, 0, 0.042, 0.12);
-  add("rat-head", SNOUT, 0.048, 0.03, 0.055, 0, 0.032, 0.175);
-  add("rat-head", EYE, 0.014, 0.01, 0.012, 0, 0.042, 0.202);
-  add("rat-ear", EAR, 0.05, 0.014, 0.038, -0.068, 0.072, 0.115);
-  add("rat-ear", EAR, 0.05, 0.014, 0.038, 0.068, 0.072, 0.115);
-  add("rat-eye", EYE, 0.016, 0.01, 0.014, -0.024, 0.068, 0.135);
-  add("rat-eye", EYE, 0.016, 0.01, 0.014, 0.024, 0.068, 0.135);
-  add("rat-tail", TAIL, 0.018, 0.012, 0.12, 0, 0.022, -0.16);
-  add("rat-tail", TAIL, 0.014, 0.01, 0.1, -0.036, 0.02, -0.265, 0.8);
+  add("rat-body", BODY, 0.13, 0.05, 0.2, 0, 0.055, -0.02);
+  add("rat-body", BODY, 0.15, 0.046, 0.09, 0, 0.052, -0.08);
+  add("rat-head", HEAD, 0.085, 0.046, 0.075, 0, 0.064, 0.13);
+  add("rat-head", SNOUT, 0.04, 0.028, 0.06, 0, 0.052, 0.19);
+  add("rat-head", EAR, 0.016, 0.012, 0.016, 0, 0.058, 0.222);
+  add("rat-ear", EAR, 0.05, 0.07, 0.018, -0.07, 0.11, 0.12, { z: 0.55 });
+  add("rat-ear", EAR, 0.05, 0.07, 0.018, 0.07, 0.11, 0.12, { z: -0.55 });
+  add("rat-eye", EYE, 0.016, 0.012, 0.014, -0.024, 0.092, 0.15);
+  add("rat-eye", EYE, 0.016, 0.012, 0.014, 0.024, 0.092, 0.15);
+  add("rat-tail", TAIL, 0.02, 0.014, 0.18, 0.01, 0.042, -0.2);
+  add("rat-tail", TAIL, 0.016, 0.012, 0.16, 0.07, 0.04, -0.34, { y: 0.9 });
   group.raycast = emptyRaycast;
   group.visible = false;
   group.frustumCulled = true;
