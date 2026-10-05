@@ -203,6 +203,7 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
         floorMapped: metrics.floorMapped,
         wallMapped: metrics.wallMapped,
         floorMaterial: metrics.floorMaterial,
+        floorSpan: metrics.floorSpan,
         floorColor: metrics.floorColor,
         wallColor: metrics.wallColor,
         pixelRatio: metrics.pixelRatio,
@@ -233,6 +234,7 @@ test("balanced dungeon keeps fog off, shadows off, and mapped floors", async ({
     expect(row.floorMapped).toBe(true);
     expect(row.wallMapped).toBe(true);
     expect(row.floorMaterial).toBe("MeshBasicMaterial");
+    expect(row.floorSpan).toBeGreaterThanOrEqual(1);
     expect(row.floorColor).not.toBe(row.wallColor);
     expect(row.pixelRatio).toBeLessThanOrEqual(0.75);
     expect(row.anisotropy).toBe(2);

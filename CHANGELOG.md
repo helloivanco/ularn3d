@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.48 — Solid dungeon floors
+
+- Close views of the cave floor no longer show dark cracks between the stones
+- The stone picture on the floor and walls is the same. Balanced caves stay evenly lit
+
 ## 1.3.47 — Higher play column
 
 - The play screen no longer shows “A classic reawakened” or “The adventure awaits”
