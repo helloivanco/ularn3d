@@ -386,24 +386,47 @@ const loadRoster = async (roomId) => {
   };
 };
 
+/** Same columns the in-game leaderboard reads. RLS already hides unverified and flagged rows. */
+const SCORE_LIST_COLUMNS =
+  "user_id, display_name, score, mode, verified, flagged, created_at, won, depth_reached";
+
+export const interpretScoreList = (listed, userId) => {
+  if (!listed || listed.error || !Array.isArray(listed.data)) {
+    return { ok: false, error: "unavailable", rows: [] };
+  }
+  return {
+    ok: true,
+    rows: listed.data.map((row) => ({
+      name: row.display_name,
+      score: row.score,
+      mode: row.mode,
+      verified: row.verified,
+      flagged: row.flagged,
+      created_at: row.created_at,
+      yours: !!userId && row.user_id === userId,
+      won: row.won,
+      depth: row.depth_reached,
+    })),
+  };
+};
+
+/** Public leaderboard. ok:false is a failed read. ok:true with no rows is an empty board. */
+export const fetchPublicScores = async (userId) => {
+  try {
+    const supabase = await getSupabase();
+    if (!supabase) return { ok: false, error: "unavailable", rows: [] };
+    const listed = await supabase
+      .from("scores")
+      .select(SCORE_LIST_COLUMNS)
+      .order("score", { ascending: false })
+      .limit(100);
+    return interpretScoreList(listed, userId);
+  } catch {
+    return { ok: false, error: "unavailable", rows: [] };
+  }
+};
+
 export const loadScores = async (userId) => {
-  const supabase = await getSupabase();
-  if (!supabase) return [];
-  const listed = await supabase
-    .from("scores")
-    .select("user_id, display_name, score, mode, verified, flagged, created_at, won, depth_reached")
-    .order("score", { ascending: false })
-    .limit(100);
-  if (listed.error || !Array.isArray(listed.data)) return [];
-  return listed.data.map((row) => ({
-    name: row.display_name,
-    score: row.score,
-    mode: row.mode,
-    verified: row.verified,
-    flagged: row.flagged,
-    created_at: row.created_at,
-    yours: !!userId && row.user_id === userId,
-    won: row.won,
-    depth: row.depth_reached,
-  }));
+  const result = await fetchPublicScores(userId);
+  return result.ok ? result.rows : [];
 };
