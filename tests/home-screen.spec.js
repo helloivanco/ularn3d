@@ -33,6 +33,31 @@ for (const viewport of desktops) {
     await expect(page.locator(".location-dot")).toBeHidden();
     await expect(page.locator("#sound")).toBeVisible();
     await expect(page.locator("#guide")).toContainText("Field guide");
+    await expect(page.locator("#welcome")).not.toContainText("Time moves only when you do.");
+    await expect(page.locator(".site-version")).toHaveCount(0);
+    await expect(page.locator("#download-windows small")).toContainText(/^v\d+\.\d+\.\d+/);
+
+    const titleLine = await page.evaluate(() => {
+      const logo = document.querySelector("#title .brand img").getBoundingClientRect();
+      const name = document.querySelector("#title .title-name").getBoundingClientRect();
+      const sub = document.querySelector("#title em").getBoundingClientRect();
+      const nameSize = parseFloat(getComputedStyle(document.querySelector("#title .title-name")).fontSize);
+      const subSize = parseFloat(getComputedStyle(document.querySelector("#title em")).fontSize);
+      const overlap = Math.min(logo.bottom, name.bottom) - Math.max(logo.top, name.top);
+      return {
+        overlap,
+        logoHeight: logo.height,
+        subStartsBelowName: sub.top >= name.bottom - 1,
+        subUnderName: Math.abs(sub.left - name.left) < 2,
+        subSmaller: subSize < nameSize * 0.6,
+        logoClearsSubtitle: logo.bottom <= sub.top + 2,
+      };
+    });
+    expect(titleLine.overlap).toBeGreaterThan(titleLine.logoHeight * 0.8);
+    expect(titleLine.subStartsBelowName).toBe(true);
+    expect(titleLine.subUnderName).toBe(true);
+    expect(titleLine.subSmaller).toBe(true);
+    expect(titleLine.logoClearsSubtitle).toBe(true);
 
     const fit = await page.evaluate(() => {
       const welcome = document.querySelector("#welcome");

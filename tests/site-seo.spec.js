@@ -95,7 +95,8 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
   await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
-  await expect(page.locator(".site-version")).toHaveText(`v${version}`);
+  await expect(page.locator(".site-version")).toHaveCount(0);
+  await expect(page.locator("#welcome")).not.toContainText("Time moves only when you do.");
   await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
   await page.goto("/about/");
   await expect(page.getByRole("link", { name: "Play in your browser" })).toHaveAttribute("href", "/play/");
@@ -133,7 +134,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/changelog/");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
   await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
-  await expect(page.locator(".changelog-list > li")).toHaveCount(38);
+  await expect(page.locator(".changelog-list > li")).toHaveCount(41);
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d/releases",
