@@ -1,9 +1,6 @@
 /* Gameplay controls share one bottom dock, leaving the world open above it. */
-.playing { --dock-height: 184px; --map-width: min(684px, 56vw, calc(100vw - 40px)); }
-.playing .topbar { height: 50px; padding: 0 18px; background: #0c191de6; }
-.playing .brand { font-size: 20px; gap: 9px; }
-.playing .brand-mark { font-size: 28px; }
-.playing .brand small, .playing .edition { display: none; }
+.playing { --dock-height: 184px; --map-width: min(684px, 56vw, calc(100vw - 40px)); --chrome-height: 50px; }
+.playing .topbar { height: var(--chrome-height); min-height: 0; padding: 0 18px; background: #0c191de6; border-bottom: 1px solid #bad4ca15; pointer-events: auto; }
 .playing #location { font-size: 9px; }
 .playing .panel { backdrop-filter: none; }
 .playing .map-panel { top: 64px; left: 18px; right: auto; width: max-content; max-width: var(--map-width); padding: 8px; z-index: 4; overflow: visible; }
@@ -126,7 +123,8 @@
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
   .playing { --dock-height: 142px; --map-width: min(684px, 62vw, calc(100vw - 16px)); }
-  .playing .topbar { height: 42px; }
+  .playing { --chrome-height: 42px; }
+  .playing .topbar { height: var(--chrome-height); }
   .playing .map-panel { top: 46px; left: 8px; right: auto; padding: 4px; z-index: 4; display: flex; flex-direction: row; align-items: center; gap: 6px; height: fit-content; max-height: calc(100dvh - var(--dock-height) - 48px); overflow: visible; }
   .playing .map-panel .panel-heading { display: none; }
   .playing #minimap { margin-top: 0; width: auto; max-width: none; max-height: calc(100dvh - var(--dock-height) - 56px); }
@@ -352,7 +350,7 @@
 }
 #spectator-badge {
   position: fixed;
-  top: 108px;
+  top: calc(var(--chrome-height, 64px) + 14px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
