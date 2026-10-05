@@ -4,7 +4,7 @@ import { getSupabase, readOnlineEnv } from "./config.js";
 import { ensureOnlineSession } from "./session.js";
 import { chooseHeir, formatBrowseRoom, showReconnecting } from "./reliability.js";
 import { createSpectatorView } from "./spectator.js";
-import { createChatLog, mapChatRows } from "./chat.js";
+import { CHAT_EMOJI, createChatLog, insertChatEmoji, mapChatRows } from "./chat.js";
 import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
@@ -161,9 +161,87 @@ export const mountOnlineUi = () => {
   });
 
   const chatInput = chat.querySelector("#chat-input");
-  chatInput.addEventListener("focus", () => chatLog.setTyping(true));
-  chatInput.addEventListener("blur", () => chatLog.setTyping(false));
-  chatInput.addEventListener("keydown", (event) => event.stopPropagation());
+  const chatForm = chat.querySelector("#chat-form");
+  const emojiButton = document.createElement("button");
+  emojiButton.type = "button";
+  emojiButton.id = "chat-emoji";
+  emojiButton.textContent = "😀";
+  emojiButton.setAttribute("aria-label", "Emoji");
+  emojiButton.setAttribute("aria-expanded", "false");
+  emojiButton.setAttribute("aria-controls", "chat-emoji-picker");
+  emojiButton.setAttribute("aria-haspopup", "true");
+  const picker = document.createElement("div");
+  picker.id = "chat-emoji-picker";
+  picker.hidden = true;
+  picker.setAttribute("role", "group");
+  picker.setAttribute("aria-label", "Emoji");
+  for (const emoji of CHAT_EMOJI) {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    choice.textContent = emoji;
+    choice.setAttribute("aria-label", emoji);
+    choice.dataset.emoji = emoji;
+    picker.append(choice);
+  }
+  const sendButton = chatForm.querySelector("button[type=submit]");
+  chatForm.insertBefore(emojiButton, sendButton);
+  chatForm.append(picker);
+
+  const closeEmojiPicker = () => {
+    picker.hidden = true;
+    emojiButton.setAttribute("aria-expanded", "false");
+  };
+  const chatTypingTarget = (node) =>
+    node === chatInput || node === emojiButton || picker.contains(node);
+  const handleChatFocus = () => chatLog.setTyping(true);
+  const handleChatBlur = (event) => {
+    if (chatTypingTarget(event.relatedTarget)) return;
+    chatLog.setTyping(false);
+  };
+  const keepChatField = (event) => event.preventDefault();
+  chatInput.addEventListener("focus", handleChatFocus);
+  chatInput.addEventListener("blur", handleChatBlur);
+  emojiButton.addEventListener("focus", handleChatFocus);
+  emojiButton.addEventListener("blur", handleChatBlur);
+  picker.addEventListener("focusin", handleChatFocus);
+  picker.addEventListener("focusout", handleChatBlur);
+  emojiButton.addEventListener("mousedown", keepChatField);
+  picker.addEventListener("mousedown", keepChatField);
+  chatInput.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key !== "Escape" || picker.hidden) return;
+    event.preventDefault();
+    closeEmojiPicker();
+  });
+  emojiButton.addEventListener("keydown", (event) => event.stopPropagation());
+  picker.addEventListener("keydown", (event) => event.stopPropagation());
+  emojiButton.addEventListener("click", () => {
+    const willOpen = picker.hidden;
+    picker.hidden = !willOpen;
+    emojiButton.setAttribute("aria-expanded", String(willOpen));
+    chatInput.focus();
+  });
+  chatForm.addEventListener("submit", () => closeEmojiPicker());
+  picker.addEventListener("click", (event) => {
+    const choice = event.target.closest("button[data-emoji]");
+    if (!choice) return;
+    const placed = insertChatEmoji(
+      chatInput.value,
+      choice.dataset.emoji,
+      chatInput.selectionStart,
+      chatInput.selectionEnd,
+    );
+    if (!placed) return;
+    chatInput.value = placed.value;
+    chatInput.setSelectionRange(placed.cursor, placed.cursor);
+    closeEmojiPicker();
+    chatInput.focus();
+  });
+  document.addEventListener("mousedown", (event) => {
+    if (picker.hidden) return;
+    if (event.target.closest("#chat-emoji, #chat-emoji-picker")) return;
+    closeEmojiPicker();
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || chat.hidden) return;

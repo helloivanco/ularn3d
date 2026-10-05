@@ -2,6 +2,27 @@ import { containsBlockedWord } from "./words.js";
 
 export const QUICK_CHAT = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
 export const CHAT_LIMIT = 280;
+export const CHAT_EMOJI = [
+  "😀", "😁", "😂", "🤣", "😊", "😍",
+  "😉", "😎", "🤔", "😴", "😭", "😡",
+  "😅", "🙃", "😇", "🥳", "😱", "🤗",
+  "👍", "👎", "👋", "👏", "🙏", "💪",
+  "❤️", "🔥", "✨", "⭐", "💀", "👑",
+  "⚔️", "🛡️", "🐉", "🏰", "💎", "💰",
+  "🧪", "📜", "🗝️", "👻", "🏆", "🍀",
+];
+
+/** Insert one emoji at the selection. A result past the chat limit is refused. */
+export const insertChatEmoji = (value, emoji, start, end, limit = CHAT_LIMIT) => {
+  const text = String(value ?? "");
+  const glyph = String(emoji ?? "");
+  if (!glyph) return null;
+  const from = Math.max(0, Math.min(Number.isInteger(start) ? start : text.length, text.length));
+  const to = Math.max(from, Math.min(Number.isInteger(end) ? end : from, text.length));
+  const next = `${text.slice(0, from)}${glyph}${text.slice(to)}`;
+  if (next.length > limit) return null;
+  return { value: next, cursor: from + glyph.length };
+};
 export const PING_MS = 4000;
 export const HISTORY = 50;
 

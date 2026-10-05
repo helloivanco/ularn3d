@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.42 — Chat emoji
+
+- The multiplayer chat box has an emoji button that opens a compact picker
+- Choosing an emoji puts it in the message at the cursor. Enter still sends
+
 ## 1.3.41 — Public end-screen scoreboard
 
 - After an expedition ends, the scoreboard reads the same verified public board as the rest of the site
