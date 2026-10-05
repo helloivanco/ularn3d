@@ -95,24 +95,7 @@
   </head>
   <body class="page-home">
     <a class="skip-link" href="#main">Skip to content</a>
-    <header class="site-header site-header--hero">
-      <a class="brand" href="/" aria-label="Ularn 3D home">
-        <img src="/favicon.svg" width="38" height="38" alt="" />
-        <span class="brand-word">ULARN 3D<small>THE CAVES BELOW</small></span>
-      </a>
-      <nav class="site-nav" aria-label="Main">
-        <a href="/about/">About</a>
-        <a href="/changelog/">What’s New</a>
-        <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
-        <a
-          class="nav-cta nav-cta--secondary web-only"
-          href="/downloads/Ularn.windows.exe"
-          download="__DOWNLOAD_FILENAME__"
-          aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
-          >Download for Windows</a
-        >
-      </nav>
-    </header>
+    <site-header variant="hero"></site-header>
 
     <main id="main">
       <section class="home-hero" id="home-hero" aria-labelledby="home-brand">
@@ -234,23 +217,7 @@
       </section>
     </main>
 
-    <footer class="site-footer wrap">
-      <a class="footer-brand" href="/">ULARN 3D</a>
-      <p class="footer-copy">
-        Free dungeon crawler.
-        <a href="/engine/LICENSE">License</a>.
-      </p>
-      <p class="footer-version">
-        <a href="/changelog/" aria-label="Ularn 3D version v__APP_VERSION__, see what’s new">v__APP_VERSION__</a>
-      </p>
-      <nav aria-label="Footer">
-        <a href="/play/">Play</a>
-        <a href="/about/">About</a>
-        <a href="/changelog/">What’s New</a>
-        <a href="https://github.com/helloivanco/ularn3d" rel="noopener noreferrer">GitHub</a>
-        <a class="web-only" href="/downloads/Ularn.windows.exe" download="__DOWNLOAD_FILENAME__">Windows</a>
-      </nav>
-    </footer>
+    <site-footer page="home"></site-footer>
     <noscript>
       <div class="no-script wrap">
         <h2>Play Ularn 3D online or on Windows</h2>

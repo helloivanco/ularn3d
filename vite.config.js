@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { APP_VERSION, DOWNLOAD_FILENAME, stampVersion } from "./scripts/app-version.mjs";
+import { expandSiteComponents } from "./scripts/site-components.mjs";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 const staticDirs = ["about", "changelog"];
@@ -28,7 +29,7 @@ const stampPublicHtmlTree = (root) => {
   for (const dir of staticDirs) {
     const file = join(root, dir, "index.html");
     if (!existsSync(file)) continue;
-    writeFileSync(file, stampVersion(readFileSync(file, "utf8")));
+    writeFileSync(file, stampVersion(expandSiteComponents(readFileSync(file, "utf8"))));
   }
 };
 
@@ -43,7 +44,7 @@ const serveStampedPublicPage = (server) => {
     const file = join(server.config.root, "public", match, "index.html");
     if (!existsSync(file)) return next();
     response.setHeader("Content-Type", "text/html; charset=utf-8");
-    response.end(stampVersion(readFileSync(file, "utf8")));
+    response.end(stampVersion(expandSiteComponents(readFileSync(file, "utf8"))));
   });
 };
 
@@ -51,7 +52,7 @@ const injectAppVersion = () => ({
   name: "inject-app-version",
   transformIndexHtml: {
     order: "pre",
-    handler: (html) => stampVersion(html),
+    handler: (html) => stampVersion(expandSiteComponents(html)),
   },
   configureServer(server) {
     serveStampedPublicPage(server);

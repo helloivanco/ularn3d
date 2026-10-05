@@ -61,24 +61,7 @@
   </head>
   <body>
     <a class="skip-link" href="#whats-new">Skip to what’s new</a>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Ularn 3D home">
-        <img src="/favicon.svg" width="38" height="38" alt="" />
-        <span class="brand-word">ULARN 3D<small>THE CAVES BELOW</small></span>
-      </a>
-      <nav class="site-nav" aria-label="Main">
-        <a href="/about/">About</a>
-        <a href="/changelog/" aria-current="page">What’s New</a>
-        <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
-        <a
-          class="nav-cta nav-cta--secondary web-only"
-          href="/downloads/Ularn.windows.exe"
-          download="__DOWNLOAD_FILENAME__"
-          aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
-          >Download for Windows</a
-        >
-      </nav>
-    </header>
+    <site-header current="changelog"></site-header>
 
     <main id="whats-new" class="wrap">
       <header class="page-hero">
@@ -89,7 +72,7 @@
           Full build history and Windows artifacts are on
           <a href="https://github.com/helloivanco/ularn3d/releases" rel="noopener noreferrer">GitHub Releases</a>.
         </p>
-        <div class="cta-row" style="margin-top: 1.5rem">
+        <div class="cta-row cta-row--offset">
           <a class="button accent" href="/play/">Play in your browser <span aria-hidden="true">↗</span></a>
           <a
             class="button ghost"
@@ -115,6 +98,17 @@
         </p>
 
         <ol class="changelog-list">
+          <li id="v1-3-46">
+            <header>
+              <span class="changelog-version">v1.3.46</span>
+              <h3>Matching controls</h3>
+            </header>
+            <ul>
+              <li>Gold and quiet buttons on the site and the play screen share one shape, hover, and focus</li>
+              <li>Text fields, panels, and the links under the pages share the same spacing and hover</li>
+              <li>Home, About, and What’s New use one header and one footer</li>
+            </ul>
+          </li>
           <li id="v1-3-45">
             <header>
               <span class="changelog-version">v1.3.45</span>
@@ -161,8 +155,6 @@
             <ul>
               <li>After an expedition ends, the scoreboard reads the same verified public board as the rest of the site</li>
               <li>If that board has no rows, it says the board is empty. If the board cannot be loaded, it says so</li>
-            </ul>
-          </li>
           <li id="v1-3-40">
             <header>
               <span class="changelog-version">v1.3.40</span>
@@ -552,7 +544,7 @@
           <li><strong>1.3.2</strong> — Dungeon floors are 57×20; symbol map shows the whole floor</li>
           <li><strong>1.3.1</strong> — Remaining / max spells shown above the adventurer stats</li>
         </ul>
-        <div class="cta-row" style="margin-top: 1.5rem">
+        <div class="cta-row cta-row--offset">
           <a
             class="button accent"
             href="https://github.com/helloivanco/ularn3d/releases"
@@ -565,22 +557,6 @@
       </section>
     </main>
 
-    <footer class="site-footer wrap">
-      <a class="footer-brand" href="/">ULARN 3D</a>
-      <p class="footer-copy">
-        Free dungeon crawler.
-        <a href="/engine/LICENSE">License</a>.
-      </p>
-      <p class="footer-version">
-        <a href="/changelog/" aria-label="Ularn 3D version v__APP_VERSION__, see what’s new">v__APP_VERSION__</a>
-      </p>
-      <nav aria-label="Footer">
-        <a href="/play/">Play</a>
-        <a href="/about/">About</a>
-        <a href="/changelog/">What’s New</a>
-        <a href="https://github.com/helloivanco/ularn3d" rel="noopener noreferrer">GitHub</a>
-        <a href="https://github.com/helloivanco/ularn3d/releases" rel="noopener noreferrer">Releases</a>
-      </nav>
-    </footer>
+    <site-footer page="changelog"></site-footer>
   </body>
 </html>
