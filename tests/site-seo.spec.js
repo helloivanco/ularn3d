@@ -85,10 +85,12 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await expect(page.getByRole("link", { name: /About & controls|History & creators|Site home/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator(".site-links .github-link svg")).toBeVisible();
-  const linkTops = await page.locator(".site-links a").evaluateAll((els) =>
-    els.map((el) => Math.round(el.getBoundingClientRect().top)),
+  const linkLefts = await page.locator(".site-links a").evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().left),
   );
-  expect(new Set(linkTops).size).toBe(1);
+  for (let index = 1; index < linkLefts.length; index += 1) {
+    expect(linkLefts[index]).toBeGreaterThan(linkLefts[index - 1]);
+  }
   await expect(page.getByRole("link", { name: "Site home" })).toHaveCount(0);
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
@@ -131,7 +133,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/changelog/");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
   await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
-  await expect(page.locator(".changelog-list > li")).toHaveCount(32);
+  await expect(page.locator(".changelog-list > li")).toHaveCount(33);
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d/releases",
