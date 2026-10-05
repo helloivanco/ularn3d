@@ -56,7 +56,9 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.match(home, /href="\/changelog\/"/);
   const play = readStampedPage("play/index.html");
   assert.match(play, /"softwareVersion": "__APP_VERSION__"/);
-  assert.match(play, /class="site-version"[^>]*>v__APP_VERSION__/);
+  assert.match(play, /Download for Windows <small>v__APP_VERSION__/);
+  assert.doesNotMatch(play, /class="site-version"/);
+  assert.doesNotMatch(play, /Time moves only when you do/);
   assert.match(play, /href="\/changelog\/"/);
   assert.match(play, /href="https:\/\/github\.com\/helloivanco\/ularn3d"/);
   const about = readStampedPage("public/about/index.html");

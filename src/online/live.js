@@ -11,6 +11,9 @@ const decompress = (text) =>
   typeof LZString !== "undefined" ? LZString.decompressFromUTF16(text) : text;
 
 const productVersion = () => {
+  const raw = document.querySelector('script[type="application/ld+json"]')?.textContent || "";
+  const fromPage = raw.match(/"softwareVersion"\s*:\s*"(\d+\.\d+\.\d+)"/);
+  if (fromPage) return fromPage[1];
   const text = document.querySelector(".site-version")?.textContent?.replace(/^v/, "").trim() || "";
   return /^\d+\.\d+\.\d+$/.test(text) ? text : "1.3.42";
 };

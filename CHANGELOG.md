@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.50 — Play title line
+
+- The play screen drops “Time moves only when you do.” and the version line under the links
+- The cave-and-gem mark sits on the Ularn 3D line, and “The caves below.” is smaller underneath
+
 ## 1.3.49 — Rats you can recognize
 
 - The small rats on dungeon walls have a head, ears, a body, and a tail (Ivan Wong)
