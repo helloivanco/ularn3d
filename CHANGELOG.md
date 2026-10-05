@@ -4,18 +4,18 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.40 — Clearer chrome
+
+- Multiplayer, the lobby, and the leaderboard close with a round X. The title stays
+- Links under Download for Windows read About, New, History, Verify, then a GitHub icon, each on one line
+- The spectating line sits under the header on a blurred dark chip. The number is people watching, not the players or the host
+
 ## 1.3.39 — Live multiplayer rooms
 
 - Hosting, joining, and watching open the room and keep the lobby, chat, and turns in sync
 - Ready and Start talk to the room. If the host is gone, the next player can take the room
 - A finished co-op run is sent in for a verified or rejected score, and the leaderboard shows verified rows
 - Chat history stays with the people still in the room
-
-## 1.3.38 — Clearer chrome
-
-- Multiplayer, the lobby, and the leaderboard close with a round X. The title stays
-- Links under Download for Windows read About, New, History, Verify, then a GitHub icon, each on one line
-- The spectating line sits under the header on a blurred dark chip. The number is people watching, not the players or the host
 
 ## 1.3.37 — Verified scores
 
