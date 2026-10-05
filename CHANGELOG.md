@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.49 — Rats you can recognize
+
+- The small rats on dungeon walls have a head, ears, a body, and a tail (Ivan Wong)
+- They stay flat and unlit, and you still cannot fight, loot, or click them
+- Town stays still
+
 ## 1.3.48 — Solid dungeon floors
 
 - Close views of the cave floor no longer show dark cracks between the stones
