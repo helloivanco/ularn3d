@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSpectatorView, tilesInFog } from "../src/online/spectator.js";
+import { createSpectatorView, tilesInFog, watcherCount } from "../src/online/spectator.js";
 import { bootEngine } from "./lib/engine-session.mjs";
 
 const players = [
@@ -15,7 +15,26 @@ test("spectators cannot act and Tab follows the next player", () => {
   assert.equal(view.followed().name, "Ada");
   assert.equal(view.next().name, "Bea");
   assert.equal(view.follow("Ada").name, "Ada");
-  assert.equal(view.badge(3), "Spectating Ada · 3 watching");
+  assert.equal(view.watching(), 1);
+  assert.equal(view.badge(), "Spectating Ada · 1 watching");
+});
+
+test("the watching count ignores players, the host, and people who have left", () => {
+  assert.equal(watcherCount(players), 1);
+  const empty = createSpectatorView([
+    { name: "Ada", role: "host" },
+    { name: "Bea", role: "player" },
+    { name: "Cid", role: "spectator", connected: false },
+    { name: "Dee", role: "spectator", banned: true },
+  ]);
+  assert.equal(empty.watching(), 0);
+  assert.equal(empty.badge(), "Spectating Ada · 0 watching");
+  empty.setRoster([
+    { name: "Ada", role: "player" },
+    { name: "Cid", role: "spectator" },
+    { name: "Dee", role: "spectator", connected: true },
+  ]);
+  assert.equal(empty.badge(), "Spectating Ada · 2 watching");
 });
 
 test("the minimap keeps only the followed player's explored tiles", async () => {

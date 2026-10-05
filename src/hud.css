@@ -222,6 +222,25 @@
 .online-dialog { width: min(440px, calc(100vw - 32px)); }
 .online-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .online-dialog h2 { margin: 0; font-size: 18px; }
+.online-dialog .dialog-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #c8ad6c50;
+  background: #122327bf;
+  color: var(--gold);
+  font-size: 16px;
+}
+.online-dialog .dialog-x:hover {
+  background: #1c3437;
+  border-color: #d7bc83;
+  color: #f8dc9c;
+}
 .online-body { display: grid; gap: 8px; margin-top: 12px; }
 .online-form label { display: grid; gap: 4px; font-size: 12px; }
 .online-form input { background: #101c20; color: #e7efe9; border: 1px solid #cbb07970; padding: 8px; }
@@ -234,7 +253,7 @@
 #chat-log { max-height: 160px; overflow: auto; font-size: 13px; }
 #chat-form { display: flex; gap: 6px; }
 #chat-input { flex: 1; background: #101c20; color: #e7efe9; border: 1px solid #cbb07970; padding: 8px; }
-#spectator-badge, #reconnect-overlay, #host-toast {
+#reconnect-overlay, #host-toast {
   position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 8;
   background: rgba(16, 28, 32, 0.92); color: #f3d48a; border: 1px solid rgba(232, 196, 122, 0.45);
   padding: 8px 12px; border-radius: 999px;
@@ -245,6 +264,25 @@
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
   background: rgba(16, 28, 32, 0.94); color: #f3d48a; border: 1px solid rgba(232, 196, 122, 0.5);
   padding: 12px 16px; border-radius: 10px; font-size: 20px;
+}
+#spectator-badge {
+  position: fixed;
+  top: 108px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100vw - 32px);
+  background: #111c20b8;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: #f3d48a;
+  border: 1px solid rgba(232, 196, 122, 0.45);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px #04101455;
 }
 .board-list { margin: 0; padding-left: 18px; }
 .board-list .yours { color: #f3d48a; }
