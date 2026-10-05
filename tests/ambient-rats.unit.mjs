@@ -66,6 +66,39 @@ test("ambient rats use a hard-capped non-interactive pool", () => {
   assert.equal(scene.children.includes(rats.group), false);
 });
 
+test("ambient rats have a head, ears, body, and tail in flat color", () => {
+  const scene = new THREE.Scene();
+  const rats = new AmbientRats(scene);
+  const mesh = rats.slots[0].mesh;
+  const names = new Set();
+  mesh.traverse((object) => {
+    if (!object.isMesh) return;
+    names.add(object.name);
+    assert.equal(object.material.type, "MeshBasicMaterial");
+    assert.equal(object.castShadow, false);
+    assert.equal(object.receiveShadow, false);
+  });
+  for (const name of ["rat-body", "rat-head", "rat-ear", "rat-tail"]) {
+    assert.equal(names.has(name), true, name);
+  }
+  const ears = [];
+  let headZ = -Infinity;
+  let tailZ = Infinity;
+  let bodyZ = 0;
+  mesh.traverse((object) => {
+    if (object.name === "rat-ear") ears.push(object.position.x);
+    if (object.name === "rat-head") headZ = Math.max(headZ, object.position.z);
+    if (object.name === "rat-tail") tailZ = Math.min(tailZ, object.position.z);
+    if (object.name === "rat-body") bodyZ = object.position.z;
+  });
+  assert.equal(ears.length, 2);
+  assert.ok(Math.min(...ears) < -0.04);
+  assert.ok(Math.max(...ears) > 0.04);
+  assert.ok(headZ > bodyZ);
+  assert.ok(tailZ < bodyZ);
+  rats.dispose();
+});
+
 test("town floors skip ambient rats", () => {
   const scene = new THREE.Scene();
   const rats = new AmbientRats(scene);
