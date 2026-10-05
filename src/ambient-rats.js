@@ -5,12 +5,9 @@ import { WALL_FULL } from "./wall-cut.js";
 export const AMBIENT_RAT_POOL = 4;
 export const AMBIENT_RAT_KIND = "ambient-rat";
 
-const BODY = 0x8a5a38;
-const HEAD = 0x6e452c;
-const SNOUT = 0x4a301f;
-const EAR = 0xe0a090;
-const TAIL = 0xc48b74;
-const EYE = 0x1a100c;
+const BODY = 0xc48448;
+const EAR = 0xe7b0a0;
+const TAIL = 0xc48448;
 const NEAR_SQ = 14 * 14;
 const THINK_INTERVAL = 0.22;
 const SCURRY_SPEED = 2.4;
@@ -31,6 +28,65 @@ const hash = (a, b) => {
 
 const emptyRaycast = () => {};
 
+/** Flat plan-view rat. Shape +Y becomes world +Z, the direction it scurries. */
+const layFlat = (group, name, color, shape, y) => {
+  const mesh = new THREE.Mesh(
+    new THREE.ShapeGeometry(shape, 12),
+    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }),
+  );
+  mesh.name = name;
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.y = y;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.raycast = emptyRaycast;
+  group.add(mesh);
+  return mesh;
+};
+
+const earShape = (x) => {
+  const shape = new THREE.Shape();
+  shape.absellipse(x, 0.11, 0.038, 0.026, 0, Math.PI * 2, false, 0);
+  return shape;
+};
+
+/** Ribbon along a quadratic curve, wide at the rump and thin at the tip. */
+const tailShape = () => {
+  const start = [0, -0.1];
+  const control = [0.16, -0.22];
+  const end = [0.02, -0.32];
+  const samples = 8;
+  const center = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const u = 1 - t;
+    center.push([
+      u * u * start[0] + 2 * u * t * control[0] + t * t * end[0],
+      u * u * start[1] + 2 * u * t * control[1] + t * t * end[1],
+    ]);
+  }
+  const left = [];
+  const right = [];
+  for (let i = 0; i < center.length; i++) {
+    const prev = center[Math.max(0, i - 1)];
+    const next = center[Math.min(center.length - 1, i + 1)];
+    let tx = next[0] - prev[0];
+    let ty = next[1] - prev[1];
+    const len = Math.hypot(tx, ty) || 1;
+    tx /= len;
+    ty /= len;
+    const width = 0.028 * (1 - i / (center.length - 1)) + 0.007;
+    left.push([center[i][0] - ty * width, center[i][1] + tx * width]);
+    right.push([center[i][0] + ty * width, center[i][1] - tx * width]);
+  }
+  const shape = new THREE.Shape();
+  shape.moveTo(left[0][0], left[0][1]);
+  for (let i = 1; i < left.length; i++) shape.lineTo(left[i][0], left[i][1]);
+  for (let i = right.length - 1; i >= 0; i--) shape.lineTo(right[i][0], right[i][1]);
+  shape.closePath();
+  return shape;
+};
+
 const makeRatMesh = () => {
   const group = new THREE.Group();
   group.name = "ambient-rat";
@@ -40,34 +96,24 @@ const makeRatMesh = () => {
     interactive: false,
     decorative: true,
   };
-  // Local +Z is the way the rat scurries. Parts are sized for the steep
-  // overhead camera: standing ears, a pointed head, and a bare tail that
-  // swings out to the side so it still shows when the rat faces the camera.
-  const add = (name, color, w, h, d, x, y, z, rot = {}) => {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, d),
-      new THREE.MeshBasicMaterial({ color }),
-    );
-    mesh.name = name;
-    mesh.position.set(x, y, z);
-    mesh.rotation.set(rot.x || 0, rot.y || 0, rot.z || 0);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    mesh.raycast = emptyRaycast;
-    group.add(mesh);
-    return mesh;
-  };
-  add("rat-body", BODY, 0.13, 0.05, 0.2, 0, 0.055, -0.02);
-  add("rat-body", BODY, 0.15, 0.046, 0.09, 0, 0.052, -0.08);
-  add("rat-head", HEAD, 0.085, 0.046, 0.075, 0, 0.064, 0.13);
-  add("rat-head", SNOUT, 0.04, 0.028, 0.06, 0, 0.052, 0.19);
-  add("rat-head", EAR, 0.016, 0.012, 0.016, 0, 0.058, 0.222);
-  add("rat-ear", EAR, 0.05, 0.07, 0.018, -0.07, 0.11, 0.12, { z: 0.55 });
-  add("rat-ear", EAR, 0.05, 0.07, 0.018, 0.07, 0.11, 0.12, { z: -0.55 });
-  add("rat-eye", EYE, 0.016, 0.012, 0.014, -0.024, 0.092, 0.15);
-  add("rat-eye", EYE, 0.016, 0.012, 0.014, 0.024, 0.092, 0.15);
-  add("rat-tail", TAIL, 0.02, 0.014, 0.18, 0.01, 0.042, -0.2);
-  add("rat-tail", TAIL, 0.016, 0.012, 0.16, 0.07, 0.04, -0.34, { y: 0.9 });
+  // Haunches wide, shoulders narrow. The snout is a separate point in front.
+  const body = new THREE.Shape();
+  body.moveTo(-0.03, 0.04);
+  body.quadraticCurveTo(-0.07, -0.04, -0.14, -0.1);
+  body.quadraticCurveTo(-0.09, -0.2, 0, -0.18);
+  body.quadraticCurveTo(0.09, -0.2, 0.14, -0.1);
+  body.quadraticCurveTo(0.07, -0.04, 0.03, 0.04);
+  body.closePath();
+  const head = new THREE.Shape();
+  head.moveTo(0, 0.18);
+  head.quadraticCurveTo(-0.01, 0.12, -0.032, 0.02);
+  head.lineTo(0.032, 0.02);
+  head.quadraticCurveTo(0.01, 0.12, 0, 0.18);
+  layFlat(group, "rat-body", BODY, body, 0.046);
+  layFlat(group, "rat-head", BODY, head, 0.05);
+  layFlat(group, "rat-ear", EAR, earShape(-0.055), 0.054);
+  layFlat(group, "rat-ear", EAR, earShape(0.055), 0.054);
+  layFlat(group, "rat-tail", TAIL, tailShape(), 0.048);
   group.raycast = emptyRaycast;
   group.visible = false;
   group.frustumCulled = true;
@@ -98,7 +144,7 @@ export class AmbientRats {
         idle: 0,
         hidden: false,
         hideFor: 0,
-        yaw: 0,
+        yaw: Math.PI / 2,
       };
     });
     this.wallIndex = new Map();
@@ -191,6 +237,7 @@ export class AmbientRats {
     slot.idle = idle;
     slot.hidden = false;
     slot.hideFor = 0;
+    slot.yaw = Math.PI / 2;
     this.heightAt(cell, slot.from);
     slot.to.copy(slot.from);
     slot.mesh.position.copy(slot.from);

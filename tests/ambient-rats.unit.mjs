@@ -66,7 +66,28 @@ test("ambient rats use a hard-capped non-interactive pool", () => {
   assert.equal(scene.children.includes(rats.group), false);
 });
 
-test("ambient rats have a head, ears, body, and tail in flat color", () => {
+const worldPoints = (mesh, name) => {
+  const points = [];
+  const vertex = new THREE.Vector3();
+  mesh.updateMatrixWorld(true);
+  mesh.traverse((object) => {
+    if (!object.isMesh || object.name !== name) return;
+    const position = object.geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position, i);
+      points.push(object.localToWorld(vertex.clone()));
+    }
+  });
+  return points;
+};
+
+const widthBetween = (points, z0, z1) => {
+  const slice = points.filter((point) => point.z >= z0 && point.z <= z1);
+  const xs = slice.map((point) => point.x);
+  return Math.max(...xs) - Math.min(...xs);
+};
+
+test("ambient rats have a tapered body, pointed snout, ears, and a curved tail", () => {
   const scene = new THREE.Scene();
   const rats = new AmbientRats(scene);
   const mesh = rats.slots[0].mesh;
@@ -81,26 +102,38 @@ test("ambient rats have a head, ears, body, and tail in flat color", () => {
   for (const name of ["rat-body", "rat-head", "rat-ear", "rat-tail"]) {
     assert.equal(names.has(name), true, name);
   }
-  const ears = [];
-  let headZ = -Infinity;
-  let tailZ = Infinity;
-  let bodyZ = 0;
-  mesh.traverse((object) => {
-    if (object.name === "rat-ear") ears.push(object.position.x);
-    if (object.name === "rat-head") headZ = Math.max(headZ, object.position.z);
-    if (object.name === "rat-tail") tailZ = Math.min(tailZ, object.position.z);
-    if (object.name === "rat-body") bodyZ = object.position.z;
-  });
-  assert.equal(ears.length, 2);
-  assert.ok(Math.min(...ears) < -0.04);
-  assert.ok(Math.max(...ears) > 0.04);
-  mesh.traverse((object) => {
-    if (object.name !== "rat-ear") return;
-    assert.ok(object.geometry.parameters.height > object.geometry.parameters.depth);
-    assert.ok(object.geometry.parameters.height > 0.04);
-  });
-  assert.ok(headZ > bodyZ);
-  assert.ok(tailZ < bodyZ);
+
+  const body = worldPoints(mesh, "rat-body");
+  const bodyZ = body.map((point) => point.z);
+  const zMin = Math.min(...bodyZ);
+  const zMax = Math.max(...bodyZ);
+  const span = zMax - zMin;
+  const haunchW = widthBetween(body, zMin, zMin + span * 0.45);
+  const shoulderW = widthBetween(body, zMax - span * 0.25, zMax);
+  assert.ok(haunchW > shoulderW * 1.4, `haunches ${haunchW} shoulders ${shoulderW}`);
+
+  const head = worldPoints(mesh, "rat-head");
+  const tip = head.reduce((best, point) => (point.z > best.z ? point : best));
+  assert.ok(tip.z > zMax);
+  assert.ok(Math.abs(tip.x) < 0.012);
+  const behindTip = head.filter((point) => point.z < tip.z - 0.04);
+  const tipWidth = Math.max(...behindTip.map((point) => point.x)) - Math.min(...behindTip.map((point) => point.x));
+  assert.ok(tipWidth > 0.04);
+
+  const ears = worldPoints(mesh, "rat-ear");
+  assert.ok(ears.some((point) => point.x < -0.03));
+  assert.ok(ears.some((point) => point.x > 0.03));
+  const earZ = ears.map((point) => point.z);
+  assert.ok(Math.min(...earZ) > (zMin + zMax) / 2);
+
+  const tail = worldPoints(mesh, "rat-tail");
+  const tailTip = tail.reduce((best, point) => (point.z < best.z ? point : best));
+  assert.ok(tailTip.z < zMin);
+  const base = tail.reduce((best, point) => (point.z > best.z ? point : best));
+  assert.ok(base.z > zMin - 0.02);
+  assert.ok(Math.abs(base.x) < 0.06);
+  const bow = Math.max(...tail.map((point) => Math.abs(point.x - base.x)));
+  assert.ok(bow > 0.08, `tail bow ${bow}`);
   rats.dispose();
 });
 
