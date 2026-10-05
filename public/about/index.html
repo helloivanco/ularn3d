@@ -60,24 +60,7 @@
   </head>
   <body>
     <a class="skip-link" href="#guide">Skip to field guide</a>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Ularn 3D home">
-        <img src="/favicon.svg" width="38" height="38" alt="" />
-        <span class="brand-word">ULARN 3D<small>THE CAVES BELOW</small></span>
-      </a>
-      <nav class="site-nav" aria-label="Main">
-        <a href="/about/" aria-current="page">About</a>
-        <a href="/changelog/">What’s New</a>
-        <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
-        <a
-          class="nav-cta nav-cta--secondary web-only"
-          href="/downloads/Ularn.windows.exe"
-          download="__DOWNLOAD_FILENAME__"
-          aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
-          >Download for Windows</a
-        >
-      </nav>
-    </header>
+    <site-header current="about"></site-header>
 
     <main id="guide" class="wrap">
       <header class="page-hero">
@@ -86,7 +69,7 @@
         <p class="lede">
           A classic turn-based roguelike in an overhead 3D world. Prepare in town, explore the caves, and make every move count.
         </p>
-        <div class="cta-row" style="margin-top: 1.5rem">
+        <div class="cta-row cta-row--offset">
           <a class="button accent" href="/play/">Play in your browser <span aria-hidden="true">↗</span></a>
           <a class="button ghost" href="/changelog/">What’s new <span aria-hidden="true">↗</span></a>
           <a class="button ghost" href="#history">History &amp; creators <span aria-hidden="true">↓</span></a>
@@ -109,7 +92,7 @@
             Move into a monster to attack with your equipped weapon. Learn spells, manage your inventory, and watch the effects shown on the right side of the screen. Stronger enemies make preparation as useful as a good weapon.
           </p>
         </div>
-        <figure class="gallery-feature" style="margin-top: 1.75rem">
+        <figure class="gallery-feature">
           <img
             src="/screenshots/town.jpg"
             width="1440"
@@ -193,7 +176,7 @@
             Download and run <strong>__DOWNLOAD_FILENAME__</strong> (latest release <strong>v__APP_VERSION__</strong>). This portable build needs no installation and targets 64-bit Windows 10 or later. It is unsigned, so Windows may identify it as an unrecognized publisher. Desktop saves are separate from browser saves.
           </p>
         </div>
-        <div class="cta-row" style="margin-top: 1.25rem">
+        <div class="cta-row cta-row--offset">
           <a
             class="button accent"
             href="/downloads/Ularn.windows.exe"
@@ -203,7 +186,7 @@
           >
           <a class="button ghost" href="/downloads/SHA256SUMS.txt">View SHA-256 checksum</a>
         </div>
-        <p class="download-note" style="margin-top: 1rem">
+        <p class="download-note">
           Optional download. <a href="/play/">Play online</a> anytime.
         </p>
       </section>
@@ -314,29 +297,13 @@
             <a href="https://ularn.sourceforge.net/">Ularn SourceForge site</a>.
           </p>
         </div>
-        <div class="cta-row" style="margin-top: 1.5rem">
+        <div class="cta-row cta-row--offset">
           <a class="button accent" href="/play/">Play Ularn 3D <span aria-hidden="true">↗</span></a>
           <a class="button ghost" href="#guide">Back to field guide</a>
         </div>
       </section>
     </main>
 
-    <footer class="site-footer wrap">
-      <a class="footer-brand" href="/">ULARN 3D</a>
-      <p class="footer-copy">
-        Free dungeon crawler.
-        <a href="/engine/LICENSE">License</a>.
-      </p>
-      <p class="footer-version">
-        <a href="/changelog/" aria-label="Ularn 3D version v__APP_VERSION__, see what’s new">v__APP_VERSION__</a>
-      </p>
-      <nav aria-label="Footer">
-        <a href="/play/">Play</a>
-        <a href="/changelog/">What’s New</a>
-        <a href="#history">History</a>
-        <a href="https://github.com/helloivanco/ularn3d" rel="noopener noreferrer">GitHub</a>
-        <a href="#guide">Top ↑</a>
-      </nav>
-    </footer>
+    <site-footer page="about"></site-footer>
   </body>
 </html>

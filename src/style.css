@@ -46,13 +46,6 @@ button:hover {
   border-color: #d7bc8377;
   color: #f8dc9c;
 }
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 4px;
-}
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -229,19 +222,6 @@ label,
 .form-row .difficulty-label {
   flex: 0.85;
 }
-input:not([type="button"]),
-select {
-  display: block;
-  background: #102024c7;
-  border: 1px solid #718d8345;
-  border-radius: 2px;
-  color: #e0e6dc;
-  width: 100%;
-  padding: 12px 13px;
-  font-size: 13px;
-  letter-spacing: 0.3px;
-  margin-top: 9px;
-}
 #class-label {
   margin: 23px 0 11px;
 }
@@ -291,29 +271,23 @@ select {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+}
+button.primary:not(.button),
+button.secondary:not(.button) {
+  min-height: 0;
   padding: 15px 19px;
-  border-radius: 2px;
+  font-size: 12px;
 }
-.primary {
-  background: #c8ad77;
-  color: #142124;
-  border: 1px solid #d7be8d;
-  font-weight: 600;
+button.primary:not(.button) {
   font-size: 13px;
-  box-shadow: 0 5px 28px #0003;
-}
-.primary:hover {
-  background: #e4cb99;
-  color: #111;
 }
 .primary span {
   font-size: 20px;
   font-weight: 400;
 }
-.secondary {
+.secondary,
+#start-form > .primary {
   margin-top: 10px;
-  background: #122327bf;
-  font-size: 12px;
 }
 .welcome-note {
   margin-top: 23px;
@@ -356,13 +330,6 @@ select {
   font-size: 10px;
   color: #8ca7a1;
   letter-spacing: 1px;
-}
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  box-shadow: 0 12px 40px #0003;
-  backdrop-filter: blur(16px);
-  border-radius: 3px;
 }
 .hero-panel {
   position: absolute;
@@ -1432,7 +1399,6 @@ kbd {
 }
 .quality-setting select {
   width: 100%;
-  padding: 12px;
 }
 #interaction.in-modal {
   position: static;
@@ -1758,7 +1724,7 @@ kbd {
 .windows-download > span:nth-child(2) { flex: 1; }
 .windows-download small { display: block; margin-top: 4px; color: #9caf9f; font-size: 9px; }
 .site-links { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 14px; margin-top: 10px; }
-.site-links a { color: #a9bbae; font-size: 10px; line-height: 1.2; text-underline-offset: 3px; white-space: nowrap; }
+.site-links a { font-size: 10px; line-height: 1.2; white-space: nowrap; }
 .site-links .github-link { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
 .site-links .github-link .icon { width: 14px; height: 14px; }
 html[data-runtime="desktop"] .web-only { display: none !important; }

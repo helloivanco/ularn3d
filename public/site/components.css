@@ -1,0 +1,155 @@
+/* Shared chrome: button, field, panel, and link. Marketing pages and the play shell. */
+
+.button,
+.nav-cta,
+button.primary,
+button.secondary {
+  box-sizing: border-box;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s;
+}
+
+.button,
+button.primary,
+button.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 14px 18px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 0;
+  padding: 11px 16px;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.button.primary,
+.button.accent,
+.nav-cta:not(.nav-cta--secondary),
+button.primary {
+  background: #c8ad77;
+  color: #142124;
+  border-color: #d7be8d;
+}
+
+.button.primary,
+button.primary {
+  box-shadow: 0 5px 28px #0003;
+}
+
+.button.primary:hover,
+.button.accent:hover,
+.nav-cta:not(.nav-cta--secondary):hover,
+button.primary:hover {
+  background: #e4cb99;
+  color: #111;
+  border-color: #d7be8d;
+}
+
+.button.secondary,
+.button.ghost,
+.nav-cta--secondary,
+button.secondary {
+  background: #122327bf;
+  color: #e5e7df;
+  border-color: var(--border, #93b3ad26);
+}
+
+.button.secondary:hover,
+.button.ghost:hover,
+.nav-cta--secondary:hover,
+button.secondary:hover {
+  background: #b7c7b116;
+  border-color: #d7bc8377;
+  color: #f8dc9c;
+}
+
+.button small {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.field,
+input:not([type="button"]),
+select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 9px;
+  padding: 12px 13px;
+  background: #102024c7;
+  border: 1px solid #718d8345;
+  border-radius: 2px;
+  color: #e0e6dc;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.field:hover,
+input:not([type="button"]):hover,
+select:hover {
+  border-color: #d7bc8377;
+}
+
+.field:focus-visible,
+input:not([type="button"]):focus-visible,
+select:focus-visible {
+  border-color: #d7bc83;
+}
+
+.panel,
+.home-fallback,
+body.page-home .hero-panel,
+.gallery figure,
+.gallery-feature {
+  background: var(--panel, #111c20ed);
+  border: 1px solid var(--border, #93b3ad26);
+  border-radius: 3px;
+  box-shadow: 0 12px 40px #0003;
+}
+
+.panel,
+.home-fallback,
+body.page-home .hero-panel {
+  backdrop-filter: blur(16px);
+}
+
+.text-link {
+  color: #bec8c1;
+  font-weight: 600;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.text-link:hover,
+.footer-brand:hover,
+.site-footer a:not(.footer-brand):hover {
+  color: #f8dc9c;
+}
+
+.button:focus-visible,
+.nav-cta:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--gold, #d7bc83);
+  outline-offset: 4px;
+}

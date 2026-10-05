@@ -1,3 +1,5 @@
+@import url("/site/components.css");
+
 /* Ularn 3D site chrome — same tokens, type, and panels as the in-game HUD */
 :root {
   color-scheme: dark;
@@ -53,12 +55,6 @@ a {
 
 a:hover {
   color: #f8dc9c;
-}
-
-a:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 4px;
 }
 
 .skip-link {
@@ -149,46 +145,17 @@ button:focus-visible {
   letter-spacing: 0.4px;
 }
 
-.site-nav a {
-  text-decoration: none;
-  color: #bec8c1;
+.site-nav a.text-link {
   padding: 10px 12px;
   border: 1px solid transparent;
   border-radius: 2px;
 }
 
-.site-nav a[aria-current="page"],
-.site-nav a:hover {
+.site-nav a.text-link[aria-current="page"],
+.site-nav a.text-link:hover {
   color: #f8dc9c;
   border-color: #d7bc8377;
   background: #b7c7b116;
-}
-
-.nav-cta {
-  color: #142124 !important;
-  background: #c8ad77 !important;
-  border: 1px solid #d7be8d !important;
-  font-weight: 600;
-  padding: 11px 16px !important;
-}
-
-.nav-cta:hover {
-  background: #e4cb99 !important;
-  color: #111 !important;
-  border-color: #d7be8d !important;
-}
-
-.nav-cta--secondary {
-  color: #e9e1cd !important;
-  background: transparent !important;
-  border: 1px solid #d7bc8377 !important;
-  font-weight: 600;
-}
-
-.nav-cta--secondary:hover {
-  color: #f8dc9c !important;
-  background: #b7c7b116 !important;
-  border-color: #d7bc83 !important;
 }
 
 .wrap {
@@ -262,10 +229,6 @@ button:focus-visible {
   max-width: 28rem;
   padding: 19px;
   text-align: center;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  box-shadow: 0 12px 40px #0003;
 }
 
 .home-fallback-note {
@@ -331,76 +294,8 @@ button:focus-visible {
   align-items: stretch;
 }
 
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 48px;
-  padding: 14px 18px;
-  font: 600 13px Arial, Helvetica, sans-serif;
-  text-decoration: none;
-  border-radius: 2px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background 0.18s,
-    border-color 0.18s,
-    color 0.18s;
-}
-
-.button.primary {
-  background: #c8ad77;
-  color: #142124;
-  border-color: #d7be8d;
-  box-shadow: 0 5px 28px #0003;
-}
-
-.button.primary:hover {
-  background: #e4cb99;
-  color: #111;
-}
-
-.button.secondary {
-  background: #122327bf;
-  color: #e5e7df;
-  border-color: var(--border);
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.button.secondary:hover {
-  background: #b7c7b116;
-  border-color: #d7bc8377;
-  color: #f8dc9c;
-}
-
-.button.accent {
-  background: #c8ad77;
-  color: #142124;
-  border-color: #d7be8d;
-}
-
-.button.accent:hover {
-  background: #e4cb99;
-  color: #111;
-}
-
-.button.ghost {
-  background: #122327bf;
-  color: #e5e7df;
-  border-color: var(--border);
-}
-
-.button.ghost:hover {
-  border-color: #d7bc8377;
-  color: #f8dc9c;
-  background: #b7c7b116;
-}
-
-.button small {
-  font-weight: 600;
-  opacity: 0.85;
+.cta-row--offset {
+  margin-top: 1.5rem;
 }
 
 /* Decorative HUD panels — same .panel recipe as the game */
@@ -409,11 +304,6 @@ button:focus-visible {
   z-index: 3;
   width: min(244px, 28vw);
   padding: 16px 18px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  box-shadow: 0 12px 40px #0003;
-  backdrop-filter: blur(16px);
   font-size: 11px;
   color: var(--muted);
   pointer-events: none;
@@ -603,11 +493,11 @@ button:focus-visible {
 .gallery figure,
 .gallery-feature {
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  background: var(--panel);
-  box-shadow: 0 12px 40px #0003;
   margin: 0;
+}
+
+.gallery-feature {
+  margin-top: 1.75rem;
 }
 
 .gallery img,
@@ -945,14 +835,10 @@ kbd {
   gap: 8px 16px;
 }
 
-.site-footer a {
+.site-footer a:not(.footer-brand) {
   text-decoration: none;
   font-weight: 600;
   color: #bec8c1;
-}
-
-.site-footer a:hover {
-  color: #f8dc9c;
 }
 
 .footer-brand {
@@ -1028,7 +914,7 @@ kbd {
     display: none;
   }
   .site-nav .nav-cta {
-    padding: 10px 12px !important;
+    padding: 10px 12px;
     font-size: 10px;
   }
   .site-nav .nav-cta--secondary {

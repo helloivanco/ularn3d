@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.46 — Matching controls
+
+- Gold and quiet buttons on the site and the play screen share one shape, hover, and focus
+- Text fields, panels, and the links under the pages share the same spacing and hover
+- Home, About, and What’s New use one header and one footer
+
 ## 1.3.45 — Play page mark
 
 - The play page title is Ularn 3D, with the cave-and-gem mark beside it and “The caves below” underneath. Sound, the field guide, and “The adventure awaits” stay along the top, and the watching line sits below that line
