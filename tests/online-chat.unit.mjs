@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CHAT_LIMIT, createChatLog, mapChatRows } from "../src/online/chat.js";
+import { CHAT_EMOJI, CHAT_LIMIT, createChatLog, insertChatEmoji, mapChatRows } from "../src/online/chat.js";
+import { containsBlockedWord } from "../src/online/words.js";
 
 test("chat keeps history, filters words, and ignores a muted player", async () => {
   let clock = 1_000;
@@ -46,6 +47,23 @@ test("join keeps the newest 50 chat rows", () => {
   assert.equal(visible[0].body, "line 10");
   assert.equal(visible.at(-1).body, "line 59");
   assert.equal(visible[0].name, "Ada");
+});
+
+test("emoji stays in the message and inserts at the cursor", async () => {
+  const chat = createChatLog();
+  for (const emoji of CHAT_EMOJI) {
+    assert.equal(containsBlockedWord(emoji), false, emoji);
+    const sent = await chat.post({ body: `  ${emoji}  ` });
+    assert.equal(sent.ok, true, emoji);
+    assert.equal(sent.message.body, emoji);
+  }
+  assert.equal((await chat.post({ body: "sh😀it" })).ok, false);
+  assert.equal((await chat.post({ body: "😀".repeat(CHAT_LIMIT + 1) })).error, "length");
+  assert.deepEqual(insertChatEmoji("Hello", "😀", 5, 5), { value: "Hello😀", cursor: 7 });
+  assert.equal(insertChatEmoji("Hold", "🐉", 2, 2).value, "Ho🐉ld");
+  assert.equal(insertChatEmoji("ab", "💀", 1, 1).value, "a💀b");
+  assert.equal(insertChatEmoji("x".repeat(279), "😀", 279, 279), null);
+  assert.equal(insertChatEmoji("x".repeat(278), "✨", 278, 278).value.length, 279);
 });
 
 test("typing blocks movement keys and a map ping fades after 4 seconds", () => {

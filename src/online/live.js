@@ -12,7 +12,7 @@ const decompress = (text) =>
 
 const productVersion = () => {
   const text = document.querySelector(".site-version")?.textContent?.replace(/^v/, "").trim() || "";
-  return /^\d+\.\d+\.\d+$/.test(text) ? text : "1.3.39";
+  return /^\d+\.\d+\.\d+$/.test(text) ? text : "1.3.41";
 };
 
 const captureEngine = () => (typeof captureGameState === "function" ? captureGameState() : null);
