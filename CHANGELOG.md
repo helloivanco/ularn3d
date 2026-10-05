@@ -4,6 +4,7 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+<<<<<<< HEAD
 ## 1.3.42 — Chat emoji
 
 - The multiplayer chat box has an emoji button that opens a compact picker
@@ -13,6 +14,11 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 
 - After an expedition ends, the scoreboard reads the same verified public board as the rest of the site
 - If that board has no rows, it says the board is empty. If the board cannot be loaded, it says so
+=======
+## 1.3.41 — Clearer download links
+
+- Links under Download for Windows read About, What’s New, History, Verify Download, then a GitHub icon, each on one line
+>>>>>>> 85c3340 (Rename play-page links to What’s New and Verify Download (1.3.41))
 
 ## 1.3.40 — Clearer chrome
 

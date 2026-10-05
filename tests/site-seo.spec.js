@@ -79,12 +79,18 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/play/");
   await expect(page.locator("#about-game")).toHaveAttribute("href", "/about/");
   await expect(page.locator("#about-game")).toHaveText("About");
-  await expect(page.getByRole("link", { name: "New", exact: true })).toHaveAttribute("href", "/changelog/");
+  await expect(page.getByRole("link", { name: "What’s New", exact: true })).toHaveAttribute("href", "/changelog/");
   await expect(page.getByRole("link", { name: "History", exact: true })).toHaveAttribute("href", "/about/#history");
-  await expect(page.getByRole("link", { name: "Verify", exact: true })).toHaveAttribute("href", "/downloads/SHA256SUMS.txt");
-  await expect(page.getByRole("link", { name: /About & controls|What’s new|History & creators|Verify download|Site home/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Verify Download", exact: true })).toHaveAttribute("href", "/downloads/SHA256SUMS.txt");
+  await expect(page.getByRole("link", { name: /About & controls|History & creators|Site home/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator(".site-links .github-link svg")).toBeVisible();
+  const linkLefts = await page.locator(".site-links a").evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().left),
+  );
+  for (let index = 1; index < linkLefts.length; index += 1) {
+    expect(linkLefts[index]).toBeGreaterThan(linkLefts[index - 1]);
+  }
   await expect(page.getByRole("link", { name: "Site home" })).toHaveCount(0);
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
@@ -127,7 +133,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/changelog/");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
   await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
-  await expect(page.locator(".changelog-list > li")).toHaveCount(32);
+  await expect(page.locator(".changelog-list > li")).toHaveCount(35);
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d/releases",
