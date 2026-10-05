@@ -28,6 +28,11 @@ for (const viewport of desktops) {
     );
     await expect(page.locator("#class-description")).not.toBeEmpty();
     await expect(page.locator("#download-windows")).toContainText("Download for Windows");
+    await expect(page.locator("#welcome")).not.toContainText(/classic reawakened/i);
+    await expect(page.locator("#location-name")).toHaveText("");
+    await expect(page.locator(".location-dot")).toBeHidden();
+    await expect(page.locator("#sound")).toBeVisible();
+    await expect(page.locator("#guide")).toContainText("Field guide");
 
     const fit = await page.evaluate(() => {
       const welcome = document.querySelector("#welcome");
@@ -39,6 +44,8 @@ for (const viewport of desktops) {
         downloadTop: download.top,
         downloadBottom: download.bottom,
         innerHeight: window.innerHeight,
+        welcomeTop: welcome.getBoundingClientRect().top,
+        titleTop: document.querySelector("#title").getBoundingClientRect().top,
       };
     });
 
@@ -47,8 +54,34 @@ for (const viewport of desktops) {
     expect(fit.pageScrolls).toBe(false);
     expect(fit.downloadTop).toBeGreaterThan(0);
     expect(fit.downloadBottom).toBeLessThanOrEqual(fit.innerHeight);
+    expect(fit.welcomeTop).toBeLessThan(24);
+    expect(fit.titleTop).toBeLessThan(40);
   });
 }
+
+test("spectator line stays off the title and out of the empty center", async ({ page }) => {
+  await openStart(page, { width: 1280, height: 800 });
+  await page.evaluate(() => window.ularnOnline.preview("spectator"));
+  const placed = await page.evaluate(() => {
+    const badge = document.getElementById("spectator-badge");
+    const title = document.getElementById("title");
+    const badgeBox = badge.getBoundingClientRect();
+    const titleBox = title.getBoundingClientRect();
+    const overlapX = Math.min(badgeBox.right, titleBox.right) - Math.max(badgeBox.left, titleBox.left);
+    const overlapY = Math.min(badgeBox.bottom, titleBox.bottom) - Math.max(badgeBox.top, titleBox.top);
+    return {
+      text: badge.textContent,
+      inNav: Boolean(document.querySelector(".topbar nav #spectator-badge")),
+      overlapsTitle: overlapX > 2 && overlapY > 2,
+      center: badgeBox.left + badgeBox.width / 2,
+      width: window.innerWidth,
+    };
+  });
+  expect(placed.text).toMatch(/^Spectating .+ · \d+ watching$/);
+  expect(placed.inNav).toBe(true);
+  expect(placed.overlapsTitle).toBe(false);
+  expect(Math.abs(placed.center - placed.width / 2)).toBeGreaterThan(80);
+});
 
 test("narrow phone start screen keeps controls from colliding", async ({ page }) => {
   await openStart(page, { width: 320, height: 700 });

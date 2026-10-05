@@ -598,10 +598,14 @@ export const mountOnlineUi = () => {
         { name: "Cid", role: "spectator", dungeon: 1 },
       ]);
       spectating = true;
+      document.getElementById("spectator-badge")?.remove();
       const badge = document.createElement("div");
       badge.id = "spectator-badge";
       badge.textContent = watch.badge();
-      root.append(badge);
+      badge.title = watch.badge();
+      const nav = document.querySelector(".topbar nav");
+      if (nav) nav.prepend(badge);
+      else root.append(badge);
       chat.hidden = false;
       chatLog.setChannel("spectators");
       chatLog.history([{ channel: "spectators", name: "Cid", body: "The stairs are east.", userId: "cid" }]);
@@ -629,8 +633,11 @@ export const mountOnlineUi = () => {
   };
 
   const refreshBadge = () => {
-    const badge = root.querySelector("#spectator-badge");
-    if (badge && watch) badge.textContent = watch.badge();
+    const badge = document.getElementById("spectator-badge");
+    if (badge && watch) {
+      badge.textContent = watch.badge();
+      badge.title = watch.badge();
+    }
   };
 
   return {

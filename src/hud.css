@@ -349,12 +349,14 @@
   padding: 12px 16px; border-radius: 10px; font-size: 20px;
 }
 #spectator-badge {
-  position: fixed;
-  top: calc(var(--chrome-height, 64px) + 14px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 8;
-  max-width: calc(100vw - 32px);
+  position: static;
+  z-index: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(280px, 38vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
   background: #111c20b8;
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
@@ -366,6 +368,16 @@
   line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 8px 24px #04101455;
+}
+/* Once an expedition is on, the chip sits under the place name, clear of the title. */
+.playing #spectator-badge {
+  position: fixed;
+  top: calc(var(--chrome-height, 50px) + 10px);
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: calc(100vw - 220px);
 }
 .board-list { margin: 0; padding-left: 18px; }
 .board-list .yours { color: #f3d48a; }
