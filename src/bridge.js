@@ -20,8 +20,28 @@ doRollbar = (severity, title, detail) => {
 };
 uploadStyle = () => true;
 cloudflareWriteHighScore = async () => {}; // This fork never submits to larn.org.
-dbQueryHighScores = async (score, winners, losers) =>
-  showLocalScoreBoard(score, winners, losers, 0, "Local expedition records");
+// The end screen reads the public Supabase board. It does not print a score from this device.
+dbQueryHighScores = async () => {
+  const paintBoard = (text) => {
+    alternativeDisplay = " ";
+    lprcat(text);
+    blt();
+  };
+  const unavailable = `                    <b>${GAMENAME} Scoreboard</b>\n\n  Could not load the scoreboard.\n\n                 ----  Start a new expedition to play again  ----`;
+  paintBoard(`                    <b>${GAMENAME} Scoreboard</b>\n\n  Loading the scoreboard...\n`);
+  try {
+    const load = window.ularnOnline && window.ularnOnline.loadPublicBoard;
+    if (typeof load !== "function") {
+      paintBoard(unavailable);
+      return;
+    }
+    const text = await load(GAMENAME);
+    paintBoard(typeof text === "string" && text ? text : unavailable);
+  } catch (error) {
+    console.error("dbQueryHighScores():", error);
+    paintBoard(unavailable);
+  }
+};
 
 // Legacy checkpoint and winner-mail routines must not alter classic saves.
 const originalStorageGet3D = localStorageGetObject;

@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.41 — Public end-screen scoreboard
+
+- After an expedition ends, the scoreboard reads the same verified public board as the rest of the site
+- If that board has no rows, it says the board is empty. If the board cannot be loaded, it says so
+
 ## 1.3.40 — Clearer chrome
 
 - Multiplayer, the lobby, and the leaderboard close with a round X. The title stays

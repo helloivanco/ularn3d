@@ -8,7 +8,8 @@ import { createChatLog, mapChatRows } from "./chat.js";
 import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, claimAbandonedHost, enterRoom, hostRoom, listPublicRooms, markReady } from "./rooms.js";
-import { createLiveRoom, loadScores } from "./live.js";
+import { formatEndScreenBoard } from "./end-board.js";
+import { createLiveRoom, fetchPublicScores, loadScores } from "./live.js";
 
 const QUICK = ["Help!", "Follow me", "Wait", "Going down", "Low HP"];
 
@@ -599,6 +600,13 @@ export const mountOnlineUi = () => {
     mapPings: () => chatLog.pings(),
     dropPing: (point) => {
       chatLog.ping(point);
+    },
+    loadPublicBoard: async (gameName) => {
+      try {
+        return formatEndScreenBoard(await fetchPublicScores(), gameName || "Ularn");
+      } catch {
+        return formatEndScreenBoard({ ok: false }, gameName || "Ularn");
+      }
     },
   };
 };
