@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { APP_VERSION, CHECKSUM_RELEASE_URL, DOWNLOAD_FILENAME, DOWNLOAD_RELEASE_URL } from "../scripts/app-version.mjs";
+import { expandSiteComponents } from "../scripts/site-components.mjs";
 import {
   checkReleaseBump,
   checkStampedVersion,
@@ -34,9 +35,11 @@ test("npm version restamp keeps package.json, lockfile, and Vercel filename toge
   assert.notEqual(version, "1.3.10");
 });
 
+const readStampedPage = (file) => expandSiteComponents(readFileSync(file, "utf8"));
+
 test("play page and field guide stamp version from package.json placeholders", () => {
   for (const file of htmlSources) {
-    const html = readFileSync(file, "utf8");
+    const html = readStampedPage(file);
     assert.match(html, /__APP_VERSION__/);
     // Changelog entries intentionally name past and current versions; stamped surfaces still use placeholders.
     if (file !== "public/changelog/index.html") {
@@ -45,18 +48,18 @@ test("play page and field guide stamp version from package.json placeholders", (
     assert.doesNotMatch(html, /Ularn-1\.\d+\.\d+\.windows\.exe/);
   }
   for (const file of downloadSources) {
-    assert.match(readFileSync(file, "utf8"), /__DOWNLOAD_FILENAME__/);
+    assert.match(readStampedPage(file), /__DOWNLOAD_FILENAME__/);
   }
-  const home = readFileSync("index.html", "utf8");
+  const home = readStampedPage("index.html");
   assert.match(home, /"softwareVersion": "__APP_VERSION__"/);
   assert.match(home, /class="footer-version"[^>]*>\s*<a href="\/changelog\/"[^>]*>v__APP_VERSION__/);
   assert.match(home, /href="\/changelog\/"/);
-  const play = readFileSync("play/index.html", "utf8");
+  const play = readStampedPage("play/index.html");
   assert.match(play, /"softwareVersion": "__APP_VERSION__"/);
   assert.match(play, /class="site-version"[^>]*>v__APP_VERSION__/);
   assert.match(play, /href="\/changelog\/"/);
   assert.match(play, /href="https:\/\/github\.com\/helloivanco\/ularn3d"/);
-  const about = readFileSync("public/about/index.html", "utf8");
+  const about = readStampedPage("public/about/index.html");
   assert.match(about, /class="footer-version"[^>]*>\s*<a href="\/changelog\/"[^>]*>v__APP_VERSION__/);
   assert.match(about, /id="history"/);
   assert.match(about, /Noah Morgan/);
@@ -67,7 +70,7 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.doesNotMatch(play, /href="\/credits\/?"/);
   assert.match(home, /href="\/about\/#history"/);
   assert.match(play, /href="\/about\/#history"/);
-  const changelog = readFileSync("public/changelog/index.html", "utf8");
+  const changelog = readStampedPage("public/changelog/index.html");
   assert.match(changelog, /class="changelog-list"/);
   assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d\/releases"/);
   assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d"/);
