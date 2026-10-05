@@ -4,6 +4,10 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.45 — Play page mark
+
+- The play page title is Ularn 3D, with the cave-and-gem mark beside it and “The caves below” underneath. Sound, the field guide, and “The adventure awaits” stay along the top, and the watching line sits below that line
+
 ## 1.3.44 — Start screen fits the window
 
 - The play screen shows the class choices, the class note, Multiplayer, Continue, and Download for Windows together on a normal desktop window
