@@ -35,6 +35,87 @@ async function mapClick(page, x, y) {
   );
 }
 
+test("travel stops for an adjacent creature and keeps going when one is farther away", async ({
+  page,
+}) => {
+  await start(page);
+  const far = await page.evaluate(() => {
+    newcavelevel(1);
+    player.x = 10;
+    player.y = 8;
+    player.HP = player.HPMAX = 100;
+    for (let x = 5; x < 24; x++)
+      for (let y = 3; y < 16; y++) {
+        setItem(x, y, OEMPTY);
+        setMonster(x, y, null);
+        setKnow(x, y, KNOWALL);
+      }
+    // Two tiles south, and six tiles south. One step east never enters melee range.
+    setMonster(10, 10, createMonster(LEMMING));
+    setMonster(10, 14, createMonster(GNOME));
+    setMazeMode(true);
+    paint();
+    return { moves: player.MOVESMADE, x: player.x, y: player.y };
+  });
+  await mapClick(page, 11, 8);
+  await expect
+    .poll(async () => [(await snap(page)).x, (await snap(page)).y])
+    .toEqual([11, 8]);
+  expect((await snap(page)).moves).toBe(far.moves + 1);
+  await expect(page.locator("#toast")).not.toContainText(
+    "A creature is near. Travel stopped.",
+  );
+
+  const beside = await page.evaluate(() => {
+    for (let x = 5; x < 24; x++)
+      for (let y = 3; y < 16; y++) setMonster(x, y, null);
+    setMonster(12, 9, createMonster(LEMMING));
+    setKnow(12, 9, KNOWALL);
+    paint();
+    return { moves: player.MOVESMADE, x: player.x, y: player.y };
+  });
+  await mapClick(page, 16, 8);
+  await expect(page.locator("#toast")).toContainText(
+    "A creature is near. Travel stopped.",
+  );
+  const after = await snap(page);
+  expect(after.moves).toBe(beside.moves);
+  expect([after.x, after.y]).toEqual([beside.x, beside.y]);
+});
+
+test("a deep-floor lemming injection stays a two-percent roll", async ({
+  page,
+}) => {
+  await start(page);
+  const result = await page.evaluate(() => {
+    level = 8;
+    const original = rnd;
+    const queue = [];
+    rnd = (value) => (queue.length ? queue.shift() : original(value));
+    try {
+      // Level 8's table cannot roll a lemming. The second rnd is the injection.
+      queue.push(1, 9, 1, 2, 1, 1, 1, 3);
+      return {
+        ularn: ULARN,
+        level,
+        formerTenPercent: makemonst(8),
+        twoPercent: makemonst(8),
+        onePercent: makemonst(8),
+        justOutside: makemonst(8),
+        lemming: LEMMING,
+      };
+    } finally {
+      rnd = original;
+    }
+  });
+  expect(result.ularn).toBe(true);
+  expect(result.level).toBe(8);
+  expect(result.formerTenPercent).not.toBe(result.lemming);
+  expect(result.twoPercent).toBe(result.lemming);
+  expect(result.onePercent).toBe(result.lemming);
+  expect(result.justOutside).not.toBe(result.lemming);
+});
+
 test("automatic travel stops immediately when a step causes damage", async ({
   page,
 }) => {

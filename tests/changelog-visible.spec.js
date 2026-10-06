@@ -8,6 +8,6 @@ test("changelog notes become visible when the list is taller than the window", a
   expect(box?.height ?? 0).toBeGreaterThan(800);
   await expect(recent).toHaveClass(/is-visible/);
   await expect(recent).toHaveCSS("opacity", "1");
-  await expect(page.locator(".changelog-list h3").first()).toContainText("Visible version notes");
+  await expect(page.locator(".changelog-list h3").first()).toContainText("Travel past distant creatures");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
 });

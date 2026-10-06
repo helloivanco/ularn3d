@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.52 — Travel past distant creatures
+
+- A walk stops for a creature only when it is on a neighboring tile, including diagonally
+- A creature down the hall, around a corner, or only on screen no longer ends the walk
+- Lemmings are placed less often, so a floor is not packed with them
+
 ## 1.3.51 — Visible version notes
 
 - What’s New shows the version list again

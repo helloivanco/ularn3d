@@ -1055,11 +1055,13 @@ function travel(tile) {
       document.querySelector("dialog[open]")
     )
       return;
+    // Melee range matches the attack check: Chebyshev distance 1, diagonals included.
+    // A creature two or more tiles away, around a corner, or only on screen does not stop travel.
     if (
       state.tiles.some(
         (t) =>
           t.monster &&
-          Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 6,
+          Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
       )
     ) {
       toast("A creature is near. Travel stopped.");
