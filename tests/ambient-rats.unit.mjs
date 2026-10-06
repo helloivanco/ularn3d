@@ -66,74 +66,45 @@ test("ambient rats use a hard-capped non-interactive pool", () => {
   assert.equal(scene.children.includes(rats.group), false);
 });
 
-const worldPoints = (mesh, name) => {
-  const points = [];
-  const vertex = new THREE.Vector3();
-  mesh.updateMatrixWorld(true);
-  mesh.traverse((object) => {
-    if (!object.isMesh || object.name !== name) return;
-    const position = object.geometry.attributes.position;
-    for (let i = 0; i < position.count; i++) {
-      vertex.fromBufferAttribute(position, i);
-      points.push(object.localToWorld(vertex.clone()));
-    }
-  });
-  return points;
-};
-
-const widthBetween = (points, z0, z1) => {
-  const slice = points.filter((point) => point.z >= z0 && point.z <= z1);
-  const xs = slice.map((point) => point.x);
-  return Math.max(...xs) - Math.min(...xs);
-};
-
-test("ambient rats have a tapered body, pointed snout, ears, and a curved tail", () => {
+test("ambient rats are a small unlit side-view sprite", () => {
   const scene = new THREE.Scene();
   const rats = new AmbientRats(scene);
   const mesh = rats.slots[0].mesh;
-  const names = new Set();
-  mesh.traverse((object) => {
-    if (!object.isMesh) return;
-    names.add(object.name);
-    assert.equal(object.material.type, "MeshBasicMaterial");
-    assert.equal(object.castShadow, false);
-    assert.equal(object.receiveShadow, false);
-  });
-  for (const name of ["rat-body", "rat-head", "rat-ear", "rat-tail"]) {
-    assert.equal(names.has(name), true, name);
+  const sprite = mesh.getObjectByName("rat-sprite");
+  assert.ok(sprite);
+  assert.equal(sprite.material.type, "MeshBasicMaterial");
+  assert.equal(sprite.material.toneMapped, false);
+  assert.ok(sprite.material.alphaTest > 0);
+  assert.equal(sprite.castShadow, false);
+  assert.equal(sprite.receiveShadow, false);
+  assert.equal(sprite.rotation.x, 0);
+  assert.ok(Math.abs(sprite.scale.x) > Math.abs(sprite.scale.y));
+  assert.ok(Math.abs(sprite.scale.x) < 1);
+
+  const image = sprite.material.map.image;
+  const { data, width, height } = image;
+  assert.ok(width > height);
+  let pink = 0;
+  let brown = 0;
+  let eye = 0;
+  let clear = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const a = data[i + 3];
+    if (a < 10) {
+      clear += 1;
+      continue;
+    }
+    if (r > 200 && r > g + 15 && b > 120) pink += 1;
+    else if (r > 70 && r < 190 && g > 40 && g < r - 10 && b < 140) brown += 1;
+    if (r < 30 && g < 30 && b < 30) eye += 1;
   }
-
-  const body = worldPoints(mesh, "rat-body");
-  const bodyZ = body.map((point) => point.z);
-  const zMin = Math.min(...bodyZ);
-  const zMax = Math.max(...bodyZ);
-  const span = zMax - zMin;
-  const haunchW = widthBetween(body, zMin, zMin + span * 0.45);
-  const shoulderW = widthBetween(body, zMax - span * 0.25, zMax);
-  assert.ok(haunchW > shoulderW * 1.4, `haunches ${haunchW} shoulders ${shoulderW}`);
-
-  const head = worldPoints(mesh, "rat-head");
-  const tip = head.reduce((best, point) => (point.z > best.z ? point : best));
-  assert.ok(tip.z > zMax);
-  assert.ok(Math.abs(tip.x) < 0.012);
-  const behindTip = head.filter((point) => point.z < tip.z - 0.04);
-  const tipWidth = Math.max(...behindTip.map((point) => point.x)) - Math.min(...behindTip.map((point) => point.x));
-  assert.ok(tipWidth > 0.04);
-
-  const ears = worldPoints(mesh, "rat-ear");
-  assert.ok(ears.some((point) => point.x < -0.03));
-  assert.ok(ears.some((point) => point.x > 0.03));
-  const earZ = ears.map((point) => point.z);
-  assert.ok(Math.min(...earZ) > (zMin + zMax) / 2);
-
-  const tail = worldPoints(mesh, "rat-tail");
-  const tailTip = tail.reduce((best, point) => (point.z < best.z ? point : best));
-  assert.ok(tailTip.z < zMin);
-  const base = tail.reduce((best, point) => (point.z > best.z ? point : best));
-  assert.ok(base.z > zMin - 0.02);
-  assert.ok(Math.abs(base.x) < 0.06);
-  const bow = Math.max(...tail.map((point) => Math.abs(point.x - base.x)));
-  assert.ok(bow > 0.08, `tail bow ${bow}`);
+  assert.ok(clear > 20);
+  assert.ok(pink > 8, `pink ${pink}`);
+  assert.ok(brown > 20, `brown ${brown}`);
+  assert.ok(eye > 0, `eye ${eye}`);
   rats.dispose();
 });
 

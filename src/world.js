@@ -1856,7 +1856,7 @@ export class World {
     if (this.wallCells.length) this.updateWalls();
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
-    this.ambientRatsNear = this.ambientRats?.update(dt, this.camera.position) || false;
+    this.ambientRatsNear = this.ambientRats?.update(dt, this.camera) || false;
     if (this.ambientRatsNear) this.hasMotion = true;
     this.applyPixelGrid();
     try {
