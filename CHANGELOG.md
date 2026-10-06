@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.53 — Clearer steps
+
+- Sprites and you sit on whole pixels, so they stay sharp instead of soft or blocky
+- The stone picture on the floor and walls is the same, and it stays sharp
+- The camera and you ease onto the next step. A turn is still one move
+
 ## 1.3.52 — Travel past distant creatures
 
 - A walk stops for a creature only when it is on a neighboring tile, including diagonally

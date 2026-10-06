@@ -69,6 +69,10 @@ button:disabled {
   display: block;
   touch-action: none;
   transform: translateZ(0);
+  /* The balanced pixel ratio is below the CSS size. Let the browser scale
+     that buffer with nearest pixels instead of a bilinear blur. */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 .vignette {
   pointer-events: none;

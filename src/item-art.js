@@ -232,8 +232,10 @@ export function itemSprite(tile, invalidate = () => {}) {
       invalidate();
     });
     texture.colorSpace = THREE.SRGBColorSpace;
+    // Nearest, no mips: scaling a sprite up must not bilinear-blur the art.
     texture.magFilter = texture.minFilter = THREE.NearestFilter;
     texture.generateMipmaps = false;
+    texture.anisotropy = 1;
     textures.set(path, texture);
     materials.set(
       path,
