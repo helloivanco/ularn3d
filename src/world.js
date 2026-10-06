@@ -7,6 +7,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, surface, surfaceLambert, surfaceBasic, noise, stoneTint } from "./materials.js";
+import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
@@ -38,6 +39,8 @@ const FLOOR_LIMIT = 40 * 32;
 /* North-aligned default: pure +Z offset looks toward game north (−Z / −map Y). */
 const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
+/* One step eases onto the next tile. Turns stay instant; only the view moves. */
+const FOLLOW_MS = 200;
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
 const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y) => {
@@ -198,6 +201,7 @@ export class World {
         : THREE.NoToneMapping;
     this.renderer.toneMappingExposure = this.quality === "cinematic" ? 1.15 : 1;
     container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.dataset.engine = "webgl";
     this.environment = null;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     Object.assign(this.controls, {
@@ -400,6 +404,17 @@ export class World {
     this.heldCameraOffset = null;
     this.pickHits = [];
     this.cameraLive = false;
+    this.followFrom = new THREE.Vector3();
+    this.followCam = new THREE.Vector3();
+    this.followStart = 0;
+    this.followMs = 0;
+    this.followHeld = true;
+    this.yawFrom = 0;
+    this.yawTo = 0;
+    this.yawEase = false;
+    this.pixelSlots = [];
+    this.pixelCount = 0;
+    this.drawSize = new THREE.Vector2();
     this.lampPool = [];
     this.billboards = [];
     this.draining = [];
@@ -471,8 +486,11 @@ export class World {
       if (detail.kind === "weapon") { this.attackAge = 0; this.attackStartedAt = performance.now(); }
       if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
-        (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y))
+        (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y)) {
         this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
+        this.yawFrom = this.yawTo = this.player.rotation.y;
+        this.yawEase = false;
+      }
       this.invalidate();
     });
     this.controls.addEventListener("change", () => {
@@ -634,12 +652,16 @@ export class World {
     this.activeUntil = performance.now() + 1100;
     this.scheduleFrame();
   }
+  followLive() {
+    return !!(this.followStart && this.followMs && !this.followHeld);
+  }
   frameLimit() {
     if (this.paused) return 4;
     const idle = performance.now() > this.activeUntil;
-    if (idle && this.state && this.quality === "balanced" && !this.hasMotion && !this.cameraLive)
+    const follow = this.followLive();
+    if (idle && this.state && this.quality === "balanced" && !this.hasMotion && !follow && !this.cameraLive)
       return 0;
-    if (this.state && (this.cameraLive || this.hasMotion || !idle)) return 60;
+    if (this.state && (this.cameraLive || this.hasMotion || follow || !idle)) return 60;
     return 12;
   }
   stopFrames() {
@@ -648,13 +670,20 @@ export class World {
     this.frameTimer = this.frameRequest = null;
   }
   scheduleFrame() {
-    if (this.disposed || document.hidden || this.lost || this.frameTimer != null || this.frameRequest != null) return;
+    if (this.disposed || document.hidden || this.lost) return;
     const idle = performance.now() > this.activeUntil;
     const effectsActive = this.effects.slots.some((slot) => slot.active);
     const ambientActive = !!this.ambientRatsNear;
-    if (idle && !this.hasMotion && !this.cameraLive && !effectsActive && !ambientActive &&
+    const follow = this.followLive();
+    if (idle && !this.hasMotion && !follow && !this.cameraLive && !effectsActive && !ambientActive &&
       (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
-    const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || effectsActive || ambientActive || !idle);
+    const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || follow || effectsActive || ambientActive || !idle);
+    // A pending low-rate timeout would hold the first step frame off vsync.
+    if (live && this.frameTimer != null) {
+      clearTimeout(this.frameTimer);
+      this.frameTimer = null;
+    }
+    if (this.frameTimer != null || this.frameRequest != null) return;
     const fps = this.frameLimit() || 12;
     const delay = live ? 0 : Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
     const kick = () => {
@@ -1014,6 +1043,7 @@ export class World {
     this.controls.update();
     this.controls.enableDamping = damping;
     this.heldCameraOffset = offset;
+    this.followHeld = true;
   }
   /* New game / load: north yaw, preferred zoom/elevation from prior sessions. */
   beginExpeditionCamera(target = null) {
@@ -1408,12 +1438,23 @@ export class World {
     if (!this.lastPlayer) {
       this.player.position.copy(target);
       this.applyHeldCamera(target);
+      this.yawEase = false;
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
-      this.player.rotation.y =
+      const facing =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
         Math.PI;
+      if (this.reduced) {
+        this.player.rotation.y = facing;
+        this.yawEase = false;
+      } else {
+        this.yawFrom = this.player.rotation.y;
+        const dy = Math.atan2(Math.sin(facing - this.yawFrom), Math.cos(facing - this.yawFrom));
+        this.yawTo = this.yawFrom + dy;
+        this.yawEase = true;
+      }
       this.walkAge = 0;
       this.walkStartedAt = performance.now();
+      this.startFollow(target);
     }
     if (
       old &&
@@ -1626,16 +1667,79 @@ export class World {
       this.camera.position
         .copy(this.controls.target)
         .add(this.heldCameraOffset);
+      if (this.playerTarget) this.player.position.copy(this.playerTarget);
+      this.followHeld = true;
+      this.yawEase = false;
       this.controls.update();
       writeCameraPrefs(this.heldCameraOffset);
       this.updateWalls();
       this.invalidate();
     }
   }
+  startFollow(target) {
+    this.followFrom.copy(this.player.position);
+    this.followCam.copy(this.controls.target);
+    this.followStart = performance.now();
+    const moving =
+      this.followFrom.distanceToSquared(target) > 1e-8 ||
+      this.followCam.distanceToSquared(target) > 1e-8;
+    this.followMs = this.reduced || !moving ? 0 : FOLLOW_MS;
+    this.followHeld = this.followMs === 0;
+    this.hasMotion = this.followMs > 0;
+    if (!this.followMs) this.snapFollow();
+  }
+  snapFollow() {
+    if (!this.playerTarget) return;
+    this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
+    this.controls.target.copy(this.playerTarget);
+    this.camera.position.copy(this.playerTarget).add(this.scratchOffset);
+    this.player.position.copy(this.playerTarget);
+    this.followHeld = true;
+  }
+  rememberPixel(object) {
+    if (!object?.parent) return;
+    let slot = this.pixelSlots[this.pixelCount];
+    if (!slot) {
+      slot = { object: null, home: new THREE.Vector3() };
+      this.pixelSlots.push(slot);
+    }
+    this.pixelCount++;
+    slot.object = object;
+    slot.home.copy(object.position);
+    object.getWorldPosition(this.scratchPosition);
+    const hold = object.userData.pixelHold || (object.userData.pixelHold = {});
+    if (!pixelAlignWorld(this.scratchPosition, this.camera, this.drawSize.x, this.drawSize.y, this.scratchPosition, hold))
+      return;
+    object.parent.updateWorldMatrix(true, false);
+    object.parent.worldToLocal(this.scratchPosition);
+    object.position.copy(this.scratchPosition);
+  }
+  applyPixelGrid() {
+    this.pixelCount = 0;
+    this.renderer.getDrawingBufferSize(this.drawSize);
+    if (this.drawSize.x < 1 || this.drawSize.y < 1) return;
+    this.camera.updateMatrixWorld();
+    if (this.player?.visible) this.rememberPixel(this.player);
+    for (const { mesh } of this.monsters.values()) {
+      const art = mesh.userData.artwork;
+      if (art) this.rememberPixel(art);
+    }
+    for (const art of this.billboards) this.rememberPixel(art);
+  }
+  restorePixelGrid() {
+    for (let i = 0; i < this.pixelCount; i++) {
+      const slot = this.pixelSlots[i];
+      slot.object.position.copy(slot.home);
+    }
+    this.pixelCount = 0;
+  }
   animate() {
     const now = performance.now(),
-      elapsed = (now - this.lastTime) / 1000,
-      dt = Math.min(0.1, elapsed);
+      elapsed = (now - this.lastTime) / 1000;
+    // A turn wakes the loop after it has been idle. Spending that gap as one
+    // step makes the camera and hero pop. Clock-based follow ignores it;
+    // everything else takes a single frame.
+    const dt = elapsed > 0.08 ? 1 / 60 : elapsed;
     this.lastTime = now;
     if (document.hidden || this.lost) {
       this.animating = false;
@@ -1647,23 +1751,24 @@ export class World {
     this.effects.update(dt);
     if (!this.reduced && this.water.visible) this.waterTime.value = this.tick;
     this.animating = true;
-    if (this.playerTarget) {
-      const remain = this.playerTarget.distanceToSquared(this.controls.target);
-      if (remain < 0.0004) {
-        this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
-        this.controls.target.copy(this.playerTarget);
-        this.camera.position.copy(this.playerTarget).add(this.scratchOffset);
-        this.player.position.copy(this.playerTarget);
+    if (this.playerTarget && this.followLive()) {
+      const t = Math.min(1, (now - this.followStart) / this.followMs);
+      const eased = t * t * (3 - 2 * t);
+      if (t >= 1) {
+        this.snapFollow();
+        if (this.yawEase) this.player.rotation.y = this.yawTo;
+        this.yawEase = false;
       } else {
-        const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11);
-        this.scratchOffset
-          .copy(this.playerTarget)
-          .sub(this.controls.target)
-          .multiplyScalar(alpha);
+        this.scratchPosition.copy(this.followCam).lerp(this.playerTarget, eased);
+        this.scratchOffset.copy(this.scratchPosition).sub(this.controls.target);
         this.controls.target.add(this.scratchOffset);
         this.camera.position.add(this.scratchOffset);
-        this.player.position.lerp(this.playerTarget, alpha);
+        this.player.position.copy(this.followFrom).lerp(this.playerTarget, eased);
+        if (this.yawEase)
+          this.player.rotation.y = this.yawFrom + (this.yawTo - this.yawFrom) * eased;
       }
+    }
+    if (this.playerTarget) {
       this.playerLight.position
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
@@ -1721,9 +1826,9 @@ export class World {
     this.scratchCam.copy(this.camera.position);
     this.controls.update();
     this.camera.updateMatrixWorld();
-    this.hasMotion =
-      !!this.playerTarget &&
-      this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
+    this.hasMotion = this.followLive();
+    if (this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001)
+      this.hasMotion = true;
     if (this.camera.position.distanceToSquared(this.scratchCam) > 1e-8) this.hasMotion = true;
     const camTurned = !this.lastCamQuatValid || !this.lastCamQuat.equals(this.camera.quaternion);
     if (camTurned) {
@@ -1753,8 +1858,13 @@ export class World {
     // briefly keep the frame loop alive, then Balanced can idle again.
     this.ambientRatsNear = this.ambientRats?.update(dt, this.camera.position) || false;
     if (this.ambientRatsNear) this.hasMotion = true;
-    if (this.quality === "cinematic" && this.composer) this.composer.render(dt);
-    else this.renderer.render(this.scene, this.camera);
+    this.applyPixelGrid();
+    try {
+      if (this.quality === "cinematic" && this.composer) this.composer.render(dt);
+      else this.renderer.render(this.scene, this.camera);
+    } finally {
+      this.restorePixelGrid();
+    }
     this.renderedFrames++;
     this.animating = false;
     this.scheduleFrame();

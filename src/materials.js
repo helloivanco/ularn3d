@@ -91,7 +91,12 @@ export function texture(kind) {
   const map = new THREE.CanvasTexture(canvas);
   map.colorSpace = THREE.SRGBColorSpace;
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  // Anisotropy stays 2 (the balanced hitch cap). Blending two mips is what
+  // softens the stone; pick the nearer mip and keep linear samples inside it
+  // so the mortar does not turn into nearest-neighbor blocks.
   map.anisotropy = 2;
+  map.magFilter = THREE.LinearFilter;
+  map.minFilter = THREE.LinearMipmapNearestFilter;
   map.generateMipmaps = true;
   maps.set(kind, map);
   return map;
