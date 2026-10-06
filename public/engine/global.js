@@ -459,8 +459,9 @@ function makemonst(lev) {
   while (isGenocided(tmp) && tmp < monsterlist.length - 1)
     tmp++; /* genocided? */
 
+  /* 2% lemming injection. The old 10% roll packed floors with them. */
   if (ULARN && level < MAXLEVEL) {
-    if (rnd(100) < 10) {
+    if (rnd(100) <= 2) {
       tmp = LEMMING;
     }
   }
