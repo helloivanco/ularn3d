@@ -68,7 +68,10 @@ for (const viewport of desktops) {
     const headerLinks = await page.evaluate(() => {
       const colorOf = (selector, child) =>
         getComputedStyle(document.querySelector(selector).querySelector(child)).color;
+      const mid = (box) => box.top + box.height / 2;
       const download = document.querySelector("#download-windows").getBoundingClientRect();
+      const verify = document.querySelector(".site-links a[href='/downloads/SHA256SUMS.txt']").getBoundingClientRect();
+      const logo = document.querySelector(".github-link").getBoundingClientRect();
       const github = document.querySelector(".github-word").getBoundingClientRect();
       const order = [...document.querySelector(".topbar nav").children]
         .filter((el) => getComputedStyle(el).display !== "none")
@@ -78,15 +81,18 @@ for (const viewport of desktops) {
         aboutMatch: colorOf("#about-game", ".icon") === colorOf("#about-game", ".button-label"),
         newsMatch: colorOf("#whats-new", ".icon") === colorOf("#whats-new", ".button-label"),
         githubBelow: github.top >= download.bottom - 1,
-        githubLeft: github.left,
-        downloadLeft: download.left,
+        sameLine: Math.abs(mid(verify) - mid(github)) < 3 && Math.abs(mid(logo) - mid(github)) < 3,
+        wordBesideLogo: github.left >= logo.right - 1 && github.left - logo.right < 24,
+        logoAfterVerify: logo.left > verify.left,
       };
     });
     expect(headerLinks.order).toEqual(["about-game", "whats-new", "guide"]);
     expect(headerLinks.aboutMatch).toBe(true);
     expect(headerLinks.newsMatch).toBe(true);
     expect(headerLinks.githubBelow).toBe(true);
-    expect(headerLinks.githubLeft).toBeGreaterThanOrEqual(headerLinks.downloadLeft - 1);
+    expect(headerLinks.sameLine).toBe(true);
+    expect(headerLinks.wordBesideLogo).toBe(true);
+    expect(headerLinks.logoAfterVerify).toBe(true);
 
     const fit = await page.evaluate(() => {
       const welcome = document.querySelector("#welcome");
