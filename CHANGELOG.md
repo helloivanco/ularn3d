@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.59 — A real swing and a real step
+
+- A weapon stroke winds up, cuts, and follows through. The dagger in hand is a short blade. A spear or lance stays long
+- Bare hands stay bare. Wizard, Elf, Ogre, and Klingon do not swing a sword they are not holding
+- Walking is a step, with a lift and a plant, instead of a slide. A turn is still one move
+
 ## 1.3.58 — Different wall rats
 
 - Fewer rats sit on dungeon walls. A corridor shows one or two, not a row of copies
