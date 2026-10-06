@@ -1,6 +1,7 @@
 import "./style.css";
 import "./hud.css";
 import { GameAudio } from "./audio.js";
+import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
@@ -37,6 +38,7 @@ let character = "Adventurer",
   walking = null,
   soundOn = false,
   audio = new GameAudio(),
+  readCues = createCueReader(),
   toastTimer,
   lastHP = null,
   graphicsLost = false;
@@ -87,6 +89,17 @@ function toast(message) {
 function sound(kind = "step", detail) {
   if (soundOn) audio.play(kind, detail);
 }
+audio.prefetch();
+const syncHeard = (snapshot) => {
+  if (!snapshot) return;
+  const cues = readCues(snapshot);
+  if (!soundOn || snapshot.over) {
+    if (snapshot.over) audio.stopMusic();
+    return;
+  }
+  audio.syncBed(snapshot.level);
+  for (const cue of cues) sound(cue);
+};
 window.addEventListener("ularn:combat", ({ detail }) => {
   if (detail.kind === "weapon") sound("weapon", detail);
   else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
@@ -146,6 +159,7 @@ const ularnPerf = {
   },
 };
 window.ularnPerf = ularnPerf;
+window.ularnAudio = audio;
 function syncInventoryPin() {
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
@@ -231,7 +245,6 @@ for (const [name, icon, description] of classes) {
       .querySelectorAll(".class-choice")
       .forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
     $("class-description").textContent = description;
-    sound("open");
   });
   $("classes").appendChild(button);
 }
@@ -338,7 +351,6 @@ async function start(resume) {
     document.body.classList.add("playing");
     update();
     world?.beginExpeditionCamera();
-    sound("open");
   } catch (error) {
     $("start-error").textContent = error.message;
     $("begin").disabled = false;
@@ -594,6 +606,7 @@ function update() {
     }
   }
   drawMap();
+  syncHeard(next);
   if (ularnPerf.enabled) {
     const bridge = engine.perfStats?.() || {};
     const metrics = window.ularnGraphics?.metrics?.() || {};
@@ -885,9 +898,7 @@ function command(key, shift = false) {
     return;
   }
   if (!state || graphicsLost) return;
-  const before = `${state.level}:${state.x},${state.y}`;
   engine.key(key, shift);
-  if (before !== `${state.level}:${state.x},${state.y}`) sound("step");
 }
 document
   .querySelectorAll("[data-key]")
@@ -987,7 +998,6 @@ function travel(tile) {
     const dir = dirs.find((d) => d[0] === dx && d[1] === dy);
     if (tile.closed) {
       engine.openToward(dir[2]);
-      sound("open");
     } else command(dir[2]);
     return;
   }
@@ -1107,7 +1117,7 @@ $("sound").addEventListener("click", () => {
   $("sound").querySelector(".button-label").textContent = soundOn
     ? "Sound on"
     : "Sound off";
-  if (soundOn) sound("open");
+  if (soundOn) audio.enable(state?.level ?? 0);
   else audio.suspend();
 });
 const openFieldGuide = (sectionId) => {
@@ -1168,8 +1178,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopTravel();
     engine.save();
-    audio.suspend();
-  }
+    audio.hold();
+  } else if (soundOn) audio.resume();
 });
 
 $("destination").addEventListener("change", (event) => {
