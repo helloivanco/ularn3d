@@ -71,7 +71,10 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.doesNotMatch(home, /href="\/credits\/?"/);
   assert.doesNotMatch(play, /href="\/credits\/?"/);
   assert.match(home, /href="\/about\/#history"/);
-  assert.match(play, /href="\/about\/#history"/);
+  assert.doesNotMatch(play, /href="\/about\/#history"/);
+  assert.match(play, /id="about-game"/);
+  assert.match(play, /id="whats-new"/);
+  assert.match(play, />Github</);
   const changelog = readStampedPage("public/changelog/index.html");
   assert.match(changelog, /class="changelog-list"/);
   assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d\/releases"/);
