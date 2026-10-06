@@ -70,6 +70,7 @@ export function monsterSprite(monster, invalidate = () => {}) {
   heading.rotation.x = -Math.PI / 2;
   heading.position.y = 0.035;
   group.add(artwork, heading);
+  group.userData.presentation = "sprite";
   group.userData.artwork = artwork;
   group.userData.heading = heading;
   group.userData.artPath = path;
@@ -79,9 +80,14 @@ export function monsterSprite(monster, invalidate = () => {}) {
 }
 
 export function faceMonster(group, facing, camera) {
+  if (facing && (facing.x || facing.y)) group.userData.facing = facing;
+  if (group.userData.presentation === "model") {
+    const direction = group.userData.facing || { x: 0, y: 1 };
+    group.rotation.y = Math.atan2(direction.x, direction.y) + Math.PI;
+    return;
+  }
   const { artwork, heading } = group.userData;
   if (!artwork) return;
-  if (facing && (facing.x || facing.y)) group.userData.facing = facing;
   const direction = group.userData.facing;
   artwork.quaternion.copy(camera.quaternion);
   // The source art is a single view. Mirroring provides a legible left/right

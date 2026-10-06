@@ -142,7 +142,7 @@ const unlitAccent = (group, color, x, y, z, w, h, d, name) => {
 const addHeroOutline = (root) => {
   const meshes = [];
   root.traverse((obj) => {
-    if (!obj.isMesh) return;
+    if (!obj.isMesh || obj.userData.skipOutline) return;
     let parent = obj;
     while (parent) {
       if (parent.name === "weapon") return;
@@ -256,7 +256,7 @@ export function fillWieldedWeapon(grip, weapon = null) {
   grip.userData.weaponType = type;
   if (!id || type === "unarmed") return grip;
 
-  const metal = { metalness: 0.92, roughness: 0.22 };
+  const metal = { metalness: 0.2, roughness: 0.42 };
   const haft = { metalness: 0.15, roughness: 0.75 };
   // Swing models are intentionally larger than ground loot icons.
   const S = 1.55;
@@ -342,83 +342,207 @@ export function fillWieldedWeapon(grip, weapon = null) {
   return grip;
 }
 
+const HERO_KITS = {
+  Adventurer: {
+    cloth: 0x427b78,
+    skin: 0xc4aa89,
+    boot: 0x544737,
+    helm: "helm",
+    cape: true,
+    lantern: true,
+    plate: true,
+    weapon: { id: 31, type: "dagger", name: "dagger" },
+  },
+  Wizard: {
+    cloth: 0x5b538b,
+    skin: 0xd2bfa4,
+    boot: 0x3c3834,
+    helm: "hat",
+    cape: true,
+    plate: false,
+    weapon: null,
+  },
+  Rogue: {
+    cloth: 0x3e4e52,
+    skin: 0xc4aa89,
+    boot: 0x2e3330,
+    helm: "hood",
+    cape: false,
+    plate: false,
+    weapon: { id: 31, type: "dagger", name: "dagger" },
+    scale: [0.92, 1.02, 0.9],
+  },
+  Elf: {
+    cloth: 0x578564,
+    skin: 0xe4c9a2,
+    boot: 0x5a4634,
+    helm: "ears",
+    cape: true,
+    plate: false,
+    weapon: null,
+    scale: [0.9, 1.08, 0.88],
+  },
+  Dwarf: {
+    cloth: 0x826644,
+    skin: 0xc49a78,
+    boot: 0x4a3c2e,
+    helm: "helm",
+    cape: false,
+    beard: true,
+    plate: false,
+    weapon: { id: 30, type: "spear", name: "spear" },
+    scale: [1.18, 0.8, 1.14],
+  },
+  Ogre: {
+    cloth: 0x6e7848,
+    skin: 0x8a9158,
+    boot: 0x4a4636,
+    helm: "tusks",
+    cape: false,
+    plate: false,
+    weapon: null,
+    scale: [1.32, 1.22, 1.24],
+  },
+  Klingon: {
+    cloth: 0x6a4038,
+    skin: 0x8d5a48,
+    boot: 0x2c2826,
+    helm: "brow",
+    cape: false,
+    studs: true,
+    plate: true,
+    weapon: null,
+    scale: [1.08, 1.04, 1.08],
+  },
+  Rambo: {
+    cloth: 0x6a623c,
+    skin: 0xc4926a,
+    boot: 0x3a342c,
+    helm: "band",
+    cape: false,
+    plate: false,
+    weapon: { id: 65, type: "lance", name: "lance" },
+  },
+};
+
+const markDetail = (mesh) => {
+  mesh.userData.skipOutline = true;
+  return mesh;
+};
+
 export function hero(character = "Adventurer") {
   const g = new THREE.Group(),
     body = new THREE.Group();
+  const kit = HERO_KITS[character] || HERO_KITS.Adventurer;
+  g.userData.heroClass = character;
+  g.userData.helm = kit.helm;
   g.add(contactDisc(0.5));
   g.add(body);
   body.name = "body";
-  const colors = {
-    Adventurer: 0x427b78,
-    Wizard: 0x5b538b,
-    Rogue: 0x465d61,
-    Elf: 0x578564,
-    Dwarf: 0x826644,
-    Ogre: 0x727751,
-    Klingon: 0x934f41,
-    Rambo: 0x706844,
-  };
-  const cloth = colors[character] || colors.Adventurer;
+  const cloth = kit.cloth;
+  const skin = kit.skin;
   for (const x of [-0.115, 0.115]) {
     const leg = new THREE.Group();
     leg.position.set(x, 0.3, 0);
     body.add(leg);
     leg.name = x < 0 ? "left-leg" : "right-leg";
-    box(leg, 0x3c4847, 0, -0.12, 0, 0.15, 0.29, 0.17);
-    box(leg, 0x544737, 0, -0.26, -0.055, 0.175, 0.12, 0.26);
+    box(leg, cloth, 0, -0.12, 0, 0.15, 0.29, 0.17);
+    box(leg, kit.boot, 0, -0.26, -0.055, 0.175, 0.12, 0.26);
   }
   const torso = cone(body, cloth, 0, 0.54, 0, 0.275, 0.43, 8);
   torso.rotation.y = 0.4;
-  box(body, 0x83978e, 0, 0.66, -0.075, 0.3, 0.24, 0.14, {
-    metalness: 0.7,
-    roughness: 0.34,
-  });
-  box(body, 0x705733, 0, 0.41, 0, 0.43, 0.065, 0.26);
-  box(body, 0xd2b67b, 0, 0.415, -0.15, 0.075, 0.075, 0.035, { metalness: 0.7 });
-  const cape = cone(body, cloth, 0, 0.48, 0.14, 0.31, 0.65, 6);
-  cape.rotation.x = -0.25;
-  cape.scale.z = 0.25;
-  cape.name = "cape";
-  for (const x of [-0.28, 0.28]) {
-    orb(body, 0x849b93, x, 0.7, 0, 0.135, { metalness: 0.65, roughness: 0.4 });
-    box(body, cloth, x, 0.51, 0, 0.13, 0.3, 0.14);
-    orb(body, 0xbd9d78, x, 0.35, -0.02, 0.073);
+  if (kit.plate) {
+    box(body, character === "Klingon" ? 0x6e5348 : 0x83978e, 0, 0.66, -0.075, 0.3, 0.24, 0.14, {
+      metalness: 0.16,
+      roughness: 0.48,
+    });
+  } else {
+    box(body, cloth, 0, 0.64, -0.04, 0.28, 0.2, 0.16);
   }
-  orb(body, 0xc4aa89, 0, 0.92, -0.005, 0.145);
-  const helm = orb(body, 0x8ca5a0, 0, 1.0, 0.015, 0.167, {
-    metalness: 0.8,
-    roughness: 0.32,
+  box(body, 0x705733, 0, 0.41, 0, 0.43, 0.065, 0.26);
+  box(body, 0xd2b67b, 0, 0.415, -0.15, 0.075, 0.075, 0.035, {
+    metalness: 0.2,
+    roughness: 0.45,
   });
-  helm.scale.y *= 0.78;
-  box(body, 0x253634, 0, 0.959, -0.14, 0.19, 0.038, 0.035);
-  box(body, 0xc4aa71, 0, 0.99, -0.162, 0.028, 0.15, 0.02, { metalness: 0.7 });
-  if (character === "Wizard") {
-    cone(body, cloth, 0, 1.21, 0, 0.24, 0.55, 8);
-    const brim = cylinder(body, cloth, 0, 1.0, 0, 0.25, 0.045);
+  if (kit.cape) {
+    const cape = cone(body, cloth, 0, character === "Wizard" ? 0.5 : 0.48, 0.14, character === "Wizard" ? 0.34 : 0.31, character === "Wizard" ? 0.78 : 0.65, 6);
+    cape.rotation.x = -0.25;
+    cape.scale.z = 0.25;
+    cape.name = "cape";
+  }
+  for (const x of [-0.28, 0.28]) {
+    const arm = new THREE.Group();
+    arm.name = x < 0 ? "left-arm" : "right-arm";
+    arm.position.set(x, 0.68, 0);
+    body.add(arm);
+    if (kit.helm === "helm" || kit.plate) {
+      orb(arm, 0x849b93, 0, 0.02, 0, 0.12, { metalness: 0.16, roughness: 0.48 });
+    }
+    box(arm, cloth, 0, -0.16, 0, 0.12, 0.26, 0.13);
+    orb(arm, skin, 0, -0.32, -0.02, character === "Ogre" ? 0.09 : 0.07);
+  }
+  orb(body, skin, 0, 0.9, -0.01, character === "Ogre" ? 0.17 : 0.14);
+  if (kit.helm === "helm") {
+    const helm = orb(body, 0x8ca5a0, 0, 0.98, 0.01, 0.16, {
+      metalness: 0.18,
+      roughness: 0.46,
+    });
+    helm.scale.y *= 0.78;
+    box(body, 0x253634, 0, 0.94, -0.13, 0.18, 0.035, 0.03);
+  } else if (kit.helm === "hat") {
+    cone(body, cloth, 0, 1.18, 0, 0.22, 0.5, 8);
+    cylinder(body, cloth, 0, 0.98, 0, 0.24, 0.04, 8);
+  } else if (kit.helm === "hood") {
+    const hood = cone(body, cloth, 0, 1.02, 0.02, 0.2, 0.28, 6);
+    hood.scale.z = 0.85;
+  } else if (kit.helm === "ears") {
+    for (const x of [-1, 1]) {
+      const ear = markDetail(cone(body, skin, x * 0.14, 0.96, 0, 0.04, 0.12, 4));
+      ear.rotation.z = x * -0.6;
+    }
+  } else if (kit.helm === "tusks") {
+    for (const x of [-1, 1]) {
+      const tusk = markDetail(cone(body, 0xe6dcc4, x * 0.06, 0.8, -0.12, 0.025, 0.1, 4));
+      tusk.rotation.x = 0.4;
+    }
+  } else if (kit.helm === "brow") {
+    markDetail(box(body, 0x5c3028, 0, 0.98, -0.08, 0.2, 0.04, 0.06));
+  } else if (kit.helm === "band") {
+    markDetail(box(body, 0x8a3030, 0, 0.98, 0, 0.2, 0.035, 0.16));
+  }
+  if (kit.beard) markDetail(box(body, 0x8a6840, 0, 0.78, -0.08, 0.12, 0.12, 0.06));
+  if (kit.studs) {
+    for (const x of [-0.08, 0.08]) markDetail(box(body, 0xd2c4a4, x, 0.66, -0.14, 0.035, 0.035, 0.02));
+  }
+  for (const x of [-0.04, 0.04]) {
+    markDetail(box(body, 0x1c2422, x, 0.9, -0.13, 0.025, 0.018, 0.016));
   }
   const sword = new THREE.Group();
   sword.name = "weapon";
   sword.position.set(0.31, 0.38, -0.11);
   body.add(sword);
-  // Default grip matches a longsword; world.sync replaces this with the wielded item.
-  fillWieldedWeapon(sword, { id: 58, type: "sword", name: "longsword" });
-  if (character === "Wizard") {
-    fillWieldedWeapon(sword, { id: 89, type: "staff", name: "staff of power" });
+  fillWieldedWeapon(sword, kit.weapon || { id: null, type: "unarmed", name: "bare hands" });
+  if (kit.lantern) {
+    const lantern = new THREE.Group();
+    lantern.name = "lantern";
+    lantern.position.set(-0.33, 0.24, 0);
+    body.add(lantern);
+    box(lantern, 0xfac96e, 0, 0, 0, 0.12, 0.15, 0.12, {
+      emissive: 0xffbc53,
+      emissiveIntensity: 1.4,
+    });
+    for (const x of [-0.073, 0.073]) box(lantern, 0x555245, x, 0, 0, 0.022, 0.19, 0.16);
+    box(lantern, 0x7b714f, 0, 0.11, 0, 0.18, 0.04, 0.18);
+    box(lantern, 0x7b714f, 0, -0.11, 0, 0.18, 0.04, 0.18);
   }
-  const lantern = new THREE.Group();
-  lantern.position.set(-0.33, 0.24, 0);
-  body.add(lantern);
-  box(lantern, 0xfac96e, 0, 0, 0, 0.12, 0.15, 0.12, {
-    emissive: 0xffbc53,
-    emissiveIntensity: 2.4,
+  if (kit.scale) body.scale.set(kit.scale[0], kit.scale[1], kit.scale[2]);
+  const mark = ring(g, 0xe6d091, 0.38, 0.012);
+  mark.material = mat(0xe6d091, {
+    emissive: 0x8a7040,
+    emissiveIntensity: 0.16,
+    metalness: 0.12,
+    roughness: 0.62,
   });
-  for (const x of [-0.073, 0.073])
-    box(lantern, 0x555245, x, 0, 0, 0.022, 0.19, 0.16);
-  box(lantern, 0x7b714f, 0, 0.11, 0, 0.18, 0.04, 0.18);
-  box(lantern, 0x7b714f, 0, -0.11, 0, 0.18, 0.04, 0.18);
-  if (character === "Dwarf") body.scale.set(1.2, 0.83, 1.12);
-  if (character === "Ogre") body.scale.set(1.28, 1.2, 1.18);
-  ring(g, 0xe6d091, 0.38, 0.012);
   addHeroOutline(body);
   return g;
 }
@@ -511,6 +635,8 @@ export function building(id) {
     torch(g, -0.9, 0.85, 0.35);
     torch(g, 0.9, 0.85, 0.35);
     ring(g, 0xa4d3c0, 0.52, 0.02);
+    box(g, 0x4e6a48, -0.95, 0.16, 0.45, 0.28, 0.08, 0.22);
+    box(g, 0x5c6a58, 0.95, 0.22, 0.2, 0.16, 0.1, 0.16);
     for (const x of [-0.64, 0.64])
       for (let i = 0; i < 3; i++)
         box(g, 0xa8b594, x, 0.52 + i * 0.23, 0.358, 0.12, 0.026, 0.025, {
@@ -533,9 +659,10 @@ export function building(id) {
       );
       rock.scale.y *= 1.8;
     }
-    cylinder(g, 0xf1b447, 0, 0.04, 0, 0.52, 0.08, 24).material = mat(0xee872d, {
+    cylinder(g, 0x2a2624, 0, 0.02, 0, 0.7, 0.04, 12);
+    cylinder(g, 0xf1b447, 0, 0.05, 0, 0.34, 0.06, 12).material = mat(0xc45a28, {
       emissive: 0xff5a16,
-      emissiveIntensity: 2.5,
+      emissiveIntensity: 0.85,
     });
     for (let i = 0; i < 5; i++) {
       const shard = cone(
@@ -610,6 +737,21 @@ export function building(id) {
     block(g, "wood", 0x8c7046, 0.42, 0.27, 1.02, 0.45, 0.42, 0.36);
     for (const z of [0.86, 1.2])
       box(g, 0x4c4b3c, 0.42, 0.27, z, 0.46, 0.06, 0.025);
+    box(g, id === 12 ? 0x8b5750 : 0x6a5340, 0, 1.48, 1.22, 0.42, 0.32, 0.05);
+    box(g, 0xf0e6d0, 0, 1.48, 1.26, 0.28, 0.18, 0.02);
+  }
+  if (id === 69) {
+    box(g, 0x6d8a55, -0.78, 0.14, 0.95, 0.32, 0.18, 0.18);
+    box(g, 0xc45b4a, 0.62, 0.16, 0.98, 0.14, 0.18, 0.12);
+    box(g, 0xe6c56a, 0.62, 0.28, 0.98, 0.08, 0.08, 0.08);
+  }
+  if (id === 16 || id === 15) {
+    for (const x of [-0.48, 0.48]) cylinder(g, 0xd5d0bc, x, 0.72, 0.9, 0.08, 1.2, 6);
+    block(g, "stone", 0xe4dfcb, 0, 1.34, 0.9, 1.25, 0.1, 0.24);
+  }
+  if (id === 10) {
+    box(g, 0x1f5c64, -0.64, 2.2, 0.02, 0.05, 0.62, 0.02);
+    box(g, 0xf2e2b0, -0.64, 2.55, 0.02, 0.16, 0.1, 0.02);
   }
   return g;
 }
@@ -625,7 +767,20 @@ export function itemModel(tile) {
       box(g, 0x36423f, 0, 0.34 + i * 0.37, 0.493, 0.98, 0.025, 0.015);
     return g;
   }
-  if ([5, 13, 56, 93].includes(id)) {
+  if (id === 56) {
+    g.userData.stairDirection = "up";
+    g.userData.stairBlocked = false;
+    cylinder(g, 0x3a322c, 0, 0.06, 0, 0.46, 0.12, 10);
+    cylinder(g, 0x14110e, 0, 0.1, 0, 0.28, 0.22, 10);
+    ring(g, 0xc47a3a, 0.4, 0.14);
+    for (const x of [-0.12, 0.12]) box(g, 0x8a7050, x, 0.48, 0.08, 0.04, 0.72, 0.04);
+    for (const y of [0.28, 0.48, 0.68]) box(g, 0x8a7050, 0, y, 0.08, 0.28, 0.03, 0.03);
+    const arrow = cone(g, 0xffe08a, 0, 0.98, 0, 0.13, 0.2, 3);
+    arrow.name = "up-arrow";
+    unlitAccent(g, 0xffe08a, 0, 0.16, 0, 0.72, 0.04, 0.72, "stair-accent");
+    return g;
+  }
+  if ([5, 13, 93].includes(id)) {
     const up = id !== 13;
     const blocked = !!tile.stair?.blocked;
     g.userData.stairDirection = up ? "up" : "down";
@@ -673,6 +828,10 @@ export function itemModel(tile) {
       arrow.name = up ? "up-arrow" : "down-arrow";
     }
     ring(g, up ? 0x9ac8a1 : 0xb49d6b, 0.46);
+    if (id === 93) {
+      for (const x of [-0.5, 0.5]) box(g, 0x6a5438, x, 0.55, -0.15, 0.08, 1.05, 0.08);
+      box(g, 0x8a7048, 0, 1.08, -0.15, 1.1, 0.08, 0.08);
+    }
     return g;
   }
   if (id === 19 || id === 20) {
@@ -691,7 +850,7 @@ export function itemModel(tile) {
   if (id === 7 || id === 17) {
     const wet = id === 7;
     g.userData.fountain = wet ? "flowing" : "dry";
-    cylinder(g, 0x81958e, 0, 0.09, 0, 0.44, 0.18, 10);
+    cylinder(g, wet ? 0x6f8f86 : 0x6a6558, 0, 0.09, 0, 0.44, 0.18, 10);
     const rim = new THREE.Mesh(geometry("fountain-rim", () => new THREE.TorusGeometry(0.36, 0.08, 6, 10)), mat(0x81958e));
     rim.rotation.x = -Math.PI / 2;
     rim.position.y = 0.29;
@@ -985,6 +1144,8 @@ export function itemModel(tile) {
 export function monsterModel(monster) {
   const g = new THREE.Group(),
     n = monster.name.toLowerCase();
+  g.userData.presentation = "fallback";
+  g.userData.artPath = null;
   g.add(contactDisc(0.4));
   let c = 0x918876;
   try {

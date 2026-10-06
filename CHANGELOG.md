@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.56 — Fantasy diorama
+
+- Stone and grass keep their pictures, with worn edges, moss, and dirt so floors repeat less
+- Town landmarks read apart: shop signs, the college banner, bank columns, the home garden, the cave mouth, and the volcano
+- The surface shaft is a laddered well, distinct from stairs and the town gate
+- The eight callings have their own silhouette, and the weapon in hand is the one you wield
+- Lemming, gnome, jackal, floating eye, and red dragon are small sculpted creatures. The other creatures keep their pictures
+- Fire, ice, lightning, and protective magic move differently, and Balanced stays the quiet preset
+
 ## 1.3.55 — Play screen links
 
 - About and What’s New sit at the top right, beside the field guide

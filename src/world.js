@@ -6,9 +6,10 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, surface, surfaceLambert, surfaceBasic, noise, stoneTint } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, stoneTint } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
+import { createCreatureModel } from "./creature-models.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
 import { wallHeight, wallLip } from "./wall-cut.js";
@@ -283,6 +284,24 @@ export class World {
     this.grassFloor.count = 0;
     this.grassFloor.receiveShadow = true;
     this.scene.add(this.grassFloor);
+    this.rubble = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.11, 0),
+      matBasic(0x5e655c),
+      48,
+    );
+    this.embers = new THREE.InstancedMesh(
+      new THREE.ConeGeometry(0.045, 0.12, 4),
+      matBasic(0xff7a3c, { toneMapped: false }),
+      24,
+    );
+    for (const decor of [this.rubble, this.embers]) {
+      decor.count = 0;
+      decor.visible = false;
+      decor.castShadow = false;
+      decor.receiveShadow = false;
+      decor.frustumCulled = false;
+      this.scene.add(decor);
+    }
     this.cooperationAura = createCooperationAura();
     this.scene.add(this.cooperationAura);
     const wallGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -401,6 +420,8 @@ export class World {
     this.lastCamQuat = new THREE.Quaternion();
     this.lastCamQuatValid = false;
     this.identityQ = new THREE.Quaternion();
+    this.spinQ = new THREE.Quaternion();
+    this.scratchEuler = new THREE.Euler();
     this.heldCameraOffset = null;
     this.pickHits = [];
     this.cameraLive = false;
@@ -578,13 +599,18 @@ export class World {
         monsterFastPath: this.monsterFastPath,
         revFastPath: this.revFastPath,
         ...monsterArtMetrics(),
+        ...this.creaturePresentation(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
       }),
       beginExpeditionCamera: () => this.beginExpeditionCamera(),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
         uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
-        facing: { ...mesh.userData.facing }, art: mesh.userData.artPath,
+        facing: { ...mesh.userData.facing },
+        facingYaw: mesh.rotation.y,
+        presentation: mesh.userData.presentation || (mesh.userData.artPath ? "sprite" : "fallback"),
+        model: mesh.userData.modelKey || null,
+        art: mesh.userData.artPath || null,
         mirrored: mesh.userData.artwork?.scale.x < 0,
       })),
       props: () => [...this.objects.values()].flatMap(({ mesh }) => {
@@ -741,7 +767,21 @@ export class World {
     this.heroRightLeg = this.player.getObjectByName("right-leg");
     this.heroWeapon = this.player.getObjectByName("weapon");
     this.heroCape = this.player.getObjectByName("cape");
+    this.heroLeftArm = this.player.getObjectByName("left-arm");
+    this.heroRightArm = this.player.getObjectByName("right-arm");
     this.heroWeaponKey = null;
+  }
+  creaturePresentation() {
+    let model = 0;
+    let sprite = 0;
+    let fallback = 0;
+    for (const actor of this.monsters.values()) {
+      const presentation = actor.mesh.userData.presentation;
+      if (presentation === "model") model++;
+      else if (presentation === "sprite") sprite++;
+      else fallback++;
+    }
+    return { creatureModels: model, creatureSprites: sprite, creatureFallbacks: fallback };
   }
   syncHeroWeapon(state) {
     const grip = this.heroWeapon;
@@ -807,8 +847,11 @@ export class World {
       this.fill.visible = false;
       if (this.scene.fog) this.scene.fog.density = 0;
     }
-    if (this.state)
-      this.fill.color.set(volcano ? 0xb54c35 : town ? 0x78b9cf : 0x8eb8c9);
+    if (this.state) {
+      this.fill.color.set(
+        volcano ? 0xb54c35 : town ? (cinematic ? 0xd7b07a : 0x78b9cf) : 0x8eb8c9,
+      );
+    }
     this.disablePointLights();
   }
   disablePointLights() {
@@ -878,21 +921,44 @@ export class World {
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     if (cinematic) this.markShadowUpdate();
   }
-  floorSurface(kind, color) {
+  floorSurface(kind, color, extra) {
     const dungeon = this.state && this.state.level !== 0;
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
-    if (dungeon) return surfaceBasic(kind, color);
+    if (dungeon) return surfaceBasic(kind, color, extra);
     return this.quality === "cinematic"
-      ? surface(kind, color)
-      : surfaceLambert(kind, color);
+      ? surface(kind, color, extra)
+      : surfaceLambert(kind, color, extra);
   }
   applyFloorMaterials() {
     const tint = stoneTint(this.state?.level ?? 0);
+    const courses = shiftedTexture("stone", "courses", 0.37, 0.19);
     this.floor.material = this.floorSurface("stone", tint.floor);
     this.grassFloor.material = this.floorSurface("grass", 0xffffff);
-    this.walls.material = this.floorSurface("stone", tint.wall);
-    this.caps.material = this.floorSurface("stone", tint.cap);
+    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses });
+    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses });
+  }
+  floorVariation(level, grass, x, y) {
+    const n = noise(x, y);
+    const n2 = noise(x + 11, y + 4);
+    if (grass) {
+      this.scratchColor.setRGB(0.52 + n * 0.22, 0.58 + n2 * 0.16, 0.36 + n * 0.08);
+      return this.scratchColor;
+    }
+    if (!level) {
+      this.scratchColor.setHex(0xb6b49c).multiplyScalar(0.84 + n * 0.2);
+      return this.scratchColor;
+    }
+    if (level > 15) {
+      if (n > 0.94) this.scratchColor.setRGB(1.15, 0.58, 0.34);
+      else this.scratchColor.setRGB(0.7 + n2 * 0.12, 0.64 + n * 0.08, 0.58 + n2 * 0.04);
+      return this.scratchColor;
+    }
+    const base = 0.95 + n * 0.08;
+    if (n2 > 0.88) this.scratchColor.setRGB(base * 0.9, base * 1.03, base * 0.86);
+    else if (n2 < 0.1) this.scratchColor.setRGB(base * 1.04, base * 0.95, base * 0.84);
+    else this.scratchColor.setRGB(base, base, base * 0.98);
+    return this.scratchColor;
   }
   markShadowUpdate() {
     this.renderer.shadowMap.needsUpdate = true;
@@ -1250,6 +1316,8 @@ export class World {
     this.lamps.length = 0;
     const rebuildFloors = isNew || this.floorHash !== floorHash;
     this.floorHash = floorHash;
+    let rubbleIndex = 0;
+    let emberIndex = 0;
     const matrix = this.scratchMatrix;
     const takeLamp = (x, y, z) => {
       const lamp =
@@ -1266,20 +1334,36 @@ export class World {
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
       if (rebuildFloors) {
-        const color = this.scratchColor.set(
-          grass ? 0xa0af80 : state.level === 0 ? 0xb6b49c : 0xffffff,
+        const color = this.floorVariation(state.level, grass, t.x, t.y);
+        this.spinQ.setFromAxisAngle(
+          UP,
+          Math.floor(noise(t.x + 4, t.y + 9) * 4) * (Math.PI / 2),
         );
-        // Dungeon variation stays near white so the material multiply is the tint.
-        color.multiplyScalar(
-          state.level === 0 || grass
-            ? 0.82 + noise(t.x, t.y) * 0.23
-            : 0.96 + noise(t.x, t.y) * 0.08,
-        );
-        matrix.makeTranslation(t.x, -0.105, t.y);
+        this.scratchPosition.set(t.x, -0.105, t.y);
+        this.scratchScale.set(1, 1, 1);
+        matrix.compose(this.scratchPosition, this.spinQ, this.scratchScale);
         const floor = grass ? this.grassFloor : this.floor,
           index = grass ? grassIndex++ : floorIndex++;
         floor.setMatrixAt(index, matrix);
         floor.setColorAt(index, color);
+        const roll = noise(t.x + 40, t.y + 11);
+        if (!t.wall && t.id === 0 && state.level > 0 && state.level <= 15 && roll > 0.965 && rubbleIndex < 48) {
+          this.scratchEuler.set(0, roll * 6, 0);
+          this.spinQ.setFromEuler(this.scratchEuler);
+          const size = 0.65 + noise(t.x + 2, t.y + 6) * 0.7;
+          this.scratchPosition.set(t.x + (noise(t.x, t.y + 3) - 0.5) * 0.4, 0.06, t.y + (noise(t.x + 5, t.y) - 0.5) * 0.4);
+          this.scratchScale.set(size, size * 0.6, size);
+          matrix.compose(this.scratchPosition, this.spinQ, this.scratchScale);
+          this.rubble.setMatrixAt(rubbleIndex++, matrix);
+        }
+        if (!t.wall && t.id === 0 && state.level > 15 && roll > 0.94 && emberIndex < 24) {
+          this.scratchEuler.set(0, roll * 4, 0);
+          this.spinQ.setFromEuler(this.scratchEuler);
+          this.scratchPosition.set(t.x + (noise(t.x + 1, t.y) - 0.5) * 0.5, 0.07, t.y + (noise(t.x, t.y + 2) - 0.5) * 0.5);
+          this.scratchScale.set(1, 0.8 + noise(t.x + 7, t.y) * 0.6, 1);
+          matrix.compose(this.scratchPosition, this.spinQ, this.scratchScale);
+          this.embers.setMatrixAt(emberIndex++, matrix);
+        }
       }
       if (t.wall) this.wallCells.push(t);
       if (t.store && t.id !== 55) takeLamp(t.x - 0.2, 1.25, t.y + 0.75);
@@ -1358,6 +1442,14 @@ export class World {
         if (m.instanceColor) m.instanceColor.needsUpdate = true;
         m.computeBoundingSphere();
       }
+      this.rubble.count = rubbleIndex;
+      this.embers.count = emberIndex;
+      this.rubble.visible = rubbleIndex > 0;
+      this.embers.visible = emberIndex > 0;
+      this.rubble.instanceMatrix.needsUpdate = true;
+      this.embers.instanceMatrix.needsUpdate = true;
+      if (rubbleIndex) this.rubble.computeBoundingSphere();
+      if (emberIndex) this.embers.computeBoundingSphere();
     }
     for (const [key, o] of this.objects)
       if (!ids.has(key)) {
@@ -1401,6 +1493,7 @@ export class World {
       }
       if (!actor) {
         const mesh =
+          createCreatureModel(monster) ||
           monsterSprite(monster, () => this.invalidate()) ||
           monsterModel(monster);
         mesh.position.set(tile.x, 0, tile.y);
@@ -1584,18 +1677,34 @@ export class World {
       changed++;
       this.scratchPosition.set(t.x, h / 2 - 0.01, t.y);
       this.scratchScale.set(0.985, h, 0.985);
+      this.spinQ.setFromAxisAngle(
+        UP,
+        Math.floor(noise(t.x + 4, t.y + 9) * 4) * (Math.PI / 2),
+      );
       this.scratchMatrix.compose(
         this.scratchPosition,
-        this.identityQ,
+        this.spinQ,
         this.scratchScale,
       );
       this.walls.setMatrixAt(i, this.scratchMatrix);
+      if (layoutChanged) {
+        const drift = 0.93 + noise(t.x + 17, t.y + 6) * 0.1;
+        const moss = noise(t.x + 2, t.y + 21) > 0.84;
+        const scorch = this.state.level > 15 ? 0.82 : 1;
+        this.scratchColor.setRGB(
+          drift * (moss ? 0.9 : 1) * scorch,
+          drift * (moss ? 1.04 : 1) * scorch,
+          drift * (moss ? 0.88 : 1) * scorch,
+        );
+        this.walls.setColorAt(i, this.scratchColor);
+        this.caps.setColorAt(i, this.scratchColor);
+      }
       const lip = wallLip(h, town);
       this.scratchPosition.y = lip.y;
       this.scratchScale.set(lip.overhang, lip.thickness, lip.overhang);
       this.scratchMatrix.compose(
         this.scratchPosition,
-        this.identityQ,
+        this.spinQ,
         this.scratchScale,
       );
       this.caps.setMatrixAt(i, this.scratchMatrix);
@@ -1606,6 +1715,7 @@ export class World {
     if (!changed) return;
     for (const mesh of [this.walls, this.caps]) {
       mesh.instanceMatrix.needsUpdate = true;
+      if (layoutChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       if (layoutChanged) mesh.computeBoundingSphere();
     }
     if (layoutChanged) this.markShadowUpdate();
@@ -1783,14 +1893,21 @@ export class World {
           this.heroLeftLeg.rotation.x = Math.sin(this.walkAge * 26) * 0.45 * walk;
         if (this.heroRightLeg)
           this.heroRightLeg.rotation.x = Math.sin(this.walkAge * 26) * -0.45 * walk;
+        if (this.heroLeftArm)
+          this.heroLeftArm.rotation.x = Math.sin(this.walkAge * 26) * -0.4 * walk;
+        if (this.heroRightArm)
+          this.heroRightArm.rotation.x = Math.sin(this.walkAge * 26) * 0.4 * walk;
         const weapon = this.heroWeapon;
-        if (weapon)
-          weapon.rotation.x =
-            this.castAge < 0.65
-              ? -Math.sin(this.castAge / 0.65 * Math.PI) * 1.9
-              : this.attackAge < 0.3
+        if (weapon) {
+          const casting = this.castAge < 0.65;
+          const attacking = this.attackAge < 0.3;
+          weapon.rotation.x = casting
+            ? -Math.sin(this.castAge / 0.65 * Math.PI) * 1.9
+            : attacking
               ? -Math.sin((this.attackAge / 0.3) * Math.PI) * 1.4
               : 0;
+          weapon.rotation.z = attacking ? Math.sin((this.attackAge / 0.3) * Math.PI) * 0.45 : 0;
+        }
         if (this.heroCape) this.heroCape.rotation.x = -0.25 + Math.sin(this.tick * 2) * 0.035;
       }
     }
@@ -1836,10 +1953,18 @@ export class World {
       this.lastCamQuatValid = true;
     }
     for (const { mesh, target } of this.monsters.values()) {
-      if (mesh.position.distanceToSquared(target) < 0.0004) mesh.position.copy(target);
+      const moving = mesh.position.distanceToSquared(target) > 0.0004;
+      if (!moving) mesh.position.copy(target);
       else mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
-      if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
-      if (camTurned) faceMonster(mesh, null, this.camera);
+      const body = mesh.userData.body;
+      if (body) {
+        const base = mesh.userData.hover || 0;
+        body.position.y = !this.reduced && moving
+          ? base + Math.abs(Math.sin(this.tick * 16 + mesh.id)) * 0.04
+          : base;
+      }
+      if (moving) this.hasMotion = true;
+      if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
     }
     if (camTurned) {
       for (const art of this.billboards) faceItem(art, this.camera);
