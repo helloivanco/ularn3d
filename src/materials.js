@@ -18,25 +18,43 @@ export function texture(kind) {
   c.fillStyle = kind === "grass" ? "#7c886d" : "#8a8980";
   c.fillRect(0, 0, TEX, TEX);
   if (kind === "grass") {
+    for (let i = 0; i < 16; i++) {
+      const dirt = noise(i, 21) > 0.45;
+      c.fillStyle = dirt ? "rgba(92,74,46,0.28)" : "rgba(62,86,48,0.34)";
+      c.beginPath();
+      c.ellipse(
+        noise(i, 22) * TEX,
+        noise(i, 23) * TEX,
+        8 + noise(i, 24) * 22,
+        5 + noise(i, 25) * 14,
+        noise(i, 26) * 3,
+        0,
+        Math.PI * 2,
+      );
+      c.fill();
+    }
     for (let i = 0; i < 2800; i++) {
-      const v = Math.floor(85 + noise(i, 2) * 80);
-      c.fillStyle = `rgba(${v},${v + 8},${v - 12},.32)`;
+      const v = Math.floor(70 + noise(i, 2) * 100);
+      const moss = noise(i, 7) > 0.72;
+      c.fillStyle = moss
+        ? `rgba(${v - 20},${v + 16},${v - 28},.4)`
+        : `rgba(${v},${v + 8},${v - 16},.34)`;
       c.fillRect(
         noise(i, 3) * TEX,
         noise(i, 4) * TEX,
         1 + noise(i, 5) * 3,
-        1 + noise(i, 6) * 4,
+        1 + noise(i, 6) * 5,
       );
     }
     for (let i = 0; i < 40; i++) {
-      c.fillStyle = "#b6b79430";
+      c.fillStyle = noise(i, 11) > 0.6 ? "#8a734430" : "#b6b79430";
       c.beginPath();
       c.ellipse(
         noise(i, 7) * TEX,
         noise(i, 8) * TEX,
         noise(i, 9) * 8,
         noise(i, 10) * 5,
-        0,
+        noise(i, 12),
         0,
         Math.PI * 2,
       );
@@ -67,22 +85,54 @@ export function texture(kind) {
         const px = x * size + (y % 2 ? size / 2 : 0),
           py = y * size;
         const v = 100 + Math.floor(noise(x + 40, y + 50) * 55);
-        c.fillStyle = `rgb(${v + 5},${v + 7},${v})`;
+        const wear = noise(x + 2, y + 6);
+        const chip = wear > 0.82 ? 3 : 0;
+        c.fillStyle = `rgb(${v + 5},${v + 7},${v - (wear < 0.18 ? 8 : 0)})`;
         c.beginPath();
         c.roundRect(
-          px + 1,
+          px + 1 + chip * 0.3,
           py + 1,
-          size - 2,
-          size - (roof ? 1 : 2),
-          roof ? 1 : 3,
+          size - 2 - chip,
+          size - (roof ? 1 : 2) - (wear > 0.9 ? 2 : 0),
+          roof ? 1 : 2 + wear * 2,
         );
         c.fill();
-        c.strokeStyle = "#ffffff20";
+        if (!roof && wear > 0.74) {
+          c.fillStyle = "rgba(58,78,48,0.35)";
+          c.fillRect(px + 3, py + size - 7, size - 8, 3);
+        }
+        c.strokeStyle = wear > 0.5 ? "#ffffff14" : "#ffffff22";
         c.beginPath();
         c.moveTo(px + 3, py + 2);
-        c.lineTo(px + size - 3, py + 2);
+        c.lineTo(px + size - 4, py + 2);
         c.stroke();
       }
+    if (!roof) {
+      for (let i = 0; i < 22; i++) {
+        c.strokeStyle = `rgba(28,24,18,${0.2 + noise(i, 20) * 0.45})`;
+        c.lineWidth = 1;
+        c.beginPath();
+        const x = noise(i, 21) * TEX;
+        const y = noise(i, 22) * TEX;
+        c.moveTo(x, y);
+        c.lineTo(x + (noise(i, 23) - 0.5) * 36, y + 6 + noise(i, 24) * 26);
+        c.stroke();
+      }
+      for (let i = 0; i < 12; i++) {
+        c.fillStyle = `rgba(86,68,40,${0.1 + noise(i, 40) * 0.16})`;
+        c.beginPath();
+        c.ellipse(
+          noise(i, 41) * TEX,
+          noise(i, 42) * TEX,
+          8 + noise(i, 43) * 18,
+          4 + noise(i, 44) * 10,
+          noise(i, 45),
+          0,
+          Math.PI * 2,
+        );
+        c.fill();
+      }
+    }
     for (let i = 0; i < 1800; i++) {
       c.fillStyle = noise(i, 11) > 0.5 ? "#ffffff0b" : "#00000016";
       c.fillRect(noise(i, 12) * TEX, noise(i, 13) * TEX, 1.2, 1.2);
@@ -99,6 +149,20 @@ export function texture(kind) {
   map.minFilter = THREE.LinearMipmapNearestFilter;
   map.generateMipmaps = true;
   maps.set(kind, map);
+  return map;
+}
+
+/** Same canvas as texture(kind), sampled on a different phase so walls do not share the floor courses. */
+export function shiftedTexture(kind, key, ox, oy) {
+  const id = `${kind}@${key}`;
+  if (maps.has(id)) return maps.get(id);
+  const map = texture(kind).clone();
+  map.offset.set(ox, oy);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = 2;
+  map.generateMipmaps = true;
+  map.needsUpdate = true;
+  maps.set(id, map);
   return map;
 }
 export function mat(color, extra = {}) {

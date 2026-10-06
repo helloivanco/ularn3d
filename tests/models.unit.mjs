@@ -34,7 +34,84 @@ test("shared solids stay cheap enough for web GPU fill", () => {
 });
 
 test("the hero no longer pays rounded-box and dense-torus tax", () => {
-  assert.ok(triangles(hero()) < 900);
+  for (const name of ["Adventurer", "Wizard", "Rogue", "Elf", "Dwarf", "Ogre", "Klingon", "Rambo"]) {
+    assert.ok(triangles(hero(name)) < 900, `${name} is ${triangles(hero(name))} triangles`);
+  }
+});
+
+test("classes keep distinct silhouettes and starting weapons", () => {
+  const weapons = {
+    Adventurer: "dagger",
+    Rogue: "dagger",
+    Dwarf: "spear",
+    Rambo: "lance",
+    Wizard: "unarmed",
+    Elf: "unarmed",
+    Ogre: "unarmed",
+    Klingon: "unarmed",
+  };
+  const helms = {
+    Adventurer: "helm",
+    Wizard: "hat",
+    Rogue: "hood",
+    Elf: "ears",
+    Dwarf: "helm",
+    Ogre: "tusks",
+    Klingon: "brow",
+    Rambo: "band",
+  };
+  for (const [name, type] of Object.entries(weapons)) {
+    const player = hero(name);
+    assert.equal(player.userData.heroClass, name);
+    assert.equal(player.userData.helm, helms[name]);
+    assert.equal(player.getObjectByName("weapon").userData.weaponType, type);
+    assert.ok(player.getObjectByName("left-arm"));
+    assert.ok(player.getObjectByName("right-arm"));
+    assert.ok(player.getObjectByName("contact-disc"));
+    let outlines = 0;
+    player.traverse((obj) => { if (obj.name === "hero-outline") outlines++; });
+    assert.ok(outlines > 4, name);
+    assert.equal(!!player.getObjectByName("lantern"), name === "Adventurer");
+  }
+  assert.ok(hero("Dwarf").getObjectByName("body").scale.y < 0.9);
+  assert.ok(hero("Ogre").getObjectByName("body").scale.x > 1.2);
+  assert.equal(hero("Wizard").getObjectByName("cape")?.name, "cape");
+  assert.equal(hero("Rogue").getObjectByName("cape"), undefined);
+  assert.equal(new Set(Object.values(helms)).size, 7);
+});
+
+test("representative species use procedural models and the rest stay sprites", async () => {
+  if (!globalThis.document?.createElementNS) {
+    globalThis.document = {
+      createElementNS() {
+        return { addEventListener() {}, removeEventListener() {}, set src(_) {} };
+      },
+    };
+  }
+  const { createCreatureModel, CREATURE_MODELS } = await import("../src/creature-models.js");
+  const { monsterSprite } = await import("../src/monster-art.js");
+  const { faceMonster } = await import("../src/monster-art.js");
+  assert.deepEqual(Object.keys(CREATURE_MODELS).map(Number).sort((a, b) => a - b), [1, 2, 4, 12, 56]);
+  for (const [id, key] of Object.entries(CREATURE_MODELS)) {
+    const model = createCreatureModel({ id: Number(id), name: key });
+    assert.equal(model.userData.presentation, "model");
+    assert.equal(model.userData.modelKey, key);
+    assert.equal(model.userData.artPath, null);
+    assert.ok(model.getObjectByName("contact-disc"));
+    assert.ok(model.userData.body);
+    let outlines = 0;
+    model.traverse((obj) => { if (obj.name === "hero-outline") outlines++; });
+    assert.equal(outlines, 0, key);
+    faceMonster(model, { x: -1, y: 0 }, null);
+    assert.ok(Math.abs(model.rotation.y - Math.PI / 2) < 0.001, key);
+  }
+  assert.equal(createCreatureModel({ id: 45, name: "gnome king" }), null);
+  assert.equal(createCreatureModel({ id: 3, name: "hobgoblin" }), null);
+  const gnome = createCreatureModel({ id: 2, name: "gnome" });
+  assert.equal(gnome.getObjectByName("staff"), undefined);
+  const sprite = monsterSprite({ id: 3, name: "hobgoblin" });
+  assert.equal(sprite.userData.presentation, "sprite");
+  assert.equal(sprite.userData.artPath, "/engine/img/m3.png");
 });
 
 test("pits dart traps and express elevators use distinct graphics", () => {

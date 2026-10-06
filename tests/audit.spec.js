@@ -376,8 +376,8 @@ test("clicking a building roof selects that building rather than the floor behin
   });
   await page.locator("#camera-reset").click();
   const s = await snap(page);
-  // Project the front roof into the viewport using the documented reset camera.
-  const offset = [2.8, 15.5, 8.5],
+  // North reset camera: no yaw, elevation 15.5, distance hypot(2.8, 8.5).
+  const offset = [0, 15.5, Math.hypot(2.8, 8.5)],
     [ox, oy, oz] = offset,
     length = Math.hypot(...offset),
     horizontal = Math.hypot(ox, oz);

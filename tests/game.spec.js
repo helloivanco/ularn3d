@@ -150,18 +150,34 @@ test("hidden traps, invisible demons, blindness, and unexplored tiles do not lea
     setKnow(11, 8, KNOWALL);
     setKnow(12, 8, KNOWNOT);
     paint();
-    const hidden = ularn.snapshot();
+    const hiddenSnap = ularn.snapshot();
+    const hiddenLive = hiddenSnap.tiles.find((t) => t.x === 11 && t.y === 8);
+    // snapshot() reuses its tile buffer, so copy before the next paint.
+    const hidden = {
+      id: hiddenLive.id,
+      monster: hiddenLive.monster ? { id: hiddenLive.monster.id } : null,
+    };
+    const unknown = hiddenSnap.tiles.some((t) => t.x === 12 && t.y === 8);
     take(createObject(OLARNEYE));
     paint();
-    const revealed = ularn.snapshot();
+    const revealedLive = ularn
+      .snapshot()
+      .tiles.find((t) => t.x === 11 && t.y === 8);
+    const revealed = {
+      monster: revealedLive.monster ? { id: revealedLive.monster.id } : null,
+    };
     player.BLINDCOUNT = 5;
     paint();
-    const blind = ularn.snapshot();
+    const blindLive = ularn
+      .snapshot()
+      .tiles.find((t) => t.x === 11 && t.y === 8);
     return {
-      hidden: hidden.tiles.find((t) => t.x === 11 && t.y === 8),
-      unknown: hidden.tiles.some((t) => t.x === 12 && t.y === 8),
-      revealed: revealed.tiles.find((t) => t.x === 11 && t.y === 8),
-      blind: blind.tiles.find((t) => t.x === 11 && t.y === 8),
+      hidden,
+      unknown,
+      revealed,
+      blind: {
+        monster: blindLive.monster ? { id: blindLive.monster.id } : null,
+      },
     };
   });
   expect(results.hidden.id).toBe(0);

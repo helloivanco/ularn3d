@@ -39,18 +39,22 @@ test("overhead view, species art and facing survive monster movement", async ({ 
     setMonster(12, 8, createMonster(GNOME));
     setMonster(14, 8, createMonster(JACKAL));
     setMonster(11, 9, createMonster(LEMMING));
+    setMonster(15, 11, createMonster(HOBGOBLIN));
     setItem(7, 6, OSTAIRSUP);
     setItem(8, 6, OSTAIRSDOWN);
     setItem(7, 10, OFOUNTAIN);
     setItem(8, 10, ODEADFOUNTAIN);
     paint();
   });
-  await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().length)).toBe(3);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().length)).toBe(4);
   const before = await page.evaluate(() => ({ creatures: ularnGraphics.creatures(), metrics: ularnGraphics.metrics() }));
   expect(before.metrics.cameraElevation).toBeGreaterThan(55);
-  expect(before.creatures.find((m) => m.species === 2).art).toBe("/engine/img/m2.png");
-  expect(before.creatures.find((m) => m.species === 4).art).toBe("/engine/img/m4.png");
-  expect(before.creatures.find((m) => m.species === 1).art).toBe("/art/monsters/lemming.png");
+  expect(before.creatures.find((m) => m.species === 2)).toMatchObject({ presentation: "model", model: "gnome", art: null });
+  expect(before.creatures.find((m) => m.species === 4)).toMatchObject({ presentation: "model", model: "jackal", art: null });
+  expect(before.creatures.find((m) => m.species === 1)).toMatchObject({ presentation: "model", model: "lemming", art: null });
+  expect(before.creatures.find((m) => m.species === 3)).toMatchObject({ presentation: "sprite", art: "/engine/img/m3.png" });
+  expect(before.metrics.creatureModels).toBe(3);
+  expect(before.metrics.creatureSprites).toBe(1);
   const lemming = before.creatures.find((m) => m.species === 1);
   const facing = await page.evaluate(() => {
     mmove(11, 9, 10, 9); paint();
@@ -60,7 +64,8 @@ test("overhead view, species art and facing survive monster movement", async ({ 
   });
   expect(facing.left.uid).toBe(lemming.uid);
   expect(facing.right.uid).toBe(lemming.uid);
-  expect(facing.left.mirrored).not.toBe(facing.right.mirrored);
+  expect(facing.left.presentation).toBe("model");
+  expect(facing.left.facingYaw).not.toBe(facing.right.facingYaw);
   const gnome = before.creatures.find((m) => m.species === 2);
   await page.evaluate(() => { mmove(12, 8, 11, 8); paint(); });
   await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().find((m) => m.species === 2).facing.x)).toBe(-1);
@@ -455,7 +460,7 @@ test("idle and hidden rendering stops and gameplay wakes it without accumulating
     document.dispatchEvent(new Event("visibilitychange"));
   });
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(hidden);
-  await page.evaluate(() => { setMonster(13, 8, createMonster(GNOME)); paint(); });
+  await page.evaluate(() => { setMonster(13, 8, createMonster(HOBGOBLIN)); paint(); });
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().monsterTextures)).toBeGreaterThan(0);
   const spawned = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(spawned);
@@ -526,7 +531,7 @@ test("context recovery releases off-scene sprite resources and full disposal cle
   test.setTimeout(90000);
   await room(page);
   const state = await page.evaluate(() => {
-    setMonster(12, 8, createMonster(GNOME));
+    setMonster(12, 8, createMonster(HOBGOBLIN));
     paint();
     return ularn.snapshot();
   });

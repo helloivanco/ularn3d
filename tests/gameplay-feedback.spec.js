@@ -69,15 +69,25 @@ test("dungeon monsters pursue and attack on player turns with stable identity an
   });
   const after = await page.evaluate(() => {
     ularn.key(".");
-    const first = ularn.snapshot().tiles.find((tile) => tile.monster);
+    const live = ularn.snapshot().tiles.find((tile) => tile.monster);
+    // snapshot() reuses its tile buffer. Copy before later turns overwrite it.
+    const first = live
+      ? {
+          x: live.x,
+          monster: {
+            uid: live.monster.uid,
+            facing: { x: live.monster.facing.x, y: live.monster.facing.y },
+          },
+        }
+      : null;
     for (let turn = 0; turn < 5; turn++) ularn.key(".");
-    return { first, attacks: window.attacks, snapshot: ularn.snapshot() };
+    return { first, attacks: window.attacks, moves: ularn.snapshot().moves };
   });
   expect(after.first.x).toBeLessThan(14);
   expect(after.first.monster.uid).toBe(before.uid);
   expect(after.first.monster.facing.x).toBe(-1);
   expect(after.attacks).toBeGreaterThan(0);
-  expect(after.snapshot.moves).toBeGreaterThanOrEqual(6);
+  expect(after.moves).toBeGreaterThanOrEqual(6);
 });
 
 test("snapshot carries safe inventory, all active effect timers, and hidden-safe glyphs", async ({ page }) => {
