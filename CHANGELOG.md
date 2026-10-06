@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.58 — Different wall rats
+
+- Fewer rats sit on dungeon walls. A corridor shows one or two, not a row of copies
+- Each rat has its own size, color, facing, and pose, so two in one scene are not the same drawing
+- They stay scenery. You still cannot fight, loot, or click them
+
 ## 1.3.57 — Fewer lemmings
 
 - A cave keeps one lemming, so they no longer stand in a ring on the tiles around you

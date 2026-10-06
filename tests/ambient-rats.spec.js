@@ -72,8 +72,7 @@ test("ambient rats are capped decorative entities on dungeon walls", async ({ pa
     };
   });
 
-  expect(info.pool).toBeLessThanOrEqual(6);
-  expect(info.pool).toBeGreaterThanOrEqual(3);
+  expect(info.pool).toBe(2);
   expect(info.count).toBeLessThanOrEqual(info.pool);
   expect(info.interactive).toBe(false);
   expect(info.decorative).toBe(true);
@@ -84,6 +83,12 @@ test("ambient rats are capped decorative entities on dungeon walls", async ({ pa
     expect(rat.interactive).toBe(false);
     expect(rat.decorative).toBe(true);
     expect(rat.position.y).toBeGreaterThan(0.9);
+    expect(rat.appearance).toBeTruthy();
+  }
+  if (info.rats.length >= 2) {
+    const [a, b] = info.rats;
+    const sep = Math.max(Math.abs(a.position.x - b.position.x), Math.abs(a.position.z - b.position.z));
+    expect(sep).toBeGreaterThanOrEqual(5);
   }
 
   // Clicking a wall tile must not invent combat/inventory interaction with rats.
