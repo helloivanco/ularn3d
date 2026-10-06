@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.60 — Expedition audio
+
+- Town and the caves play quiet original music after you turn sound on. The volcano uses the cave music, lower and dryer
+- A step, a sword swing, a hit, a door, stairs, and a spell each sound once with the action, then stop
+- Sound stays off the title screen. The expedition control still silences music and effects together
+
 ## 1.3.59 — A real swing and a real step
 
 - A weapon stroke winds up, cuts, and follows through. The dagger in hand is a short blade. A spear or lance stays long

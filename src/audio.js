@@ -1,6 +1,7 @@
-// Local synthesis keeps every effect available offline. Voices are bounded and
-// disconnected on completion, including their filters and gain envelopes.
-// Every wieldable weapon id has its own attack voice; types cover bare hands.
+// Bundled beds and effects in public/audio. Nothing is fetched from the network.
+// Weapon and spell profiles still differ so each attack keeps its own pitch.
+// Reduced motion is not consulted here; visuals already honor that preference.
+import { bedForLevel } from "./expedition-cues.js";
 const WEAPONS = {
   unarmed: [90, 45, "sine", 0.11, 0.7],
   axe: [170, 45, "sawtooth", 0.27, 0.8],
@@ -83,148 +84,212 @@ export function spellProfile(spell = {}) {
   };
 }
 
+const FILES = {
+  town: "/audio/town.mp3",
+  cave: "/audio/cave.mp3",
+  step: "/audio/step.mp3",
+  swing: "/audio/swing.mp3",
+  hit: "/audio/hit.mp3",
+  door: "/audio/door.mp3",
+  stairs: "/audio/stairs.mp3",
+  spell: "/audio/spell.mp3",
+};
+
+const EFFECT_GAIN = {
+  step: 0.78,
+  swing: 0.7,
+  hit: 0.74,
+  door: 0.68,
+  stairs: 0.7,
+  spell: 0.46,
+};
+
+const rateForWeapon = (weapon) => {
+  const [frequency] = weaponProfile(weapon);
+  return Math.min(1.32, Math.max(0.7, frequency / 980));
+};
+
+const rateForSpell = (spell) => {
+  const profile = spellProfile(spell);
+  return Math.min(1.35, Math.max(0.78, profile.frequency / 520));
+};
+
 export class GameAudio {
   constructor() {
     this.context = null;
     this.voices = new Set();
     this.maxVoices = 24;
-    this.noise = null;
+    this.buffers = null;
+    this.loading = null;
+    this.fetched = null;
+    this.music = null;
+    this.duck = null;
+    this.bed = null;
+    this.enabled = false;
   }
   prepare() {
     this.context ??= new AudioContext();
-    if (this.context.state === "suspended") this.context.resume().catch(() => {});
-    if (!this.noise) {
-      const length = this.context.sampleRate;
-      this.noise = this.context.createBuffer(1, length, length);
-      const data = this.noise.getChannelData(0);
-      for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    if (!this.duck) {
+      this.duck = this.context.createGain();
+      this.duck.gain.value = 1;
+      this.duck.connect(this.context.destination);
     }
+    if (this.context.state === "suspended") this.context.resume().catch(() => {});
     return this.context;
   }
-  voice({
-    frequency = 200,
-    end = 100,
-    duration = 0.2,
-    delay = 0,
-    type = "sine",
-    volume = 0.025,
-    noise = false,
-  }) {
-    if (this.voices.size >= this.maxVoices) return;
-    const ctx = this.prepare(),
-      start = ctx.currentTime + delay;
-    const source = noise ? ctx.createBufferSource() : ctx.createOscillator();
+  prefetch() {
+    if (this.fetched || this.buffers) return;
+    this.fetched = Promise.all(
+      Object.entries(FILES).map(async ([key, url]) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Missing audio ${url}`);
+        return [key, await response.arrayBuffer()];
+      }),
+    ).catch(() => null);
+  }
+  async load() {
+    if (this.buffers) return this.buffers;
+    this.prefetch();
+    this.loading ??= (async () => {
+      const packed = await this.fetched;
+      if (!packed) return null;
+      const ctx = this.prepare();
+      const decoded = await Promise.all(
+        packed.map(async ([key, bytes]) => [key, await ctx.decodeAudioData(bytes.slice(0))]),
+      );
+      this.buffers = Object.fromEntries(decoded);
+      return this.buffers;
+    })().catch(() => null);
+    return this.loading;
+  }
+  startBed(kind) {
+    const buffer = this.buffers?.[kind === "volcano" ? "cave" : kind];
+    if (!buffer) return;
+    this.stopMusic();
+    const ctx = this.prepare();
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
-    let filter;
-    if (noise) {
-      source.buffer = this.noise;
-      filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.setValueAtTime(frequency, start);
-      filter.frequency.exponentialRampToValueAtTime(
-        Math.max(20, end),
-        start + duration,
-      );
-      source.connect(filter);
-      filter.connect(gain);
+    source.buffer = buffer;
+    source.loop = true;
+    filter.type = "lowpass";
+    if (kind === "volcano") {
+      source.playbackRate.value = 0.9;
+      filter.frequency.value = 1400;
+      gain.gain.value = 0.58;
+    } else if (kind === "cave") {
+      filter.frequency.value = 7200;
+      gain.gain.value = 0.68;
     } else {
-      source.type = type;
-      source.frequency.setValueAtTime(frequency, start);
-      source.frequency.exponentialRampToValueAtTime(
-        Math.max(20, end),
-        start + duration,
-      );
-      source.connect(gain);
+      filter.frequency.value = 12000;
+      gain.gain.value = 0.72;
     }
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.duck);
+    source.start();
+    this.music = { source, filter, gain, kind };
+    this.bed = kind;
+  }
+  stopMusic() {
+    const music = this.music;
+    this.music = null;
+    if (!music) return;
+    try {
+      music.source.stop();
+    } catch {
+      /* already stopped */
+    }
+    music.source.disconnect();
+    music.filter.disconnect();
+    music.gain.disconnect();
+  }
+  syncBed(level) {
+    this.bed = bedForLevel(level);
+    if (!this.enabled || !this.buffers) return;
+    if (this.music?.kind === this.bed) return;
+    this.startBed(this.bed);
+  }
+  enable(level) {
+    this.enabled = true;
+    this.bed = bedForLevel(level);
+    this.prepare();
+    this.load().then(() => {
+      if (this.enabled) this.syncBed(level);
+    }).catch(() => {});
+  }
+  stopVoices() {
+    for (const source of this.voices) {
+      try {
+        source.stop();
+      } catch {
+        /* already stopped */
+      }
+      source.onended?.();
+    }
+  }
+  hold() {
+    this.stopVoices();
+    if (this.context?.state === "running") return this.context.suspend().catch(() => {});
+  }
+  resume() {
+    if (!this.enabled) return;
+    this.prepare();
+    if (!this.music && this.bed) this.syncBed(this.bed === "town" ? 0 : this.bed === "volcano" ? 16 : 1);
+  }
+  suspend() {
+    this.enabled = false;
+    this.stopVoices();
+    this.stopMusic();
+    if (this.context?.state === "running") return this.context.suspend().catch(() => {});
+  }
+  effect(name, { rate = 1, volume = 0.6, delay = 0 } = {}) {
+    const buffer = this.buffers?.[name];
+    if (!buffer || this.voices.size >= this.maxVoices) return;
+    const ctx = this.prepare();
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime + delay;
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    gain.gain.setValueAtTime(volume, start);
+    source.connect(gain);
     gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     this.voices.add(source);
     source.onended = () => {
       source.disconnect();
-      filter?.disconnect();
       gain.disconnect();
       this.voices.delete(source);
       source.onended = null;
     };
     source.start(start);
-    source.stop(start + duration + 0.015);
+    source.stop(start + buffer.duration / rate + 0.02);
+    this.duck.gain.cancelScheduledValues(start);
+    this.duck.gain.setTargetAtTime(0.42, start, 0.015);
+    this.duck.gain.setTargetAtTime(1, start + 0.22, 0.08);
   }
   play(kind, detail = {}) {
     try {
-      if (document.hidden) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (!this.buffers) return;
       if (kind === "weapon") {
-        const [frequency, end, type, duration, weight] = weaponProfile(
-          detail.weapon,
-        );
-        this.voice({ frequency, end, type, duration, volume: 0.035 });
-        this.voice({
-          frequency: frequency * 2,
-          end,
-          duration: duration * 0.8,
-          noise: true,
-          volume: 0.045 * weight,
-        });
-        if (detail.hit)
-          this.voice({
-            frequency: 130,
-            end: 40,
-            duration: 0.1,
-            delay: 0.06,
-            volume: 0.025,
-          });
-      } else if (kind === "spell") {
-        const p = spellProfile(detail.spell);
-        for (let i = 0; i < p.pulses; i++)
-          this.voice({
-            frequency: p.frequency * (1 + i * 0.25),
-            end: p.frequency * p.endRatio,
-            type: p.type,
-            duration: p.duration,
-            delay: i * p.interval,
-            volume: 0.014,
-          });
-        if (["fire", "electric", "dark"].includes(p.family))
-          this.voice({
-            frequency: p.frequency * 3,
-            end: 90,
-            duration: p.duration,
-            noise: true,
-            volume: 0.025,
-          });
-      } else if (kind === "hurt")
-        this.voice({
-          frequency: 85,
-          end: 35,
-          type: "sawtooth",
-          duration: 0.16,
-          volume: 0.035,
-        });
-      else if (kind === "open")
-        this.voice({ frequency: 420, end: 620, duration: 0.12, volume: 0.016 });
-      else
-        this.voice({
-          frequency: 120,
-          end: 65,
-          duration: 0.07,
-          noise: true,
-          volume: 0.018,
-        });
+        const rate = rateForWeapon(detail.weapon);
+        this.effect("swing", { rate, volume: EFFECT_GAIN.swing });
+        if (detail.hit) this.effect("hit", { rate: Math.min(1.15, rate), volume: EFFECT_GAIN.hit, delay: 0.06 });
+        return;
+      }
+      if (kind === "spell") {
+        this.effect("spell", { rate: rateForSpell(detail.spell), volume: EFFECT_GAIN.spell });
+        return;
+      }
+      if (kind === "hurt") {
+        this.effect("hit", { rate: 0.74, volume: 0.4 });
+        return;
+      }
+      const name = kind === "open" ? "door" : kind;
+      if (EFFECT_GAIN[name]) this.effect(name, { volume: EFFECT_GAIN[name] });
     } catch {
       /* Audio support is optional; gameplay continues normally. */
     }
-  }
-  suspend() {
-    // Stop pending sounds before freezing the audio clock. Otherwise a full
-    // voice pool cannot drain while suspended, or old attacks replay on resume.
-    for (const source of this.voices) {
-      try {
-        source.stop();
-      } catch {}
-      source.onended?.();
-    }
-    if (this.context?.state === "running")
-      return this.context.suspend().catch(() => {});
   }
 }

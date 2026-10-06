@@ -59,7 +59,35 @@ test("effect rail and persistent pack refresh from engine changes without openin
 });
 
 test("every spell and weapon has a distinct sound and voices are released", async ({ page }) => {
+  await expect(page.locator("#sound")).toBeVisible();
   await page.locator("#sound").click();
+  await expect.poll(() => page.evaluate(() => window.ularnAudio?.music?.kind || "")).toBe("town");
+  const stepped = await page.evaluate(() => {
+    const heard = [];
+    const original = window.ularnAudio.play.bind(window.ularnAudio);
+    window.ularnAudio.play = (kind, detail) => {
+      heard.push(kind);
+      return original(kind, detail);
+    };
+    try {
+      const here = ularn.snapshot();
+      const next = here.tiles.find(
+        (tile) =>
+          !tile.wall &&
+          !tile.closed &&
+          Math.max(Math.abs(tile.x - here.x), Math.abs(tile.y - here.y)) === 1,
+      );
+      if (!next) return { heard, moved: false };
+      player.x = next.x;
+      player.y = next.y;
+      paint();
+      return { heard, moved: true };
+    } finally {
+      window.ularnAudio.play = original;
+    }
+  });
+  expect(stepped.moved).toBe(true);
+  expect(stepped.heard).toEqual(["step"]);
   const result = await page.evaluate(async () => {
     const { GameAudio, spellProfile, weaponProfile, weaponSoundKeys } = await import("/src/audio.js");
     const profiles = spelname.map((name, id) => JSON.stringify(spellProfile({name, id})));
@@ -69,12 +97,16 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
       ...weaponIds.map((id) => JSON.stringify(weaponProfile({ id, type: "sword" }))),
     ];
     window.testAudio = new GameAudio();
+    await testAudio.load();
+    testAudio.play("spell", { spell: { id: 0, name: spelname[0] } });
+    const one = testAudio.voices.size;
     for (let i = 0; i < 60; i++) testAudio.play("spell", { spell: { id: i % 39, name: spelname[i % 39] } });
     return {
       spells: new Set(profiles).size,
       count: spelname.length,
       weapons: new Set(weapons).size,
       weaponKeys: weaponSoundKeys().length,
+      one,
       voices: testAudio.voices.size,
       cap: testAudio.maxVoices,
     };
@@ -82,6 +114,7 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
   expect(result.spells).toBe(result.count);
   expect(result.weapons).toBe(15);
   expect(result.weaponKeys).toBeGreaterThanOrEqual(15);
+  expect(result.one).toBeGreaterThan(0);
   expect(result.voices).toBeLessThanOrEqual(result.cap);
   await page.evaluate(async () => {
     await testAudio.suspend();
@@ -90,5 +123,7 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
   });
   await expect.poll(() => page.evaluate(() => testAudio.context.state)).toBe("running");
   await expect.poll(() => page.evaluate(() => testAudio.voices.size)).toBe(0);
+  await page.locator("#sound").click();
+  await expect.poll(() => page.evaluate(() => window.ularnAudio.music)).toBeNull();
   await page.evaluate(() => testAudio.context.close());
 });
