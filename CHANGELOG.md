@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.51 — Visible version notes
+
+- What’s New shows the version list again
+- The notes were already on the page; they stayed blank when the list grew taller than the window
+
 ## 1.3.50 — Play title line
 
 - The play screen drops “Time moves only when you do.” and the version line under the links
