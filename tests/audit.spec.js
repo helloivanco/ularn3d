@@ -50,6 +50,9 @@ test("travel stops for an adjacent creature and keeps going when one is farther 
         setMonster(x, y, null);
         setKnow(x, y, KNOWALL);
       }
+    for (let y = 0; y < MAXY; y++)
+      for (let x = 0; x < MAXX; x++)
+        if (monsterAt(x, y) && monsterAt(x, y).matches(LEMMING)) setMonster(x, y, null);
     // Two tiles south, and six tiles south. One step east never enters melee range.
     setMonster(10, 10, createMonster(LEMMING));
     setMonster(10, 14, createMonster(GNOME));
@@ -69,6 +72,9 @@ test("travel stops for an adjacent creature and keeps going when one is farther 
   const beside = await page.evaluate(() => {
     for (let x = 5; x < 24; x++)
       for (let y = 3; y < 16; y++) setMonster(x, y, null);
+    for (let y = 0; y < MAXY; y++)
+      for (let x = 0; x < MAXX; x++)
+        if (monsterAt(x, y) && monsterAt(x, y).matches(LEMMING)) setMonster(x, y, null);
     setMonster(12, 9, createMonster(LEMMING));
     setKnow(12, 9, KNOWALL);
     paint();
