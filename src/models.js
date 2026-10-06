@@ -274,9 +274,15 @@ export function fillWieldedWeapon(grip, weapon = null) {
     return grip;
   }
   if (type === "dagger" || id === 31) {
-    box(grip, 0xc5dedb, 0, 0.28 * S, 0, 0.04 * S, 0.5 * S, 0.035 * S, metal);
-    box(grip, 0xddba70, 0, 0.02 * S, 0, 0.18 * S, 0.04 * S, 0.055 * S, metal);
-    box(grip, 0x463e32, 0, -0.1 * S, 0, 0.05 * S, 0.16 * S, 0.05 * S, haft);
+    // Short leaf in the fist. Wide on both axes so a side view is a knife,
+    // not the edge of a sword or the shaft of a spear.
+    const blade = box(grip, 0xd7ebe8, 0, 0.16, 0, 0.16, 0.26, 0.16, metal);
+    blade.name = "dagger-blade";
+    box(grip, 0xf4f8f6, 0, 0.3, 0, 0.07, 0.08, 0.07, metal);
+    const guard = box(grip, 0xddba70, 0, 0.02, 0, 0.42, 0.04, 0.07, metal);
+    guard.name = "dagger-guard";
+    box(grip, 0xc9a15a, 0, 0.02, 0, 0.07, 0.04, 0.42, metal);
+    box(grip, 0x463e32, 0, -0.07, 0, 0.05, 0.12, 0.05, haft);
     return grip;
   }
   if (type === "spear" || id === 30) {

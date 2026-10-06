@@ -152,10 +152,25 @@ test("pits dart traps and express elevators use distinct graphics", () => {
 test("wielded weapons rebuild into distinct larger attack grips", async () => {
   const { fillWieldedWeapon } = await import("../src/models.js");
   const grip = new THREE.Group();
+  const sizeOf = (weapon) => {
+    fillWieldedWeapon(grip, weapon);
+    grip.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(grip).getSize(new THREE.Vector3());
+  };
+  const longest = (size) => Math.max(size.x, size.y, size.z);
   fillWieldedWeapon(grip, { id: 31, type: "dagger" });
   const daggerMeshes = meshCount(grip);
-  const daggerBox = new THREE.Box3().setFromObject(grip);
-  const daggerSize = daggerBox.getSize(new THREE.Vector3());
+  const blade = grip.getObjectByName("dagger-blade");
+  const guard = grip.getObjectByName("dagger-guard");
+  assert.ok(blade, "dagger has a named blade");
+  assert.ok(guard, "dagger has a crossguard");
+  assert.ok(blade.scale.y < 0.4, `dagger blade is short, got ${blade.scale.y}`);
+  assert.ok(Math.min(blade.scale.x, blade.scale.z) > 0.12, "dagger is not a needle from the side");
+  assert.ok(Math.max(guard.scale.x, guard.scale.z) > blade.scale.y, "crossguard reads wider than the blade is long");
+  const daggerSize = sizeOf({ id: 31, type: "dagger" });
+  const swordSize = sizeOf({ id: 32, type: "sword" });
+  const spearSize = sizeOf({ id: 30, type: "spear" });
+  const lanceSize = sizeOf({ id: 65, type: "lance" });
   fillWieldedWeapon(grip, { id: 57, type: "axe" });
   const axeMeshes = meshCount(grip);
   fillWieldedWeapon(grip, { id: 27, type: "hammer" });
@@ -164,7 +179,10 @@ test("wielded weapons rebuild into distinct larger attack grips", async () => {
   assert.equal(meshCount(grip), 0);
   assert.notEqual(daggerMeshes, axeMeshes);
   assert.notEqual(axeMeshes, hammerMeshes);
-  assert.ok(daggerSize.y > 0.6, `swing dagger should be larger than a ground icon, got ${daggerSize.y}`);
+  assert.ok(longest(daggerSize) > 0.35, `dagger should stay readable, got ${longest(daggerSize)}`);
+  assert.ok(longest(daggerSize) < longest(swordSize) * 0.7, `dagger ${longest(daggerSize)} vs sword ${longest(swordSize)}`);
+  assert.ok(longest(daggerSize) < longest(spearSize) * 0.55, `dagger ${longest(daggerSize)} vs spear ${longest(spearSize)}`);
+  assert.ok(longest(lanceSize) > longest(daggerSize) * 1.8, `lance ${longest(lanceSize)} vs dagger ${longest(daggerSize)}`);
 });
 
 test("town portal has its own landmark mesh", () => {

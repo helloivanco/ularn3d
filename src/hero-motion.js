@@ -182,7 +182,7 @@ export const attackPose = (t, style = "slash") => (ATTACKS[style] || slash)(t);
 export const weaponRestX = (type) => {
   if (type === "spear" || type === "lance") return -1.05;
   if (type === "staff") return -0.2;
-  if (type === "dagger") return -0.5;
+  if (type === "dagger") return -1.15;
   if (type === "unarmed") return 0;
   return -0.42;
 };
