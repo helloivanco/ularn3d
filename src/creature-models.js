@@ -26,9 +26,9 @@ const bodyOf = (group) => {
   return body;
 };
 
-const make = () => {
+const make = (disc = 0.42) => {
   const group = new THREE.Group();
-  group.add(contactDisc(0.4));
+  group.add(contactDisc(disc));
   const body = new THREE.Group();
   body.name = "creature-body";
   group.add(body);
@@ -38,135 +38,132 @@ const make = () => {
 const eye = (body, x, y, z, scale = 0.028, color = 0x1a1614) => {
   const mesh = orb(body, color, x, y, z, scale, {
     emissive: color,
-    emissiveIntensity: 0.35,
+    emissiveIntensity: 0.4,
   });
   mesh.userData.skipOutline = true;
   return mesh;
 };
 
+// Plan shapes are the gameplay read. The camera sits steeply overhead, so a
+// tall thin figure disappears and a flat body the color of the floor vanishes.
 const buildLemming = () => {
-  const { group, body } = make();
-  const fur = 0x8a5a34;
-  const belly = 0xd2b48a;
-  const torso = orb(body, fur, 0, 0.22, 0.02, 0.2);
-  torso.scale.set(1.05, 0.82, 1.55);
-  orb(body, belly, 0, 0.16, -0.02, 0.11).scale.set(0.9, 0.55, 1.2);
-  orb(body, fur, 0, 0.3, -0.28, 0.13);
-  orb(body, 0xc49a6a, 0, 0.28, -0.4, 0.045);
-  for (const x of [-0.07, 0.07]) {
-    const ear = orb(body, 0x6b4428, x, 0.4, -0.26, 0.045);
-    ear.scale.y = 0.7;
+  const { group, body } = make(0.46);
+  const fur = 0xc4843c;
+  const dark = 0x6b3d22;
+  const torso = orb(body, fur, 0, 0.22, 0, 0.28);
+  torso.scale.set(0.9, 0.48, 1.5);
+  box(body, dark, 0, 0.36, 0.02, 0.12, 0.04, 0.62);
+  orb(body, fur, 0, 0.28, -0.44, 0.16);
+  orb(body, 0xf0d2a8, 0, 0.24, -0.58, 0.07);
+  orb(body, 0x2a1812, 0, 0.24, -0.64, 0.028);
+  for (const x of [-1, 1]) {
+    const ear = orb(body, dark, x * 0.11, 0.42, -0.4, 0.075);
+    ear.scale.set(0.65, 1.2, 0.5);
+    eye(body, x * 0.06, 0.32, -0.56, 0.022);
+    box(body, fur, x * 0.22, 0.08, -0.16, 0.12, 0.08, 0.16);
+    box(body, fur, x * 0.22, 0.08, 0.22, 0.12, 0.08, 0.16);
   }
-  eye(body, -0.05, 0.32, -0.38);
-  eye(body, 0.05, 0.32, -0.38);
-  for (const x of [-0.12, 0.12]) {
-    for (const z of [-0.12, 0.16]) box(body, fur, x, 0.08, z, 0.05, 0.12, 0.06);
-  }
-  const tail = cone(body, fur, 0, 0.2, 0.32, 0.035, 0.16, 5);
-  tail.rotation.x = 1.15;
+  const tail = cone(body, fur, 0, 0.2, 0.58, 0.05, 0.46, 5);
+  tail.rotation.x = -Math.PI / 2;
   bodyOf(group);
   return finish(group, "lemming");
 };
 
 const buildGnome = () => {
-  const { group, body } = make();
-  const cloth = 0x9a2a2a;
-  const skin = 0xe2b184;
-  const boot = 0x635563;
-  for (const x of [-0.09, 0.09]) {
-    box(body, boot, x, 0.07, 0.02, 0.1, 0.12, 0.14);
-    box(body, cloth, x, 0.24, 0, 0.11, 0.22, 0.12);
+  const { group, body } = make(0.4);
+  const cloth = 0xc42828;
+  const skin = 0xf0c49a;
+  const boot = 0x4e4854;
+  for (const x of [-0.1, 0.1]) {
+    box(body, boot, x, 0.07, 0.04, 0.15, 0.12, 0.2);
+    box(body, cloth, x, 0.22, 0, 0.14, 0.2, 0.15);
   }
-  box(body, cloth, 0, 0.46, 0, 0.32, 0.28, 0.22);
-  box(body, 0x6a3a28, 0, 0.34, 0, 0.34, 0.05, 0.2);
-  box(body, 0xd2b46a, 0, 0.34, -0.11, 0.06, 0.05, 0.03);
-  for (const x of [-0.2, 0.2]) {
-    box(body, cloth, x, 0.48, 0, 0.09, 0.2, 0.1);
-    orb(body, skin, x, 0.34, -0.02, 0.045);
+  box(body, cloth, 0, 0.42, 0, 0.46, 0.26, 0.28);
+  box(body, 0x6a3a22, 0, 0.3, 0, 0.48, 0.05, 0.24);
+  box(body, 0xe6c56a, 0, 0.3, -0.13, 0.08, 0.05, 0.03);
+  for (const x of [-0.26, 0.26]) {
+    box(body, cloth, x, 0.44, 0, 0.11, 0.18, 0.11);
+    orb(body, skin, x, 0.32, -0.05, 0.05);
   }
-  orb(body, skin, 0, 0.7, -0.01, 0.13);
-  const nose = orb(body, 0xd09a72, 0, 0.66, -0.12, 0.04);
-  nose.scale.z = 1.3;
-  const cap = orb(body, cloth, 0, 0.8, 0, 0.15);
-  cap.scale.set(1.15, 0.45, 1.15);
-  box(body, 0xc4b49a, 0, 0.62, -0.08, 0.1, 0.06, 0.04);
-  eye(body, -0.045, 0.72, -0.1, 0.022, 0xf0d24a);
-  eye(body, 0.045, 0.72, -0.1, 0.022, 0xf0d24a);
+  orb(body, skin, 0, 0.64, -0.02, 0.14);
+  const nose = orb(body, 0xe0a878, 0, 0.6, -0.15, 0.045);
+  nose.scale.z = 1.4;
+  const cap = orb(body, cloth, 0, 0.78, 0, 0.2);
+  cap.scale.set(1.4, 0.3, 1.4);
+  box(body, 0xf4f0e6, 0, 0.56, -0.1, 0.14, 0.06, 0.04);
+  eye(body, -0.05, 0.66, -0.13, 0.03, 0xf0d24a);
+  eye(body, 0.05, 0.66, -0.13, 0.03, 0xf0d24a);
   bodyOf(group);
-  group.scale.setScalar(0.92);
   return finish(group, "gnome");
 };
 
 const buildJackal = () => {
-  const { group, body } = make();
-  const fur = 0xc4a06a;
-  const dark = 0x8a6238;
-  const torso = orb(body, fur, 0, 0.28, 0.02, 0.18);
-  torso.scale.set(0.85, 0.9, 1.7);
-  box(body, dark, 0, 0.36, 0.02, 0.12, 0.06, 0.42);
-  orb(body, fur, 0, 0.36, -0.32, 0.12);
-  const snout = orb(body, 0xd8bc8a, 0, 0.32, -0.46, 0.07);
-  snout.scale.z = 1.45;
-  orb(body, 0x2a2420, 0, 0.31, -0.54, 0.025);
+  const { group, body } = make(0.5);
+  const fur = 0xe2c27a;
+  const dark = 0x5c3a22;
+  const torso = orb(body, fur, 0, 0.26, 0.04, 0.22);
+  torso.scale.set(0.72, 0.68, 2.2);
+  box(body, dark, 0, 0.4, 0.06, 0.1, 0.04, 0.72);
+  orb(body, fur, 0, 0.34, -0.46, 0.15);
+  const snout = orb(body, 0xf3d9a6, 0, 0.3, -0.64, 0.08);
+  snout.scale.set(0.85, 0.8, 1.7);
+  orb(body, 0x1a1410, 0, 0.3, -0.76, 0.03);
   for (const x of [-1, 1]) {
-    const ear = cone(body, fur, x * 0.08, 0.52, -0.3, 0.05, 0.16, 4);
-    ear.rotation.z = x * -0.2;
+    const ear = cone(body, dark, x * 0.1, 0.66, -0.42, 0.06, 0.34, 4);
+    ear.rotation.z = x * -0.12;
+    eye(body, x * 0.055, 0.4, -0.56, 0.02);
+    box(body, dark, x * 0.18, 0.1, -0.14, 0.08, 0.18, 0.09);
+    box(body, dark, x * 0.18, 0.1, 0.3, 0.08, 0.18, 0.09);
   }
-  eye(body, -0.05, 0.38, -0.4, 0.02);
-  eye(body, 0.05, 0.38, -0.4, 0.02);
-  for (const x of [-0.12, 0.12]) {
-    for (const z of [-0.16, 0.18]) box(body, dark, x, 0.1, z, 0.05, 0.18, 0.06);
-  }
-  const tail = cone(body, fur, 0, 0.32, 0.38, 0.04, 0.28, 5);
-  tail.rotation.x = 1.05;
+  const tail = cone(body, fur, 0, 0.46, 0.68, 0.055, 0.52, 5);
+  tail.rotation.x = -1.05;
   bodyOf(group);
   return finish(group, "jackal");
 };
 
 const buildFloatingEye = () => {
-  const { group, body } = make();
-  orb(body, 0xe7e0d2, 0, 0, 0, 0.28);
-  const iris = orb(body, 0xb4532a, 0, 0.02, -0.2, 0.12, {
-    emissive: 0x8a3018,
-    emissiveIntensity: 0.45,
+  const { group, body } = make(0.36);
+  orb(body, 0xf7f3ea, 0, 0, 0, 0.38);
+  const iris = orb(body, 0xd23a22, 0, 0.24, -0.1, 0.17, {
+    emissive: 0xc42818,
+    emissiveIntensity: 0.55,
   });
-  iris.scale.z = 0.45;
-  const pupil = orb(body, 0x141210, 0, 0.02, -0.26, 0.05);
-  pupil.scale.z = 0.4;
+  iris.scale.set(1, 0.42, 1);
+  const pupil = orb(body, 0x140e0c, 0, 0.3, -0.12, 0.075);
+  pupil.scale.y = 0.4;
   for (const x of [-1, 1]) {
-    const fin = cone(body, 0xcbbfa8, x * 0.26, 0.04, 0.02, 0.16, 0.05, 3);
-    fin.rotation.z = x * 1.2;
+    const fin = box(body, 0xd5cbb8, x * 0.46, 0.02, 0, 0.32, 0.045, 0.18);
+    fin.rotation.z = x * 0.45;
   }
-  body.position.y = 0.62;
+  body.position.y = 0.82;
   bodyOf(group);
-  return finish(group, "floating-eye", 0.62);
+  return finish(group, "floating-eye", 0.82);
 };
 
 const buildRedDragon = () => {
-  const { group, body } = make();
-  const scale = 0x8e2c28;
-  const belly = 0xc47a52;
-  const torso = orb(body, scale, 0, 0.42, 0.05, 0.28);
-  torso.scale.set(0.9, 0.85, 1.45);
-  orb(body, belly, 0, 0.32, 0.02, 0.16).scale.set(0.7, 0.45, 1.1);
-  orb(body, scale, 0, 0.62, -0.38, 0.16);
-  const jaw = box(body, belly, 0, 0.52, -0.52, 0.14, 0.06, 0.18);
-  jaw.rotation.x = 0.2;
+  const { group, body } = make(0.55);
+  const hide = 0xc4322c;
+  const wing = 0x4e1414;
+  const belly = 0xe0a070;
+  const torso = orb(body, hide, 0, 0.36, 0.02, 0.26);
+  torso.scale.set(0.8, 0.68, 1.65);
+  box(body, belly, 0, 0.26, 0, 0.18, 0.06, 0.5);
+  for (const z of [-0.12, 0.08, 0.26]) cone(body, wing, 0, 0.58, z, 0.045, 0.18, 4);
+  orb(body, hide, 0, 0.5, -0.5, 0.17);
+  box(body, belly, 0, 0.4, -0.68, 0.18, 0.07, 0.24);
   for (const x of [-1, 1]) {
-    const horn = cone(body, 0xe6d3a4, x * 0.08, 0.82, -0.34, 0.04, 0.18, 4);
-    horn.rotation.z = x * -0.35;
-    const wing = cone(body, 0x6e2422, x * 0.55, 0.58, 0.05, 0.42, 0.08, 3);
-    wing.rotation.z = x * 0.7;
-    wing.rotation.y = x * -0.3;
-    box(body, scale, x * 0.18, 0.16, 0.05, 0.1, 0.28, 0.12);
-    box(body, scale, x * 0.2, 0.16, -0.22, 0.09, 0.26, 0.1);
+    const horn = cone(body, 0xf0e2c0, x * 0.09, 0.74, -0.48, 0.04, 0.24, 4);
+    horn.rotation.z = x * -0.4;
+    const sail = box(body, wing, x * 0.78, 0.52, -0.02, 0.86, 0.05, 0.52);
+    sail.rotation.z = x * -0.32;
+    box(body, hide, x * 0.2, 0.16, -0.12, 0.12, 0.24, 0.14);
+    box(body, hide, x * 0.2, 0.16, 0.28, 0.12, 0.24, 0.14);
+    eye(body, x * 0.07, 0.54, -0.62, 0.032, 0xf0c14a);
   }
-  eye(body, -0.07, 0.66, -0.5, 0.025, 0xf0c14a);
-  eye(body, 0.07, 0.66, -0.5, 0.025, 0xf0c14a);
-  const tail = cone(body, scale, 0, 0.36, 0.55, 0.08, 0.55, 5);
-  tail.rotation.x = 1.25;
+  const tail = cone(body, hide, 0, 0.32, 0.72, 0.08, 0.5, 5);
+  tail.rotation.x = -Math.PI / 2.35;
+  box(body, wing, 0, 0.4, 1.02, 0.28, 0.04, 0.16);
   bodyOf(group);
-  group.scale.setScalar(1.08);
   return finish(group, "red-dragon");
 };
 
