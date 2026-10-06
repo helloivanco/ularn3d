@@ -5,6 +5,9 @@ import {
   AmbientRats,
   AMBIENT_RAT_POOL,
   AMBIENT_RAT_KIND,
+  AMBIENT_RAT_MIN_SEP,
+  ambientRatSprites,
+  lookFromTile,
 } from "../src/ambient-rats.js";
 import { WALL_FULL } from "../src/wall-cut.js";
 
@@ -25,8 +28,7 @@ test("ambient rats use a hard-capped non-interactive pool", () => {
   const scene = new THREE.Scene();
   const rats = new AmbientRats(scene);
   assert.equal(rats.slots.length, AMBIENT_RAT_POOL);
-  assert.ok(AMBIENT_RAT_POOL <= 6);
-  assert.ok(AMBIENT_RAT_POOL >= 3);
+  assert.equal(AMBIENT_RAT_POOL, 2);
 
   const heights = wallRing().map(() => WALL_FULL);
   rats.setLayout(wallRing(), 1, heights);
@@ -138,4 +140,70 @@ test("rats scurry along wall tops without allocating new slots", () => {
     assert.ok(Math.abs(rat.position.y - (WALL_FULL + 0.055)) < 0.05 || rat.scurrying);
   }
   rats.dispose();
+});
+
+test("wall rats stay apart and keep a tile-stable look", () => {
+  const scene = new THREE.Scene();
+  const rats = new AmbientRats(scene);
+  const cells = [];
+  for (let x = 0; x < 36; x++) cells.push({ x, y: 4 });
+  rats.setLayout(cells, 4, cells.map(() => WALL_FULL));
+  const snap = rats.snapshot();
+  assert.equal(snap.count, 2);
+  const [a, b] = snap.rats;
+  const sep = Math.max(Math.abs(a.position.x - b.position.x), Math.abs(a.position.z - b.position.z));
+  assert.ok(sep >= AMBIENT_RAT_MIN_SEP, `separation ${sep}`);
+  assert.ok(a.appearance && b.appearance);
+  const same =
+    a.appearance.variant === b.appearance.variant &&
+    a.appearance.tint === b.appearance.tint &&
+    a.appearance.size === b.appearance.size &&
+    a.appearance.flip === b.appearance.flip;
+  assert.equal(same, false);
+
+  for (const slot of rats.slots) slot.idle = 30;
+  const before = rats.snapshot().rats.map((rat) => rat.appearance);
+  const cam = new THREE.Vector3(8, 8, 8);
+  for (let i = 0; i < 6; i++) rats.update(0.05, cam);
+  assert.deepEqual(
+    rats.snapshot().rats.map((rat) => rat.appearance),
+    before,
+  );
+
+  const again = lookFromTile(3, 4);
+  assert.deepEqual(again, lookFromTile(3, 4));
+  const looks = new Set();
+  for (let x = 0; x < 24; x++) {
+    const look = lookFromTile(x, 4);
+    looks.add(`${look.variant}|${look.tint}|${look.size}|${look.flip}`);
+  }
+  assert.ok(looks.size >= 8, `variety ${looks.size}`);
+  rats.dispose();
+});
+
+test("rat poses are distinct rodents", () => {
+  const sprites = ambientRatSprites();
+  assert.equal(sprites.length, 4);
+  const signatures = new Set();
+  for (const sprite of sprites) {
+    assert.ok(sprite.width > sprite.height);
+    let pink = 0;
+    let brown = 0;
+    let eye = 0;
+    for (let i = 0; i < sprite.data.length; i += 4) {
+      const r = sprite.data[i];
+      const g = sprite.data[i + 1];
+      const b = sprite.data[i + 2];
+      const a = sprite.data[i + 3];
+      if (a < 10) continue;
+      if (r > 200 && r > g + 15 && b > 120) pink += 1;
+      else if (r > 70 && r < 190 && g > 40 && g < r - 10 && b < 140) brown += 1;
+      if (r < 30 && g < 30 && b < 30) eye += 1;
+    }
+    assert.ok(pink > 8, `pink ${pink}`);
+    assert.ok(brown > 20, `brown ${brown}`);
+    assert.ok(eye > 0, `eye ${eye}`);
+    signatures.add(Buffer.from(sprite.data).toString("base64"));
+  }
+  assert.equal(signatures.size, sprites.length);
 });

@@ -1,9 +1,13 @@
 import * as THREE from "three";
 import { WALL_FULL } from "./wall-cut.js";
 
-/** Hard cap — fixed pool, never grows with floor size or turns. */
-export const AMBIENT_RAT_POOL = 4;
+/** Hard cap — a normal overhead view shows one or two, never a row of copies. */
+export const AMBIENT_RAT_POOL = 2;
 export const AMBIENT_RAT_KIND = "ambient-rat";
+/** Chebyshev tiles. Keeps the pair off the same wall run. */
+export const AMBIENT_RAT_MIN_SEP = 5;
+/** Prefer the pair close enough to share a corridor, still not shoulder to shoulder. */
+const AMBIENT_RAT_MAX_SEP = 6;
 
 const NEAR_SQ = 14 * 14;
 const THINK_INTERVAL = 0.22;
@@ -25,13 +29,22 @@ const hash = (a, b) => {
 
 const emptyRaycast = () => {};
 
+const SPRITE_W = 51;
+
+const row = (pixels) => {
+  if (pixels.length > SPRITE_W) throw new Error("ambient rat row is too wide");
+  return pixels.padEnd(SPRITE_W, ".");
+};
+
 /**
- * Side-view pixel rat. Snout points right. The camera looks down, so this
- * stands on a billboard instead of a top-down blob.
+ * Side-view pixel rats. Snout points right. The camera looks down, so each
+ * one stands on a billboard instead of a top-down blob.
  * 1 dark back, 2 body, 3 back shade, 4 belly, 5 ear, 6 inner ear,
  * 7 eye, 8 nose, 9 foot, T tail, S tail segment.
+ * Poses differ in the ear, the body, and the tail. One drawing is not a flip
+ * of another.
  */
-const RAT_ROWS = [
+const ALERT_ROWS = [
   ".TT........................................555...",
   "TTTS....................................55.565...",
   ".TTSTT.................................565.565...",
@@ -45,9 +58,57 @@ const RAT_ROWS = [
   "...............TTTST..44444444444444444444444....",
   "......................444444449944449944499......",
   "..............................99....99...99......",
+].map(row);
+
+const CROUCH_ROWS = [
+  row(".................................5"),
+  row("................................565"),
+  row("...........111111...............555"),
+  row(".........11333311111111111111111111"),
+  row(".......33333333333333333333333333771"),
+  row(".....2222222222222222222222222222211"),
+  row("TTT44222222222222222222222222222228"),
+  row("TTS4444444444444444444444444444444"),
+  row("TTTS444444444444444444444444444"),
+  row("TTS...444444444444444444444444"),
+  row("TT........9944..9944..9944..99"),
+  row("............99....99....99"),
+  row("............99....99....99"),
 ];
 
-const RAT_PALETTE = {
+const SNIFF_ROWS = [
+  row(".....TT"),
+  row("....TTTS"),
+  row("...TTTS..........1111111"),
+  row("..TSTT.........113333333111111"),
+  row("...TTTT......3333333333333333771"),
+  row(".....STT..22222222222222222222211"),
+  row(".......S22222222222222222222222228"),
+  row(".......4444444444444444444444444"),
+  row(".....444444444444444444444444"),
+  row("...9944..9944..9944..994499"),
+  row("...99....99....99....99"),
+  row("...99....99....99....99"),
+  row("...99....99....99....99"),
+];
+
+const PLUMP_ROWS = [
+  row(".....................5.5"),
+  row("....................56565"),
+  row("..........1111......56565"),
+  row("........11333311....55555"),
+  row("......333333333311111111"),
+  row("....222222222222222222771"),
+  row("..442222222222222222222211"),
+  row(".4422222222222222222222228"),
+  row("444444444444444444444444"),
+  row("4444444444444444444444"),
+  row("99444499444499444499"),
+  row("..99....99....99....99"),
+  row("..99....99....99....99"),
+];
+
+const PALETTE = {
   ".": [0, 0, 0, 0],
   1: [0x3e, 0x30, 0x26, 255],
   2: [0x8c, 0x64, 0x44, 255],
@@ -62,43 +123,109 @@ const RAT_PALETTE = {
   S: [0xc2, 0x7e, 0x70, 255],
 };
 
-const RAT_TEX_W = RAT_ROWS[0].length;
-const RAT_TEX_H = RAT_ROWS.length;
-/** Small on a wall tile. Wide, because the rat is shown in profile. */
-const RAT_W = 0.74;
-const RAT_H = RAT_W * (RAT_TEX_H / RAT_TEX_W);
+const CROUCH_PALETTE = {
+  ...PALETTE,
+  1: [0x32, 0x24, 0x1c, 255],
+  2: [0x74, 0x4c, 0x34, 255],
+  3: [0x4e, 0x38, 0x2a, 255],
+  4: [0xb0, 0x84, 0x5e, 255],
+  5: [0xf4, 0xc4, 0xb6, 255],
+  6: [0xd8, 0x90, 0x84, 255],
+  8: [0xe4, 0xa4, 0x96, 255],
+  9: [0xec, 0xb0, 0xa0, 255],
+  T: [0xf2, 0xc6, 0xb8, 255],
+  S: [0xb8, 0x74, 0x66, 255],
+};
 
-const ratPixels = () => {
-  const data = new Uint8Array(RAT_TEX_W * RAT_TEX_H * 4);
-  for (let y = 0; y < RAT_TEX_H; y++) {
-    // DataTexture keeps the first row at the bottom.
-    const row = RAT_ROWS[RAT_TEX_H - 1 - y];
-    for (let x = 0; x < RAT_TEX_W; x++) {
-      const color = RAT_PALETTE[row[x]];
-      const i = (y * RAT_TEX_W + x) * 4;
+const SNIFF_PALETTE = {
+  ...PALETTE,
+  1: [0x3a, 0x32, 0x2a, 255],
+  2: [0x86, 0x6c, 0x56, 255],
+  3: [0x5c, 0x4c, 0x3e, 255],
+  4: [0xb6, 0x98, 0x7a, 255],
+  5: [0xf6, 0xcc, 0xbe, 255],
+  6: [0xe0, 0xa8, 0x98, 255],
+  8: [0xec, 0xb4, 0xa4, 255],
+  9: [0xf0, 0xbc, 0xac, 255],
+  T: [0xf4, 0xce, 0xc0, 255],
+  S: [0xc8, 0x96, 0x84, 255],
+};
+
+const PLUMP_PALETTE = {
+  ...PALETTE,
+  1: [0x46, 0x2c, 0x1e, 255],
+  2: [0x9c, 0x5c, 0x38, 255],
+  3: [0x6a, 0x40, 0x2c, 255],
+  4: [0xbe, 0x88, 0x5c, 255],
+  5: [0xf8, 0xc8, 0xb4, 255],
+  6: [0xe4, 0x98, 0x84, 255],
+  8: [0xf0, 0xa8, 0x90, 255],
+  9: [0xf2, 0xb4, 0x9c, 255],
+  T: [0xf6, 0xc4, 0xb0, 255],
+  S: [0xc4, 0x78, 0x60, 255],
+};
+
+const TINTS = [0xffffff, 0xf4d7c0, 0xd9c3aa, 0xc4a48c, 0xe8d2c2, 0xb89a84];
+
+const paintSprite = (rows, palette) => {
+  const width = rows[0].length;
+  const height = rows.length;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const source = rows[height - 1 - y];
+    if (source.length !== width) throw new Error("ambient rat rows disagree");
+    for (let x = 0; x < width; x++) {
+      const color = palette[source[x]];
+      if (!color) throw new Error(`ambient rat pixel ${source[x]}`);
+      const i = (y * width + x) * 4;
       data[i] = color[0];
       data[i + 1] = color[1];
       data[i + 2] = color[2];
       data[i + 3] = color[3];
     }
   }
-  return data;
+  const texture = new THREE.DataTexture(data, width, height);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  texture.userData.shared = true;
+  return { texture, width, height, data };
 };
 
-const ratTexture = new THREE.DataTexture(ratPixels(), RAT_TEX_W, RAT_TEX_H);
-ratTexture.colorSpace = THREE.SRGBColorSpace;
-ratTexture.magFilter = THREE.NearestFilter;
-ratTexture.minFilter = THREE.NearestFilter;
-ratTexture.generateMipmaps = false;
-ratTexture.needsUpdate = true;
+const RAT_VARIANTS = [
+  paintSprite(ALERT_ROWS, PALETTE),
+  paintSprite(CROUCH_ROWS, CROUCH_PALETTE),
+  paintSprite(SNIFF_ROWS, SNIFF_PALETTE),
+  paintSprite(PLUMP_ROWS, PLUMP_PALETTE),
+];
 
-const ratMaterial = new THREE.MeshBasicMaterial({
-  map: ratTexture,
-  transparent: true,
-  alphaTest: 0.5,
-  side: THREE.DoubleSide,
-  toneMapped: false,
-});
+/** Pixel buffers for tests. Shared with the billboards. */
+export const ambientRatSprites = () =>
+  RAT_VARIANTS.map((variant) => ({
+    width: variant.width,
+    height: variant.height,
+    data: variant.data,
+  }));
+
+/**
+ * Pose, tint, size, and facing for one wall tile.
+ * Stable for that tile: nothing here reads the clock or the camera.
+ */
+export const lookFromTile = (x, y) => {
+  const variant = Math.floor(hash(x + 1, y + 4) * RAT_VARIANTS.length) % RAT_VARIANTS.length;
+  const tint = TINTS[Math.floor(hash(x + 8, y + 2) * TINTS.length) % TINTS.length];
+  const size = 0.82 + Math.floor(hash(x + 5, y + 9) * 5) * 0.08;
+  const flip = hash(x + 2, y + 7) < 0.5 ? -1 : 1;
+  const yawBias = (hash(x + 12, y + 15) - 0.5) * 0.9;
+  return { variant, tint, size, flip, yawBias };
+};
+
+/** Small on a wall tile. Wide, because the rat is shown in profile. */
+const RAT_W = 0.74;
+const ALERT = RAT_VARIANTS[0];
+const RAT_H = RAT_W * (ALERT.height / ALERT.width);
 
 const ratGeometry = new THREE.PlaneGeometry(1, 1);
 ratGeometry.userData.shared = true;
@@ -112,7 +239,14 @@ const makeRatMesh = () => {
     interactive: false,
     decorative: true,
   };
-  const sprite = new THREE.Mesh(ratGeometry, ratMaterial);
+  const material = new THREE.MeshBasicMaterial({
+    map: ALERT.texture,
+    transparent: true,
+    alphaTest: 0.5,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
+  const sprite = new THREE.Mesh(ratGeometry, material);
   sprite.name = "rat-sprite";
   sprite.scale.set(RAT_W, RAT_H, 1);
   sprite.position.y = RAT_H / 2 + 0.02;
@@ -126,6 +260,8 @@ const makeRatMesh = () => {
   group.frustumCulled = false;
   return group;
 };
+
+const chebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 
 /**
  * Tiny non-interactive rats that scurry along dungeon wall tops.
@@ -146,6 +282,7 @@ export class AmbientRats {
         art: mesh.getObjectByName("rat-sprite"),
         active: false,
         cell: -1,
+        look: null,
         from: new THREE.Vector3(),
         to: new THREE.Vector3(),
         progress: 1,
@@ -176,6 +313,7 @@ export class AmbientRats {
     for (const slot of this.slots) {
       slot.active = false;
       slot.cell = -1;
+      slot.look = null;
       slot.progress = 1;
       slot.hidden = false;
       slot.hideFor = 0;
@@ -217,26 +355,86 @@ export class AmbientRats {
     this.placeInitial();
   }
 
+  separated(cell, chosen, maxSep) {
+    const t = this.wallCells[cell];
+    for (const other of chosen) {
+      const sep = chebyshev(t, this.wallCells[other]);
+      if (sep < AMBIENT_RAT_MIN_SEP) return false;
+      if (maxSep != null && sep > maxSep) return false;
+    }
+    return true;
+  }
+
+  differentPose(cell, chosen) {
+    if (!chosen.length) return true;
+    const look = lookFromTile(this.wallCells[cell].x, this.wallCells[cell].y);
+    return chosen.every((other) => {
+      const tile = this.wallCells[other];
+      return look.variant !== lookFromTile(tile.x, tile.y).variant;
+    });
+  }
+
+  /** Prefer a pair across the corridor, so a north-facing view does not stack them. */
+  across(cell, chosen) {
+    if (!chosen.length) return true;
+    const t = this.wallCells[cell];
+    return chosen.every((other) => {
+      const o = this.wallCells[other];
+      return Math.abs(t.x - o.x) >= Math.abs(t.y - o.y);
+    });
+  }
+
   placeInitial() {
     const n = this.wallCells.length;
     if (!n) {
       this.clear();
       return;
     }
-    const used = new Set();
-    let placed = 0;
-    for (let attempt = 0; attempt < AMBIENT_RAT_POOL * 8 && placed < AMBIENT_RAT_POOL; attempt++) {
-      const i = Math.floor(hash(this.seed, attempt + 3) * n) % n;
-      if (used.has(i) || !this.neighbors[i]?.length) continue;
-      used.add(i);
-      const slot = this.slots[placed++];
-      this.activate(slot, i, hash(this.seed, i) * IDLE_MAX);
+    const order = [];
+    for (let i = 0; i < n; i++) {
+      if (!this.neighbors[i]?.length) continue;
+      order.push({ i, h: hash(this.seed, i + 3) });
     }
-    for (let i = placed; i < AMBIENT_RAT_POOL; i++) {
+    order.sort((a, b) => a.h - b.h || a.i - b.i);
+    const chosen = [];
+    const take = (maxSep, distinct, lateral) => {
+      for (const { i } of order) {
+        if (chosen.length >= AMBIENT_RAT_POOL) return;
+        if (chosen.includes(i)) continue;
+        if (!this.separated(i, chosen, chosen.length ? maxSep : null)) continue;
+        if (distinct && !this.differentPose(i, chosen)) continue;
+        if (lateral && !this.across(i, chosen)) continue;
+        chosen.push(i);
+      }
+    };
+    take(AMBIENT_RAT_MAX_SEP, true, true);
+    if (chosen.length < AMBIENT_RAT_POOL) take(AMBIENT_RAT_MAX_SEP, true, false);
+    if (chosen.length < AMBIENT_RAT_POOL) take(AMBIENT_RAT_MAX_SEP, false, false);
+    if (chosen.length < AMBIENT_RAT_POOL) take(null, false, false);
+    for (let placed = 0; placed < chosen.length; placed++) {
+      const cell = chosen[placed];
+      this.activate(this.slots[placed], cell, hash(this.seed, cell) * IDLE_MAX);
+    }
+    for (let i = chosen.length; i < AMBIENT_RAT_POOL; i++) {
       const slot = this.slots[i];
       slot.active = false;
+      slot.look = null;
       slot.mesh.visible = false;
     }
+  }
+
+  applyLook(slot) {
+    const t = this.wallCells[slot.cell];
+    const art = slot.art;
+    if (!t || !art) return;
+    const look = lookFromTile(t.x, t.y);
+    slot.look = look;
+    const variant = RAT_VARIANTS[look.variant];
+    if (art.material.map !== variant.texture) {
+      art.material.map = variant.texture;
+      art.material.needsUpdate = true;
+    }
+    art.material.color.setHex(look.tint);
   }
 
   activate(slot, cell, idle = IDLE_MIN) {
@@ -252,24 +450,37 @@ export class AmbientRats {
     slot.mesh.position.copy(slot.from);
     slot.mesh.rotation.y = 0;
     slot.mesh.visible = true;
+    this.applyLook(slot);
     this.face(slot);
   }
 
-  /** Billboard the side-view sprite toward the camera and mirror it with travel. */
+  /** Billboard the side-view sprite. Resting facing comes from the tile. */
   face(slot) {
     const art = slot.art;
     if (!art) return;
-    const fx = Math.sin(slot.yaw);
-    const fz = Math.cos(slot.yaw);
-    let sign = fx < -0.05 ? -1 : 1;
+    const look = slot.look;
+    const variant = RAT_VARIANTS[look?.variant ?? 0];
+    const size = look?.size ?? 1;
+    const w = RAT_W * size;
+    const h = w * (variant.height / variant.width);
+    let sign = look?.flip ?? 1;
     const camera = this._camera;
+    if (slot.progress < 1) {
+      const fx = Math.sin(slot.yaw);
+      const fz = Math.cos(slot.yaw);
+      if (camera) {
+        const right = camera.matrixWorld.elements;
+        const side = fx * right[0] + fz * right[2];
+        if (Math.abs(side) > 0.05) sign = side < 0 ? -1 : 1;
+      } else if (fx < -0.05) sign = -1;
+    }
     if (camera) {
       art.quaternion.copy(camera.quaternion);
-      const right = camera.matrixWorld.elements;
-      const side = fx * right[0] + fz * right[2];
-      if (Math.abs(side) > 0.05) sign = side < 0 ? -1 : 1;
+      const bias = look?.yawBias ?? 0;
+      if (bias) art.rotateY(bias);
     }
-    art.scale.set(sign * RAT_W, RAT_H, 1);
+    art.scale.set(sign * w, h, 1);
+    art.position.y = h / 2 + 0.02;
   }
 
   heightAt(cell, out) {
@@ -284,12 +495,21 @@ export class AmbientRats {
     return slot.mesh.position.distanceToSquared(cam) < NEAR_SQ;
   }
 
-  pickNeighbor(cell, avoid = -1) {
-    const opts = this.neighbors[cell] || [];
+  apartFrom(cell, slot) {
+    const t = this.wallCells[cell];
+    if (!t) return false;
+    for (const other of this.slots) {
+      if (other === slot || !other.active || other.hidden) continue;
+      const o = this.wallCells[other.cell];
+      if (o && chebyshev(t, o) < AMBIENT_RAT_MIN_SEP) return false;
+    }
+    return true;
+  }
+
+  pickNeighbor(cell, slot) {
+    const opts = (this.neighbors[cell] || []).filter((j) => this.apartFrom(j, slot));
     if (!opts.length) return -1;
-    const filtered = opts.filter((j) => j !== avoid);
-    const pool = filtered.length ? filtered : opts;
-    return pool[Math.floor(hash(this.seed + cell, this.thinkAccum * 10 + pool.length) * pool.length) % pool.length];
+    return opts[Math.floor(hash(this.seed + cell, this.thinkAccum * 10 + opts.length) * opts.length) % opts.length];
   }
 
   /** Returns true while any near-camera rat is mid-scurry (keeps rAF alive briefly). */
@@ -312,9 +532,18 @@ export class AmbientRats {
         if (slot.hideFor <= 0 && think) {
           const n = this.wallCells.length;
           if (!n) continue;
-          let cell = Math.floor(hash(this.seed, slot.mesh.userData.slot + this.thinkAccum) * n) % n;
-          if (!this.neighbors[cell]?.length) cell = this.neighbors.findIndex((list) => list.length);
-          if (cell < 0) continue;
+          let cell = -1;
+          for (let k = 0; k < n && k < 48; k++) {
+            const candidate = Math.floor(hash(this.seed + slot.mesh.userData.slot + 1, k + 3) * n) % n;
+            if (!this.neighbors[candidate]?.length) continue;
+            if (!this.apartFrom(candidate, slot)) continue;
+            cell = candidate;
+            break;
+          }
+          if (cell < 0) {
+            slot.hideFor = 1;
+            continue;
+          }
           this.activate(slot, cell, IDLE_MIN + hash(cell, 9) * 2);
         }
         continue;
@@ -351,7 +580,7 @@ export class AmbientRats {
         continue;
       }
 
-      const next = this.pickNeighbor(slot.cell, slot.cell);
+      const next = this.pickNeighbor(slot.cell, slot);
       if (next < 0) {
         slot.idle = IDLE_MIN;
         continue;
@@ -363,6 +592,7 @@ export class AmbientRats {
       slot.yaw = Math.atan2(dx, dz);
       slot.cell = next;
       slot.progress = 0;
+      this.applyLook(slot);
       if (near) scurryingNear = true;
     }
     return scurryingNear;
@@ -375,6 +605,7 @@ export class AmbientRats {
       interactive: false,
       decorative: true,
       kind: AMBIENT_RAT_KIND,
+      minSeparation: AMBIENT_RAT_MIN_SEP,
       count: this.slots.filter((s) => s.active && !s.hidden).length,
       rats: this.slots
         .filter((s) => s.active)
@@ -388,13 +619,24 @@ export class AmbientRats {
           cell: s.cell,
           position: { x: s.mesh.position.x, y: s.mesh.position.y, z: s.mesh.position.z },
           scurrying: s.progress < 1,
+          appearance: s.look
+            ? {
+                variant: s.look.variant,
+                tint: s.look.tint,
+                size: s.look.size,
+                flip: s.look.flip,
+              }
+            : null,
         })),
     };
   }
 
   dispose() {
-    // Sprite geometry, material, and texture are shared by the pool.
-    for (const slot of this.slots) slot.mesh.removeFromParent();
+    // Geometry and sprite textures are shared by every pool. Materials are not.
+    for (const slot of this.slots) {
+      slot.art?.material?.dispose();
+      slot.mesh.removeFromParent();
+    }
     this.group.removeFromParent();
     this.clear();
   }
