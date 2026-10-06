@@ -202,7 +202,6 @@ export class World {
     this.renderer.toneMappingExposure = this.quality === "cinematic" ? 1.15 : 1;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.dataset.engine = "webgl";
-    this.renderer.domElement.style.imageRendering = "pixelated";
     this.environment = null;
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     Object.assign(this.controls, {
