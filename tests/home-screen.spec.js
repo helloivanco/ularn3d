@@ -31,8 +31,14 @@ for (const viewport of desktops) {
     await expect(page.locator("#welcome")).not.toContainText(/classic reawakened/i);
     await expect(page.locator("#location-name")).toHaveText("");
     await expect(page.locator(".location-dot")).toBeHidden();
-    await expect(page.locator("#sound")).toBeVisible();
+    await expect(page.locator("#sound")).toBeHidden();
+    await expect(page.locator(".topbar #about-game")).toBeVisible();
+    await expect(page.locator(".topbar #whats-new")).toBeVisible();
     await expect(page.locator("#guide")).toContainText("Field guide");
+    await expect(page.getByRole("link", { name: "History", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Github", exact: true })).toBeVisible();
+    await expect(page.locator(".site-links")).toContainText("Verify Download");
+    await expect(page.locator(".site-links .github-link")).toBeVisible();
     await expect(page.locator("#welcome")).not.toContainText("Time moves only when you do.");
     await expect(page.locator(".site-version")).toHaveCount(0);
     await expect(page.locator("#download-windows small")).toContainText(/^v\d+\.\d+\.\d+/);
@@ -58,6 +64,29 @@ for (const viewport of desktops) {
     expect(titleLine.subUnderName).toBe(true);
     expect(titleLine.subSmaller).toBe(true);
     expect(titleLine.logoClearsSubtitle).toBe(true);
+
+    const headerLinks = await page.evaluate(() => {
+      const colorOf = (selector, child) =>
+        getComputedStyle(document.querySelector(selector).querySelector(child)).color;
+      const download = document.querySelector("#download-windows").getBoundingClientRect();
+      const github = document.querySelector(".github-word").getBoundingClientRect();
+      const order = [...document.querySelector(".topbar nav").children]
+        .filter((el) => getComputedStyle(el).display !== "none")
+        .map((el) => el.id);
+      return {
+        order,
+        aboutMatch: colorOf("#about-game", ".icon") === colorOf("#about-game", ".button-label"),
+        newsMatch: colorOf("#whats-new", ".icon") === colorOf("#whats-new", ".button-label"),
+        githubBelow: github.top >= download.bottom - 1,
+        githubLeft: github.left,
+        downloadLeft: download.left,
+      };
+    });
+    expect(headerLinks.order).toEqual(["about-game", "whats-new", "guide"]);
+    expect(headerLinks.aboutMatch).toBe(true);
+    expect(headerLinks.newsMatch).toBe(true);
+    expect(headerLinks.githubBelow).toBe(true);
+    expect(headerLinks.githubLeft).toBeGreaterThanOrEqual(headerLinks.downloadLeft - 1);
 
     const fit = await page.evaluate(() => {
       const welcome = document.querySelector("#welcome");

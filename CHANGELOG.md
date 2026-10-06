@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.55 — Play screen links
+
+- About and What’s New sit at the top right, beside the field guide
+- History is gone from the play screen. Verify Download, the GitHub mark, and Github sit on one line under the Windows download
+- Sound stays off the title screen and returns once an expedition starts
+
 ## 1.3.54 — Rats in profile
 
 - The small rats on dungeon walls are a side-view pixel rat: brown body, pink ears, a dark eye, pink feet, and a long pink tail (Ivan Wong)
