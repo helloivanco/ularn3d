@@ -70,7 +70,83 @@ function monsterAt(x, y) {
 
 
 
-function setMonster(x, y, monster, placement) {
+/*
+ * One lemming on a floor. A second one cannot land within two tiles of the
+ * first, so the eight tiles around the hero cannot fill up as a ring.
+ * `moving` is a lemming already on the floor stepping to a new tile.
+ */
+const LEMMING_FLOOR_CAP = 1;
+const LEMMING_SEPARATION = 2;
+
+function isLemmingspecies(monster) {
+  if (!ULARN || monster == null) return false;
+  if (typeof monster === "number") return monster === LEMMING;
+  return monster.arg === LEMMING;
+}
+
+function lemmingCount() {
+  if (!LEVELS[level] || !LEVELS[level].monsters) return 0;
+  const grid = LEVELS[level].monsters;
+  let count = 0;
+  for (let y = 0; y < MAXY; y++) {
+    for (let x = 0; x < MAXX; x++) {
+      const monster = grid[x][y];
+      if (monster && monster.arg === LEMMING) count++;
+    }
+  }
+  return count;
+}
+
+function lemmingTooClose(x, y) {
+  if (!LEVELS[level] || !LEVELS[level].monsters) return false;
+  const grid = LEVELS[level].monsters;
+  for (let dy = -LEMMING_SEPARATION; dy <= LEMMING_SEPARATION; dy++) {
+    for (let dx = -LEMMING_SEPARATION; dx <= LEMMING_SEPARATION; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const mx = x + dx;
+      const my = y + dy;
+      if (!inBounds(mx, my)) continue;
+      const monster = grid[mx][my];
+      if (monster && monster.arg === LEMMING) return true;
+    }
+  }
+  return false;
+}
+
+/* Drop extras already on a floor, keeping the one nearest the hero. */
+function thinLemmings() {
+  if (!ULARN || !LEVELS) return;
+  for (let lev = 0; lev < LEVELS.length; lev++) {
+    const floor = LEVELS[lev];
+    if (!floor || !floor.monsters) continue;
+    const grid = floor.monsters;
+    const found = [];
+    for (let y = 0; y < MAXY; y++) {
+      for (let x = 0; x < MAXX; x++) {
+        const monster = grid[x][y];
+        if (monster && monster.arg === LEMMING) found.push({ x, y });
+      }
+    }
+    if (found.length <= LEMMING_FLOOR_CAP) continue;
+    let keep = 0;
+    if (lev === level && player) {
+      let best = Infinity;
+      for (let i = 0; i < found.length; i++) {
+        const dist = Math.max(Math.abs(found[i].x - player.x), Math.abs(found[i].y - player.y));
+        if (dist < best) {
+          best = dist;
+          keep = i;
+        }
+      }
+    }
+    for (let i = 0; i < found.length; i++) {
+      if (i === keep) continue;
+      grid[found[i].x][found[i].y] = null;
+    }
+  }
+}
+
+function setMonster(x, y, monster, placement, moving) {
   if (!inBounds(x, y)) {
     debug(`setMonster(): bad args`, x, y, monster);
     return null;
@@ -79,15 +155,18 @@ function setMonster(x, y, monster, placement) {
   if (!placement) {
     placement = OVERWRITE;
   }
-  
+
+  const spawningLemmings = !moving && isLemmingspecies(monster);
+  const lemmingTileOk = (tx, ty) => !spawningLemmings || (lemmingCount() < LEMMING_FLOOR_CAP && !lemmingTooClose(tx, ty));
+
   if (placement === SCATTER || placement === EXACT_OR_SCATTER) {
     let dx, dy;
-    let ok = (placement === EXACT_OR_SCATTER) ? cgood(x, y, false, true) : false;
+    let ok = (placement === EXACT_OR_SCATTER) ? cgood(x, y, false, true) && lemmingTileOk(x, y) : false;
     for (let k = rnd(8), i = -8; i < 0 && !ok; i++, k++) /* choose direction, then try all */ {
       if (k > 8) k = 1; /* wraparound the diroff arrays */
       dx = x + diroffx[k];
       dy = y + diroffy[k];
-      if (cgood(dx, dy, false, true)) {
+      if (cgood(dx, dy, false, true) && lemmingTileOk(dx, dy)) {
         x = dx; /* if we can create here */
         y = dy;
         ok = true;
@@ -97,6 +176,8 @@ function setMonster(x, y, monster, placement) {
       debug(`setMonster(): placement`, placement, ok, x, y, monster);
       return null;
     }
+  } else if (spawningLemmings && !lemmingTileOk(x, y)) {
+    return null;
   }
 
   if (monster instanceof Monster) {

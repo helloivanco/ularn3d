@@ -114,7 +114,7 @@ function shuffleMonster(oldx, oldy) {
   if (monster) {
     debug(`shuffleMonster(): moving ${monster} at x=${oldx} y=${oldy}`);
     setMonster(oldx, oldy, null);    // get rid of monster at old location
-    setMonster(oldx, oldy, monster, SCATTER); // put it anywhere else
+    setMonster(oldx, oldy, monster, SCATTER, true); // put it anywhere else
   }
 }
 

@@ -649,7 +649,7 @@ function mmove(sx, sy, dx, dy) {
 
   /* move monster to the new location */
   setMonster(sx, sy, null);
-  setMonster(dx, dy, monster);
+  setMonster(dx, dy, monster, OVERWRITE, true);
 
   monster.awake = true;
 

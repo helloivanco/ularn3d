@@ -176,6 +176,7 @@ function loadState(state) {
   viewflag = state.viewflag;
   lasttime = state.lasttime;
   spheres = state.spheres;
+  thinLemmings();
 }
 
 

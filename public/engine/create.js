@@ -1920,7 +1920,8 @@ function fillmonst(what, awake) {
         (!placementNetwork || placementNetwork.has(`${x},${y}`)) &&
         ((player.x != x) || (player.y != y))) { // not on player
       let monster = createMonster(what);
-      setMonster(x, y, monster);
+      /* A refused lemming still ends the try, so later monsters keep the same rolls. */
+      if (!setMonster(x, y, monster)) return null;
       if (awake) monster.awake = awake;
       setKnow(x, y, getKnow(x, y) & ~KNOWHERE);
       return monster;
@@ -1999,6 +2000,7 @@ function sethp(newLevel) {
   }
 
   if (imposed) placementNetwork = restore;
+  thinLemmings();
 }
 
 
