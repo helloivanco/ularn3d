@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.54 — Rats in profile
+
+- The small rats on dungeon walls are a side-view pixel rat: brown body, pink ears, a dark eye, pink feet, and a long pink tail (Ivan Wong)
+- They stay small, flat, and unlit, and you still cannot fight, loot, or click them
+- Town stays still
+
 ## 1.3.53 — Clearer steps
 
 - Sprites and you sit on whole pixels, so they stay sharp instead of soft or blocky

@@ -5,9 +5,6 @@ import { WALL_FULL } from "./wall-cut.js";
 export const AMBIENT_RAT_POOL = 4;
 export const AMBIENT_RAT_KIND = "ambient-rat";
 
-const BODY = 0xc48448;
-const EAR = 0xe7b0a0;
-const TAIL = 0xc48448;
 const NEAR_SQ = 14 * 14;
 const THINK_INTERVAL = 0.22;
 const SCURRY_SPEED = 2.4;
@@ -28,64 +25,83 @@ const hash = (a, b) => {
 
 const emptyRaycast = () => {};
 
-/** Flat plan-view rat. Shape +Y becomes world +Z, the direction it scurries. */
-const layFlat = (group, name, color, shape, y) => {
-  const mesh = new THREE.Mesh(
-    new THREE.ShapeGeometry(shape, 12),
-    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }),
-  );
-  mesh.name = name;
-  mesh.rotation.x = Math.PI / 2;
-  mesh.position.y = y;
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  mesh.raycast = emptyRaycast;
-  group.add(mesh);
-  return mesh;
+/**
+ * Side-view pixel rat. Snout points right. The camera looks down, so this
+ * stands on a billboard instead of a top-down blob.
+ * 1 dark back, 2 body, 3 back shade, 4 belly, 5 ear, 6 inner ear,
+ * 7 eye, 8 nose, 9 foot, T tail, S tail segment.
+ */
+const RAT_ROWS = [
+  ".TT........................................555...",
+  "TTTS....................................55.565...",
+  ".TTSTT.................................565.565...",
+  "..TSTTT...............111111...........565.555...",
+  "....TTTTS.............3333331111111111111111.....",
+  ".....TTTSTT...........33333333333333333333331....",
+  "......TTSTTTT.........3333333333333333333333771..",
+  "........STTTTSTTTTTTTT222222222222222222222272211",
+  "..........TTTSTTTTSTTT222222222222222222222222228",
+  ".............STTTTSTTT4444444444444444444444444..",
+  "...............TTTST..44444444444444444444444....",
+  "......................444444449944449944499......",
+  "..............................99....99...99......",
+];
+
+const RAT_PALETTE = {
+  ".": [0, 0, 0, 0],
+  1: [0x3e, 0x30, 0x26, 255],
+  2: [0x8c, 0x64, 0x44, 255],
+  3: [0x5a, 0x42, 0x32, 255],
+  4: [0xc8, 0xa2, 0x78, 255],
+  5: [0xf2, 0xc0, 0xb2, 255],
+  6: [0xdc, 0x8c, 0x80, 255],
+  7: [0x12, 0x0e, 0x0c, 255],
+  8: [0xe8, 0xa0, 0x92, 255],
+  9: [0xee, 0xb2, 0xa2, 255],
+  T: [0xf0, 0xc2, 0xb2, 255],
+  S: [0xc2, 0x7e, 0x70, 255],
 };
 
-const earShape = (x) => {
-  const shape = new THREE.Shape();
-  shape.absellipse(x, 0.11, 0.038, 0.026, 0, Math.PI * 2, false, 0);
-  return shape;
+const RAT_TEX_W = RAT_ROWS[0].length;
+const RAT_TEX_H = RAT_ROWS.length;
+/** Small on a wall tile. Wide, because the rat is shown in profile. */
+const RAT_W = 0.74;
+const RAT_H = RAT_W * (RAT_TEX_H / RAT_TEX_W);
+
+const ratPixels = () => {
+  const data = new Uint8Array(RAT_TEX_W * RAT_TEX_H * 4);
+  for (let y = 0; y < RAT_TEX_H; y++) {
+    // DataTexture keeps the first row at the bottom.
+    const row = RAT_ROWS[RAT_TEX_H - 1 - y];
+    for (let x = 0; x < RAT_TEX_W; x++) {
+      const color = RAT_PALETTE[row[x]];
+      const i = (y * RAT_TEX_W + x) * 4;
+      data[i] = color[0];
+      data[i + 1] = color[1];
+      data[i + 2] = color[2];
+      data[i + 3] = color[3];
+    }
+  }
+  return data;
 };
 
-/** Ribbon along a quadratic curve, wide at the rump and thin at the tip. */
-const tailShape = () => {
-  const start = [0, -0.1];
-  const control = [0.16, -0.22];
-  const end = [0.02, -0.32];
-  const samples = 8;
-  const center = [];
-  for (let i = 0; i <= samples; i++) {
-    const t = i / samples;
-    const u = 1 - t;
-    center.push([
-      u * u * start[0] + 2 * u * t * control[0] + t * t * end[0],
-      u * u * start[1] + 2 * u * t * control[1] + t * t * end[1],
-    ]);
-  }
-  const left = [];
-  const right = [];
-  for (let i = 0; i < center.length; i++) {
-    const prev = center[Math.max(0, i - 1)];
-    const next = center[Math.min(center.length - 1, i + 1)];
-    let tx = next[0] - prev[0];
-    let ty = next[1] - prev[1];
-    const len = Math.hypot(tx, ty) || 1;
-    tx /= len;
-    ty /= len;
-    const width = 0.028 * (1 - i / (center.length - 1)) + 0.007;
-    left.push([center[i][0] - ty * width, center[i][1] + tx * width]);
-    right.push([center[i][0] + ty * width, center[i][1] - tx * width]);
-  }
-  const shape = new THREE.Shape();
-  shape.moveTo(left[0][0], left[0][1]);
-  for (let i = 1; i < left.length; i++) shape.lineTo(left[i][0], left[i][1]);
-  for (let i = right.length - 1; i >= 0; i--) shape.lineTo(right[i][0], right[i][1]);
-  shape.closePath();
-  return shape;
-};
+const ratTexture = new THREE.DataTexture(ratPixels(), RAT_TEX_W, RAT_TEX_H);
+ratTexture.colorSpace = THREE.SRGBColorSpace;
+ratTexture.magFilter = THREE.NearestFilter;
+ratTexture.minFilter = THREE.NearestFilter;
+ratTexture.generateMipmaps = false;
+ratTexture.needsUpdate = true;
+
+const ratMaterial = new THREE.MeshBasicMaterial({
+  map: ratTexture,
+  transparent: true,
+  alphaTest: 0.5,
+  side: THREE.DoubleSide,
+  toneMapped: false,
+});
+
+const ratGeometry = new THREE.PlaneGeometry(1, 1);
+ratGeometry.userData.shared = true;
 
 const makeRatMesh = () => {
   const group = new THREE.Group();
@@ -96,24 +112,14 @@ const makeRatMesh = () => {
     interactive: false,
     decorative: true,
   };
-  // Haunches wide, shoulders narrow. The snout is a separate point in front.
-  const body = new THREE.Shape();
-  body.moveTo(-0.03, 0.04);
-  body.quadraticCurveTo(-0.07, -0.04, -0.14, -0.1);
-  body.quadraticCurveTo(-0.09, -0.2, 0, -0.18);
-  body.quadraticCurveTo(0.09, -0.2, 0.14, -0.1);
-  body.quadraticCurveTo(0.07, -0.04, 0.03, 0.04);
-  body.closePath();
-  const head = new THREE.Shape();
-  head.moveTo(0, 0.18);
-  head.quadraticCurveTo(-0.01, 0.12, -0.032, 0.02);
-  head.lineTo(0.032, 0.02);
-  head.quadraticCurveTo(0.01, 0.12, 0, 0.18);
-  layFlat(group, "rat-body", BODY, body, 0.046);
-  layFlat(group, "rat-head", BODY, head, 0.05);
-  layFlat(group, "rat-ear", EAR, earShape(-0.055), 0.054);
-  layFlat(group, "rat-ear", EAR, earShape(0.055), 0.054);
-  layFlat(group, "rat-tail", TAIL, tailShape(), 0.048);
+  const sprite = new THREE.Mesh(ratGeometry, ratMaterial);
+  sprite.name = "rat-sprite";
+  sprite.scale.set(RAT_W, RAT_H, 1);
+  sprite.position.y = RAT_H / 2 + 0.01;
+  sprite.castShadow = false;
+  sprite.receiveShadow = false;
+  sprite.raycast = emptyRaycast;
+  group.add(sprite);
   group.raycast = emptyRaycast;
   group.visible = false;
   group.frustumCulled = true;
@@ -136,6 +142,7 @@ export class AmbientRats {
       this.group.add(mesh);
       return {
         mesh,
+        art: mesh.getObjectByName("rat-sprite"),
         active: false,
         cell: -1,
         from: new THREE.Vector3(),
@@ -155,6 +162,7 @@ export class AmbientRats {
     this.enabled = false;
     this.thinkAccum = 0;
     this.seed = 1;
+    this._camera = null;
     this._scratch = new THREE.Vector3();
   }
 
@@ -241,8 +249,26 @@ export class AmbientRats {
     this.heightAt(cell, slot.from);
     slot.to.copy(slot.from);
     slot.mesh.position.copy(slot.from);
+    slot.mesh.rotation.y = 0;
     slot.mesh.visible = true;
-    slot.mesh.rotation.y = slot.yaw;
+    this.face(slot);
+  }
+
+  /** Billboard the side-view sprite toward the camera and mirror it with travel. */
+  face(slot) {
+    const art = slot.art;
+    if (!art) return;
+    const fx = Math.sin(slot.yaw);
+    const fz = Math.cos(slot.yaw);
+    let sign = fx < -0.05 ? -1 : 1;
+    const camera = this._camera;
+    if (camera) {
+      art.quaternion.copy(camera.quaternion);
+      const right = camera.matrixWorld.elements;
+      const side = fx * right[0] + fz * right[2];
+      if (Math.abs(side) > 0.05) sign = side < 0 ? -1 : 1;
+    }
+    art.scale.set(sign * RAT_W, RAT_H, 1);
   }
 
   heightAt(cell, out) {
@@ -266,8 +292,10 @@ export class AmbientRats {
   }
 
   /** Returns true while any near-camera rat is mid-scurry (keeps rAF alive briefly). */
-  update(dt, cameraPos) {
+  update(dt, cameraOrPos) {
     if (!this.enabled) return false;
+    this._camera = cameraOrPos?.isCamera ? cameraOrPos : null;
+    const cameraPos = this._camera ? this._camera.position : cameraOrPos;
     let scurryingNear = false;
     this.thinkAccum += dt;
     const think = this.thinkAccum >= THINK_INTERVAL;
@@ -275,6 +303,7 @@ export class AmbientRats {
 
     for (const slot of this.slots) {
       if (!slot.active) continue;
+      if (slot.mesh.visible) this.face(slot);
       const near = this.nearCamera(slot, cameraPos);
 
       if (slot.hidden) {
@@ -331,7 +360,6 @@ export class AmbientRats {
       const dx = slot.to.x - slot.from.x;
       const dz = slot.to.z - slot.from.z;
       slot.yaw = Math.atan2(dx, dz);
-      slot.mesh.rotation.y = slot.yaw;
       slot.cell = next;
       slot.progress = 0;
       if (near) scurryingNear = true;
@@ -364,13 +392,8 @@ export class AmbientRats {
   }
 
   dispose() {
-    for (const slot of this.slots) {
-      slot.mesh.traverse((o) => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) o.material.dispose();
-      });
-      slot.mesh.removeFromParent();
-    }
+    // Sprite geometry, material, and texture are shared by the pool.
+    for (const slot of this.slots) slot.mesh.removeFromParent();
     this.group.removeFromParent();
     this.clear();
   }
