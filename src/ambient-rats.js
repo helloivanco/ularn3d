@@ -115,14 +115,15 @@ const makeRatMesh = () => {
   const sprite = new THREE.Mesh(ratGeometry, ratMaterial);
   sprite.name = "rat-sprite";
   sprite.scale.set(RAT_W, RAT_H, 1);
-  sprite.position.y = RAT_H / 2 + 0.01;
+  sprite.position.y = RAT_H / 2 + 0.02;
   sprite.castShadow = false;
   sprite.receiveShadow = false;
+  sprite.frustumCulled = false;
   sprite.raycast = emptyRaycast;
   group.add(sprite);
   group.raycast = emptyRaycast;
   group.visible = false;
-  group.frustumCulled = true;
+  group.frustumCulled = false;
   return group;
 };
 
