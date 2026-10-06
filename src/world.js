@@ -34,14 +34,25 @@ import {
   fillWieldedWeapon,
   LANDMARK_NAMES,
 } from "./models.js";
+import {
+  attackPose,
+  attackStyle,
+  CAST_MS,
+  castPose,
+  LEG_Y,
+  STEP_MS,
+  stepEase,
+  stepPose,
+  SWING_MS,
+} from "./hero-motion.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 const FLOOR_LIMIT = 40 * 32;
 /* North-aligned default: pure +Z offset looks toward game north (−Z / −map Y). */
 const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
-/* One step eases onto the next tile. Turns stay instant; only the view moves. */
-const FOLLOW_MS = 200;
+/* One stride crosses the tile. The turn is still one action; only the view and body move. */
+const FOLLOW_MS = STEP_MS;
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
 const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y) => {
@@ -504,7 +515,11 @@ export class World {
     listen(window, "ularn:combat", (event) => {
       const detail = event.detail;
       if (!this.state || detail?.level !== this.level || document.hidden) return;
-      if (detail.kind === "weapon") { this.attackAge = 0; this.attackStartedAt = performance.now(); }
+      if (detail.kind === "weapon") {
+        this.attackAge = 0;
+        this.attackStartedAt = performance.now();
+        this.attackStyle = attackStyle(detail.weapon);
+      }
       if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
         (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y)) {
@@ -663,6 +678,25 @@ export class World {
         meshes: this.heroWeapon?.children?.length ?? 0,
         hasArt: !!this.heroWeapon?.getObjectByName("weapon-art"),
       }),
+      heroMotion: () => {
+        const now = performance.now();
+        const swing = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
+        const step = this.followLive() ? (now - this.followStart) / this.followMs : 1;
+        return {
+          style: this.attackStyle || "punch",
+          armed: (this.heroWeapon?.children?.length || 0) > 0,
+          weaponType: this.heroWeapon?.userData?.weaponType ?? "unarmed",
+          swinging: swing >= 0 && swing < 1,
+          swing: Math.max(0, Math.min(1, swing)),
+          stepping: step >= 0 && step < 1,
+          step: Math.max(0, Math.min(1, step)),
+          bodyY: this.heroBody?.position.y ?? 0,
+          rightArmX: this.heroRightArm?.rotation.x ?? 0,
+          rightArmZ: this.heroRightArm?.rotation.z ?? 0,
+          leftLegX: this.heroLeftLeg?.rotation.x ?? 0,
+          rightLegX: this.heroRightLeg?.rotation.x ?? 0,
+        };
+      },
       ambientRats: () => this.ambientRats?.snapshot() ?? {
         pool: AMBIENT_RAT_POOL,
         enabled: false,
@@ -769,7 +803,65 @@ export class World {
     this.heroCape = this.player.getObjectByName("cape");
     this.heroLeftArm = this.player.getObjectByName("left-arm");
     this.heroRightArm = this.player.getObjectByName("right-arm");
+    this.heroLeftForearm = this.player.getObjectByName("left-forearm");
+    this.heroRightForearm = this.player.getObjectByName("right-forearm");
     this.heroWeaponKey = null;
+  }
+  setLeg(leg, rotationX, lift) {
+    if (!leg) return;
+    leg.rotation.x = rotationX;
+    leg.position.y = LEG_Y + lift;
+  }
+  setArm(arm, x, y, z) {
+    if (!arm) return;
+    arm.rotation.set(x, y, z);
+  }
+  setForearm(arm, x) {
+    if (!arm) return;
+    arm.rotation.set(x, 0, 0);
+  }
+  setWeaponGrip(gripZ = 0) {
+    const weapon = this.heroWeapon;
+    if (!weapon) return;
+    weapon.rotation.set(weapon.userData.restRotationX || 0, 0, gripZ);
+  }
+  poseHero(now) {
+    const body = this.heroBody;
+    if (!body || this.reduced) return false;
+    const swingT = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
+    const castT = this.castStartedAt == null ? 1 : (now - this.castStartedAt) / CAST_MS;
+    const stepping = this.followLive();
+    const swinging = swingT >= 0 && swingT < 1;
+    const casting = castT >= 0 && castT < 1;
+    const step = stepPose(stepping ? Math.min(1, (now - this.followStart) / this.followMs) : 1, !!this.stepLeadRight);
+    body.position.y = step.bodyY;
+    body.position.z = 0;
+    body.rotation.x = step.lean;
+    body.rotation.y = 0;
+    body.rotation.z = step.roll;
+    this.setLeg(this.heroLeftLeg, step.leftLeg, step.leftLift);
+    this.setLeg(this.heroRightLeg, step.rightLeg, step.rightLift);
+    this.setArm(this.heroLeftArm, step.leftArm, 0, 0);
+    this.setArm(this.heroRightArm, step.rightArm, 0, 0);
+    this.setForearm(this.heroLeftForearm, step.forearmX);
+    this.setForearm(this.heroRightForearm, step.forearmX);
+    if (this.heroCape) this.heroCape.rotation.x = step.capeX;
+    this.setWeaponGrip(0);
+    if (casting && !swinging) {
+      const cast = castPose(castT);
+      this.setArm(this.heroRightArm, cast.arm.x, cast.arm.y, cast.arm.z);
+      this.setForearm(this.heroRightForearm, cast.forearmX);
+    }
+    if (swinging) {
+      const attack = attackPose(swingT, this.attackStyle || "punch");
+      this.setArm(this.heroRightArm, attack.arm.x, attack.arm.y, attack.arm.z);
+      this.setForearm(this.heroRightForearm, attack.forearmX);
+      this.setArm(this.heroLeftArm, attack.left.x, attack.left.y, attack.left.z);
+      body.position.z = attack.lunge;
+      body.rotation.y = attack.twist;
+      this.setWeaponGrip(attack.gripZ);
+    }
+    return stepping || swinging || casting;
   }
   creaturePresentation() {
     let model = 0;
@@ -1545,27 +1637,7 @@ export class World {
         this.yawTo = this.yawFrom + dy;
         this.yawEase = true;
       }
-      this.walkAge = 0;
-      this.walkStartedAt = performance.now();
       this.startFollow(target);
-    }
-    if (
-      old &&
-      old.moves !== state.moves &&
-      state.x === old.x &&
-      state.y === old.y &&
-      state.maze
-    ) {
-      if (
-        old.tiles.some(
-          (t) =>
-            t.monster &&
-            Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
-        )
-      ) {
-        this.attackAge = 0;
-        this.attackStartedAt = performance.now();
-      }
     }
     if (
       old &&
@@ -1796,6 +1868,7 @@ export class World {
     this.followMs = this.reduced || !moving ? 0 : FOLLOW_MS;
     this.followHeld = this.followMs === 0;
     this.hasMotion = this.followMs > 0;
+    if (this.followMs) this.stepLeadRight = !this.stepLeadRight;
     if (!this.followMs) this.snapFollow();
   }
   snapFollow() {
@@ -1863,7 +1936,7 @@ export class World {
     this.animating = true;
     if (this.playerTarget && this.followLive()) {
       const t = Math.min(1, (now - this.followStart) / this.followMs);
-      const eased = t * t * (3 - 2 * t);
+      const eased = stepEase(t);
       if (t >= 1) {
         this.snapFollow();
         if (this.yawEase) this.player.rotation.y = this.yawTo;
@@ -1882,34 +1955,7 @@ export class World {
       this.playerLight.position
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
-      const body = this.heroBody;
-      if (body && !this.reduced) {
-        this.walkAge = this.walkStartedAt === undefined ? 1 : (now - this.walkStartedAt) / 1000;
-        this.attackAge = this.attackStartedAt === undefined ? 1 : (now - this.attackStartedAt) / 1000;
-        this.castAge = this.castStartedAt === undefined ? 1 : (now - this.castStartedAt) / 1000;
-        const walk = Math.max(0, 1 - this.walkAge / 0.28);
-        body.position.y = Math.abs(Math.sin(this.walkAge * 26)) * 0.045 * walk;
-        if (this.heroLeftLeg)
-          this.heroLeftLeg.rotation.x = Math.sin(this.walkAge * 26) * 0.45 * walk;
-        if (this.heroRightLeg)
-          this.heroRightLeg.rotation.x = Math.sin(this.walkAge * 26) * -0.45 * walk;
-        if (this.heroLeftArm)
-          this.heroLeftArm.rotation.x = Math.sin(this.walkAge * 26) * -0.4 * walk;
-        if (this.heroRightArm)
-          this.heroRightArm.rotation.x = Math.sin(this.walkAge * 26) * 0.4 * walk;
-        const weapon = this.heroWeapon;
-        if (weapon) {
-          const casting = this.castAge < 0.65;
-          const attacking = this.attackAge < 0.3;
-          weapon.rotation.x = casting
-            ? -Math.sin(this.castAge / 0.65 * Math.PI) * 1.9
-            : attacking
-              ? -Math.sin((this.attackAge / 0.3) * Math.PI) * 1.4
-              : 0;
-          weapon.rotation.z = attacking ? Math.sin((this.attackAge / 0.3) * Math.PI) * 0.45 : 0;
-        }
-        if (this.heroCape) this.heroCape.rotation.x = -0.25 + Math.sin(this.tick * 2) * 0.035;
-      }
+      this.heroLimbLive = this.poseHero(now);
     }
     if (!this.reduced) {
       this.dust.rotation.y = Math.sin(this.tick * 0.055) * 0.08;
@@ -1943,7 +1989,7 @@ export class World {
     this.scratchCam.copy(this.camera.position);
     this.controls.update();
     this.camera.updateMatrixWorld();
-    this.hasMotion = this.followLive();
+    this.hasMotion = this.followLive() || !!this.heroLimbLive;
     if (this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001)
       this.hasMotion = true;
     if (this.camera.position.distanceToSquared(this.scratchCam) > 1e-8) this.hasMotion = true;

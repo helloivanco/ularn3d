@@ -64,9 +64,16 @@ test("classes keep distinct silhouettes and starting weapons", () => {
     const player = hero(name);
     assert.equal(player.userData.heroClass, name);
     assert.equal(player.userData.helm, helms[name]);
-    assert.equal(player.getObjectByName("weapon").userData.weaponType, type);
+    const weapon = player.getObjectByName("weapon");
+    assert.equal(weapon.userData.weaponType, type);
+    assert.equal(weapon.parent?.name, "right-forearm");
+    let armedMeshes = 0;
+    weapon.traverse((obj) => { if (obj.isMesh) armedMeshes++; });
+    assert.equal(armedMeshes > 0, type !== "unarmed", name);
     assert.ok(player.getObjectByName("left-arm"));
     assert.ok(player.getObjectByName("right-arm"));
+    assert.ok(player.getObjectByName("left-forearm"));
+    assert.ok(player.getObjectByName("right-forearm"));
     assert.ok(player.getObjectByName("contact-disc"));
     let outlines = 0;
     player.traverse((obj) => { if (obj.name === "hero-outline") outlines++; });

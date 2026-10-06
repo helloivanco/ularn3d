@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mat, matBasic, surface, noise } from "./materials.js";
+import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 export { mat } from "./materials.js";
 const shared = new Map();
 const geometry = (key, create) => {
@@ -254,6 +255,9 @@ export function fillWieldedWeapon(grip, weapon = null) {
   const type = weapon?.type || "unarmed";
   grip.userData.weaponId = id;
   grip.userData.weaponType = type;
+  const restX = !id || type === "unarmed" ? 0 : weaponRestX(type);
+  grip.rotation.set(restX, 0, 0);
+  grip.userData.restRotationX = restX;
   if (!id || type === "unarmed") return grip;
 
   const metal = { metalness: 0.2, roughness: 0.42 };
@@ -478,8 +482,34 @@ export function hero(character = "Adventurer") {
     if (kit.helm === "helm" || kit.plate) {
       orb(arm, 0x849b93, 0, 0.02, 0, 0.12, { metalness: 0.16, roughness: 0.48 });
     }
-    box(arm, cloth, 0, -0.16, 0, 0.12, 0.26, 0.13);
-    orb(arm, skin, 0, -0.32, -0.02, character === "Ogre" ? 0.09 : 0.07);
+    box(arm, cloth, 0, -0.1, 0, 0.12, 0.18, 0.13);
+    const forearm = new THREE.Group();
+    forearm.name = x < 0 ? "left-forearm" : "right-forearm";
+    forearm.position.set(0, -0.2, 0);
+    forearm.rotation.x = FOREARM_REST;
+    arm.add(forearm);
+    box(forearm, cloth, 0, -0.08, 0, 0.1, 0.16, 0.11);
+    orb(forearm, skin, 0, -0.18, -0.02, character === "Ogre" ? 0.09 : 0.07);
+    if (x > 0) {
+      const sword = new THREE.Group();
+      sword.name = "weapon";
+      sword.position.set(0.03, -0.16, -0.05);
+      forearm.add(sword);
+      fillWieldedWeapon(sword, kit.weapon || { id: null, type: "unarmed", name: "bare hands" });
+    }
+    if (x < 0 && kit.lantern) {
+      const lantern = new THREE.Group();
+      lantern.name = "lantern";
+      lantern.position.set(-0.02, -0.2, 0.02);
+      forearm.add(lantern);
+      box(lantern, 0xfac96e, 0, 0, 0, 0.12, 0.15, 0.12, {
+        emissive: 0xffbc53,
+        emissiveIntensity: 1.4,
+      });
+      for (const side of [-0.073, 0.073]) box(lantern, 0x555245, side, 0, 0, 0.022, 0.19, 0.16);
+      box(lantern, 0x7b714f, 0, 0.11, 0, 0.18, 0.04, 0.18);
+      box(lantern, 0x7b714f, 0, -0.11, 0, 0.18, 0.04, 0.18);
+    }
   }
   orb(body, skin, 0, 0.9, -0.01, character === "Ogre" ? 0.17 : 0.14);
   if (kit.helm === "helm") {
@@ -516,24 +546,6 @@ export function hero(character = "Adventurer") {
   }
   for (const x of [-0.04, 0.04]) {
     markDetail(box(body, 0x1c2422, x, 0.9, -0.13, 0.025, 0.018, 0.016));
-  }
-  const sword = new THREE.Group();
-  sword.name = "weapon";
-  sword.position.set(0.31, 0.38, -0.11);
-  body.add(sword);
-  fillWieldedWeapon(sword, kit.weapon || { id: null, type: "unarmed", name: "bare hands" });
-  if (kit.lantern) {
-    const lantern = new THREE.Group();
-    lantern.name = "lantern";
-    lantern.position.set(-0.33, 0.24, 0);
-    body.add(lantern);
-    box(lantern, 0xfac96e, 0, 0, 0, 0.12, 0.15, 0.12, {
-      emissive: 0xffbc53,
-      emissiveIntensity: 1.4,
-    });
-    for (const x of [-0.073, 0.073]) box(lantern, 0x555245, x, 0, 0, 0.022, 0.19, 0.16);
-    box(lantern, 0x7b714f, 0, 0.11, 0, 0.18, 0.04, 0.18);
-    box(lantern, 0x7b714f, 0, -0.11, 0, 0.18, 0.04, 0.18);
   }
   if (kit.scale) body.scale.set(kit.scale[0], kit.scale[1], kit.scale[2]);
   const mark = ring(g, 0xe6d091, 0.38, 0.012);
