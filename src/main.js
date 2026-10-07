@@ -1,8 +1,11 @@
 import "./style.css";
 import "./hud.css";
 import { GameAudio } from "./audio.js";
+import { audioSettings } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
+import { HeldMovement, movementKey, findRoute, isHostile, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
+import { GameMap } from "./map.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
@@ -37,11 +40,59 @@ let character = "Adventurer",
   world,
   walking = null,
   soundOn = false,
-  audio = new GameAudio(),
+  audio,
   readCues = createCueReader(),
   toastTimer,
+  damageTimer,
   lastHP = null,
   graphicsLost = false;
+const AUDIO_SETTINGS_KEY = "ularn3d.audio.v1";
+let audioPreference = audioSettings(), audioStarted = false, lastAudioError = "", audioControlSignature = "";
+try { audioPreference = audioSettings(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY) || "{}")); } catch {}
+audio = new GameAudio({ ...audioPreference, enabled: false, onChange: syncAudioControls });
+window.ularnAudio = Object.freeze({ metrics: () => audio.metrics() });
+function syncAudioControls() {
+  if (!$("sound")) return;
+  const metrics = audio.metrics(), retry = soundOn && ["blocked", "error"].includes(metrics.status);
+  const signature = JSON.stringify([soundOn, metrics.status, metrics.error, metrics.track, audioPreference.music, audioPreference.effects, !!state?.over]);
+  if (signature === audioControlSignature) return;
+  audioControlSignature = signature;
+  const label = retry ? "Resume sound" : soundOn ? "Disable sound" : "Enable sound";
+  $("sound").setAttribute("aria-label", label); $("sound").title = label;
+  $("sound").setAttribute("aria-pressed", String(soundOn));
+  setIcon($("sound").querySelector("[data-icon]"), soundOn ? "soundOn" : "soundOff");
+  $("sound").querySelector(".button-label").textContent = retry ? "Resume sound" : soundOn ? "Sound on" : "Sound off";
+  $("audio-enabled").checked = soundOn;
+  $("music-volume").value = Math.round(audioPreference.music * 100);
+  $("effects-volume").value = Math.round(audioPreference.effects * 100);
+  $("music-volume-text").textContent = `${Math.round(audioPreference.music * 100)}%`;
+  $("effects-volume-text").textContent = `${Math.round(audioPreference.effects * 100)}%`;
+  $("audio-track").textContent = state?.over ? "Expedition ended" : metrics.track;
+  $("audio-status").textContent = metrics.error || (metrics.status === "loading" ? "Loading music…" : "");
+  if (metrics.error && metrics.error !== lastAudioError) toast(metrics.error);
+  lastAudioError = metrics.error;
+}
+function setAudioPreference(changes) {
+  audioPreference = audioSettings({ ...audioPreference, ...changes });
+  soundOn = audioPreference.enabled; audioStarted = true;
+  try { localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(audioPreference)); } catch {}
+  audio.configure(audioPreference); if (soundOn) audio.resume(); syncAudioControls();
+}
+function activateAudio() {
+  if (!state) audio.deferMusic = true;
+  if (!audioStarted) { audioStarted = true; soundOn = audioPreference.enabled; audio.configure(audioPreference); syncAudioControls(); }
+  if (soundOn) audio.resume();
+}
+syncAudioControls();
+
+let route = [], travelRevision = 0;
+const movementAllowed = () => !!state && state.maze && !state.over && !state.prompt && !state.busy && !graphicsLost && !document.hidden && !document.querySelector("dialog[open]");
+const held = new HeldMovement((key) => sendCommand(key), movementAllowed);
+const heldKeys = new Set();
+const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map"), dialog: $("map-dialog"), viewport: $("map-viewport"), travel: (tile) => travel(tile), stop: () => stopTravel(),
+  glyph: tile => tile.monster?.symbol || MAP_GLYPHS[tile.id] || tile.symbol || (tile.id ? "?" : "."), color: mapGlyphColor,
+  allies: () => engine.party?.() || [], pings: () => window.ularnOnline?.mapPings?.() || [] });
+let journalSignature = "", statsSignature = "";
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
 const HERO_NAME_KEY = "ularn3d.heroName";
@@ -98,9 +149,17 @@ const syncHeard = (snapshot) => {
     return;
   }
   audio.syncBed(snapshot.level);
-  for (const cue of cues) sound(cue);
+  for (const cue of cues) sound(cue, {surface: snapshot.level===0 && !world?.paths.has(`${snapshot.x},${snapshot.y}`) ? "grass" : "stone"});
 };
+window.addEventListener("ularn:action", ({detail}) => {
+  if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest"].includes(detail.kind)) sound(detail.kind,detail);
+});
 window.addEventListener("ularn:combat", ({ detail }) => {
+  if (state?.over) return;
+  if (detail.to && window.ularnGraphics) {
+    const point = ularnGraphics.projectTile(detail.to.x, detail.to.y, .4);
+    detail = { ...detail, pan: Math.max(-.65, Math.min(.65, (point.x - ularnGraphics.metrics().heroScreen.x) / 250)) };
+  }
   if (detail.kind === "weapon") sound("weapon", detail);
   else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
     sound("spell", detail);
@@ -163,6 +222,7 @@ window.ularnAudio = audio;
 function syncInventoryPin() {
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
+  updateViewport();
 }
 function toggleInventoryPin() {
   inventoryPinned = !inventoryPinned;
@@ -216,6 +276,7 @@ function updateInventoryAndEffects() {
     .join("|");
   if (effectsKey !== effectsSignature) {
     effectsSignature = effectsKey;
+    requestAnimationFrame(updateViewport);
     $("effects-panel").hidden = effects.length === 0;
     $("effects").replaceChildren(...effects.map((effect) => {
       const row = document.createElement("div");
@@ -333,6 +394,7 @@ try {
     '<div style="max-width:440px;padding:30px;text-align:center">3D graphics could not start.<p style="font:14px Arial;line-height:1.7">Enable hardware acceleration in your browser, then reload. You can also play the complete classic edition below.</p><a style="color:#d7bc83;font:14px Arial" href="/engine/larn_local.html?ularn=true">Open classic Ularn →</a></div>';
 }
 async function start(resume) {
+  activateAudio();
   $("begin").disabled = true;
   $("continue").disabled = true;
   try {
@@ -351,6 +413,7 @@ async function start(resume) {
     document.body.classList.add("playing");
     update();
     world?.beginExpeditionCamera();
+    updateViewport();
   } catch (error) {
     $("start-error").textContent = error.message;
     $("begin").disabled = false;
@@ -432,6 +495,8 @@ function update() {
   const perfStart = ularnPerf.enabled ? performance.now() : 0;
   const next = engine.snapshot();
   if (!next) return;
+  const previous = state;
+  const previousGold = state?.gold, previousBank = state?.bank;
   const fog = window.ularnOnline?.fogMask?.() ?? null;
   state = fog
     ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
@@ -564,6 +629,24 @@ function update() {
     $("new-after-death").hidden = !state.over;
     if (state.saveError) toast(state.saveError);
   }
+  audio.deferMusic = false;
+  if (!movementAllowed() || (previous && previous.level !== state.level)) stopTravel();
+  if (!state.over) {
+    const danger = state.tiles.filter(tile => isHostile(tile) && Math.max(Math.abs(tile.x-state.x), Math.abs(tile.y-state.y)) <= 6).length;
+    audio.scene(state.level === 0 ? "town" : state.level > 15 ? "volcano" : "caves", Math.min(1,danger/3));
+  }
+  if (previous && !previous.over && state.over) audio.finish(state.winner ? "victory" : "death");
+  $("scoreboard-controls").hidden = !state.scoreboard;
+  $("global-scores").setAttribute("aria-pressed", String(!state.localScores));
+  $("local-scores").setAttribute("aria-pressed", String(state.localScores));
+  $("score-details").hidden = !state.scoreboard;
+  if (state.scoreboard) $("score-details").textContent = $("STATS").textContent;
+  $("score-sync-status").hidden = !state.scoreboard;
+  if (state.scoreboard) {
+    const sync=state.scoreSync;
+    $("score-sync-status").textContent = !sync.configured ? "Global records are not configured." : sync.pending ? `${sync.pending} completed score${sync.pending===1?"":"s"} saved locally, waiting to sync.` : sync.latestSyncedGame===state.gameID ? "This expedition’s score is saved globally." : "Completed expeditions are shared automatically when online.";
+  }
+  if (previousGold != null && state.gold > previousGold && state.bank === previousBank && !state.over) sound("coins");
   syncTerminalEndActions(state);
   updateInventoryAndEffects();
   syncJournal(state.log, state.logRev);
@@ -650,247 +733,22 @@ function mapGlyphColor(tile) {
   return "#f0d7a0";
 }
 
-function mapExtent() {
-  if (state.level === 0 && typeof townBounds === "function") {
-    const b = townBounds();
-    const x0 = Math.max(0, b.x0 - 1);
-    const y0 = Math.max(0, b.y0 - 1);
-    return {
-      x0,
-      y0,
-      cols: Math.min(state.width - x0, b.x1 - x0 + 2),
-      rows: Math.min(state.height - y0, b.y1 - y0 + 2),
-    };
-  }
-  return { x0: 0, y0: 0, cols: state.width, rows: state.height };
-}
+function drawMap() { gameMap.update(state); }
 
-function mapCellSize(cols, rows) {
-  const short = innerHeight <= 500 && innerWidth > innerHeight;
-  const compact = innerWidth <= 700 || short;
-  const maxW = compact
-    ? Math.min(
-        innerWidth - 28,
-        short ? Math.floor(innerWidth * 0.62) : innerWidth - 28,
-      )
-    : Math.min(Math.floor(innerWidth * 0.56), 684);
-  /* Leave room for the top chrome, town destination, and bottom dock. */
-  const reserved = short ? 198 : compact ? 412 : 250;
-  const maxH = compact
-    ? Math.max(24, Math.min(Math.floor(innerHeight * 0.34), innerHeight - reserved))
-    : Math.min(innerHeight - 250, 280);
-  const cell = Math.max(
-    1,
-    Math.min(Math.floor(maxW / cols), Math.floor(maxH / rows)),
-  );
-  return { cell, short, compact };
-}
-
-function drawMap() {
-  const canvas = $("minimap"),
-    ctx = canvas.getContext("2d");
-  const { x0, y0, cols, rows } = mapExtent();
-  const { cell } = mapCellSize(cols, rows);
-  const dpr = Math.min(1.25, window.devicePixelRatio || 1);
-  const cssW = cols * cell;
-  const cssH = rows * cell;
-  const nextWidth = Math.round(cssW * dpr);
-  const nextHeight = Math.round(cssH * dpr);
-  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
-    canvas.width = nextWidth;
-    canvas.height = nextHeight;
-  }
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
-  canvas.dataset.x0 = String(x0);
-  canvas.dataset.y0 = String(y0);
-  canvas.dataset.cols = String(cols);
-  canvas.dataset.rows = String(rows);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  const layoutKey = `${state.level}:${x0},${y0},${cols}x${rows}:${cell}:${cssW}x${cssH}`;
-  const playerKey = `${state.x},${state.y}`;
-  // Prefer engine mapRev (floors/props/actors) over re-hashing every tile.
-  let contentKey =
-    state.mapRev != null
-      ? `rev:${state.mapRev}:${layoutKey}`
-      : null;
-  if (!contentKey) {
-    let contentHash =
-      (state.level * 9973) ^
-      (state.tiles.length * 131) ^
-      ((x0 + 1) * 17 + (y0 + 1) * 19 + cols * 23 + rows * 29 + cell);
-    for (const t of state.tiles) {
-      contentHash =
-        (Math.imul(contentHash, 16777619) ^
-          ((t.x + 1) * 73471 +
-            (t.y + 1) * 19349663 +
-            (t.wall ? 3 : 0) +
-            t.id * 997 +
-            (t.arg ?? 0) * 13 +
-            (t.monster?.id ?? 0) * 47)) |
-        0;
-    }
-    contentKey = `${contentHash}:${cssW}x${cssH}`;
-  }
-  const pings = window.ularnOnline?.mapPings?.() ?? [];
-  const pingKey = pings.map((ping) => `${ping.x},${ping.y}`).join(";");
-  if (
-    canvas.dataset.contentKey === contentKey &&
-    canvas.dataset.playerKey === playerKey &&
-    canvas.dataset.pingKey === pingKey
-  )
-    return;
-  // Walking only moves @. Redraw the old and new cell instead of 57×20 fillRects.
-  if (
-    canvas.dataset.contentKey === contentKey &&
-    canvas.dataset.playerKey &&
-    canvas.dataset.playerKey !== playerKey &&
-    canvas.dataset.pingKey === pingKey
-  ) {
-    const [ox, oy] = canvas.dataset.playerKey.split(",").map(Number);
-    const paintCell = (x, y, isPlayer) => {
-      if (x < x0 || y < y0 || x >= x0 + cols || y >= y0 + rows) return;
-      const px = (x - x0) * cell,
-        py = (y - y0) * cell;
-      if (isPlayer) {
-        ctx.fillStyle = "#f8dea0";
-        ctx.fillRect(px, py, cell, cell);
-        ctx.fillStyle = "#132325";
-        const fontPx = Math.max(6, Math.round(cell * 0.8));
-        ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("@", px + cell / 2, py + cell / 2);
-        return;
-      }
-      const t = state.tiles.find((tile) => tile.x === x && tile.y === y);
-      ctx.fillStyle = t?.wall ? "#3a4d4a" : "#173236";
-      ctx.fillRect(px, py, cell, cell);
-      if (!t || t.wall) return;
-      const cx = px + cell / 2,
-        cy = py + cell / 2;
-      const symbol =
-        t.monster?.symbol ||
-        MAP_GLYPHS[t.id] ||
-        t.symbol ||
-        (t.id ? "?" : ".");
-      const notable =
-        t.monster ||
-        MAP_GLYPHS[t.id] ||
-        (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
-      if (notable) {
-        const fontPx = Math.max(6, Math.round(cell * 0.8));
-        ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = mapGlyphColor(t);
-        ctx.fillText(symbol, cx, cy);
-      } else {
-        const mark = Math.max(1, Math.round(cell * 0.14));
-        ctx.fillStyle = "#6d8a82";
-        ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
-      }
-    };
-    paintCell(ox, oy, false);
-    paintCell(state.x, state.y, true);
-    canvas.dataset.playerKey = playerKey;
-    canvas.dataset.pingKey = pingKey;
-    return;
-  }
-  ctx.fillStyle = "#0a1214";
-  ctx.fillRect(0, 0, cssW, cssH);
-  const fontPx = Math.max(6, Math.round(cell * 0.8));
-  ctx.font = `700 ${fontPx}px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const mark = Math.max(1, Math.round(cell * 0.14));
-  for (const t of state.tiles) {
-    const col = t.x - x0,
-      row = t.y - y0;
-    if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
-    const px = col * cell,
-      py = row * cell;
-    ctx.fillStyle = t.wall ? "#3a4d4a" : "#173236";
-    ctx.fillRect(px, py, cell, cell);
-    if (t.wall || (t.x === state.x && t.y === state.y)) continue;
-    const cx = px + cell / 2,
-      cy = py + cell / 2;
-    const symbol =
-      t.monster?.symbol ||
-      MAP_GLYPHS[t.id] ||
-      t.symbol ||
-      (t.id ? "?" : ".");
-    const notable =
-      t.monster ||
-      MAP_GLYPHS[t.id] ||
-      (t.id > 0 && symbol !== "." && symbol !== " " && symbol !== "·");
-    if (notable) {
-      ctx.fillStyle = mapGlyphColor(t);
-      ctx.fillText(symbol, cx, cy);
-    } else {
-      ctx.fillStyle = "#6d8a82";
-      ctx.fillRect(cx - mark / 2, cy - mark / 2, mark, mark);
-    }
-  }
-  if (
-    state.x >= x0 &&
-    state.x < x0 + cols &&
-    state.y >= y0 &&
-    state.y < y0 + rows
-  ) {
-    const px = (state.x - x0) * cell,
-      py = (state.y - y0) * cell;
-    ctx.fillStyle = "#f8dea0";
-    ctx.fillRect(px, py, cell, cell);
-    ctx.fillStyle = "#132325";
-    ctx.fillText("@", px + cell / 2, py + cell / 2);
-  }
-  const allies = typeof engine.party === "function" ? engine.party() : [];
-  if (allies.length > 1) {
-    for (const ally of allies) {
-      if (!ally.alive || ally.dungeon !== state.level) continue;
-      if (ally.x === state.x && ally.y === state.y) continue;
-      if (ally.x < x0 || ally.y < y0 || ally.x >= x0 + cols || ally.y >= y0 + rows) continue;
-      const ax = (ally.x - x0) * cell;
-      const ay = (ally.y - y0) * cell;
-      ctx.fillStyle = "#9fd7c8";
-      ctx.fillRect(ax, ay, cell, cell);
-      ctx.fillStyle = "#132325";
-      ctx.fillText(String(ally.name || "A").slice(0, 1), ax + cell / 2, ay + cell / 2);
-    }
-  }
-  for (const ping of pings) {
-    if (ping.x < x0 || ping.y < y0 || ping.x >= x0 + cols || ping.y >= y0 + rows) continue;
-    const px = (ping.x - x0) * cell;
-    const py = (ping.y - y0) * cell;
-    ctx.strokeStyle = "#f3d48a";
-    ctx.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
-  }
-  canvas.dataset.contentKey = contentKey;
-  canvas.dataset.playerKey = playerKey;
-  canvas.dataset.pingKey = pingKey;
-  const sizeKey = `${nextWidth}x${nextHeight}:${cssW}x${cssH}`;
-  if (canvas.dataset.sizeKey !== sizeKey) {
-    canvas.dataset.sizeKey = sizeKey;
-    const panel = canvas.closest(".map-panel");
-    if (panel) {
-      document.body.style.setProperty(
-        "--map-bottom",
-        `${Math.ceil(panel.getBoundingClientRect().bottom)}px`,
-      );
-    }
-  }
-}
+function setRoute(points=[]) { route=points; gameMap.setRoute?.(points); world?.setRoute(points); }
 function stopTravel() {
+  travelRevision++;
+  held.stop();
+  if (route.length) setRoute();
   engine.interruptTravel();
   if (walking) {
     clearTimeout(walking);
     walking = null;
   }
 }
-function command(key, shift = false) {
-  stopTravel();
+function command(key, shift=false) { stopTravel(); sendCommand(key,shift); }
+function sendCommand(key, shift = false) {
+  if (world) world.lastInputAt=performance.now();
   if (document.activeElement?.id === "chat-input") return;
   if (window.ularnOnline?.inMatch?.()) {
     if (window.ularnOnline.acceptsInput?.() === false) return;
@@ -900,11 +758,26 @@ function command(key, shift = false) {
   if (!state || graphicsLost) return;
   engine.key(key, shift);
 }
-document
-  .querySelectorAll("[data-key]")
-  .forEach((button) =>
-    button.addEventListener("click", () => command(button.dataset.key)),
-  );
+document.querySelectorAll("[data-key]").forEach((button) => {
+  let pointerClick = false;
+  const key = button.dataset.key;
+  if (button.closest(".dpad") && movementKey(key)) {
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !movementAllowed()) return;
+      event.preventDefault(); pointerClick = true; button.setPointerCapture(event.pointerId);
+      stopTravel(); held.start(key, event.pointerId);
+    });
+    button.addEventListener("pointerup", (event) => held.release(event.pointerId));
+    button.addEventListener("pointercancel", (event) => held.release(event.pointerId));
+    button.addEventListener("lostpointercapture", (event) => held.release(event.pointerId));
+  }
+  button.addEventListener("click", (event) => {
+    if (pointerClick && event.detail !== 0) { pointerClick = false; return; }
+    pointerClick = false; command(key);
+  });
+});
+window.addEventListener("keyup", (event) => { const source = event.code || event.key; held.release(source); heldKeys.delete(source); });
+window.addEventListener("blur", stopTravel);
 const keyMap = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -960,19 +833,15 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key.length === 1 || keyMap[event.key]) {
     event.preventDefault();
-    command(keyMap[event.key] || event.key, event.shiftKey);
+    const key = keyMap[event.key] || event.key;
+    const source = event.code || event.key;
+    if (event.repeat && heldKeys.has(source)) return;
+    if (!event.shiftKey && movementKey(key) && movementAllowed()) {
+      if (!event.repeat) { stopTravel(); heldKeys.add(source); held.start(key, source); }
+    } else command(key, event.shiftKey);
   }
 });
-const dirs = [
-  [-1, -1, "y"],
-  [0, -1, "k"],
-  [1, -1, "u"],
-  [-1, 0, "h"],
-  [1, 0, "l"],
-  [-1, 1, "b"],
-  [0, 1, "j"],
-  [1, 1, "n"],
-];
+const dirs = DIRECTIONS;
 function travel(tile) {
   stopTravel();
   if (
@@ -1009,50 +878,16 @@ function travel(tile) {
     toast("Move one step at a time while confused or blinded.");
     return;
   }
-  const cells = new Map(
-    state.tiles
-      .filter(
-        (t) =>
-          !t.wall &&
-          !t.closed &&
-          !t.monster &&
-          (!t.hazard || (t.x === tile.x && t.y === tile.y)),
-      )
-      .map((t) => [`${t.x},${t.y}`, t]),
-  );
-  const startKey = `${state.x},${state.y}`,
-    goal = `${tile.x},${tile.y}`;
-  const q = [[state.x, state.y]],
-    prev = new Map([[startKey, null]]);
-  let qi = 0;
-  while (qi < q.length && !prev.has(goal)) {
-    const [x, y] = q[qi++];
-    for (const [a, b, key] of dirs) {
-      const nx = x + a,
-        ny = y + b,
-        k = `${nx},${ny}`;
-      if (cells.has(k) && !prev.has(k)) {
-        prev.set(k, { from: `${x},${y}`, key });
-        q.push([nx, ny]);
-      }
-    }
-  }
-  if (!prev.has(goal)) {
-    toast("No explored route. Move closer to discover the way.");
-    return;
-  }
-  const path = [];
-  let cursor = goal;
-  while (cursor !== startKey) {
-    const p = prev.get(cursor);
-    path.unshift(p.key);
-    cursor = p.from;
-  }
+  const path = findRoute(state, tile);
+  if (!path) { toast("No explored route. Move closer to discover the way."); return; }
+  const token = travelRevision;
+  setRoute([{ x: state.x, y: state.y }, ...path]);
   const initialLevel = state.level;
   let hp = state.hp;
   const step = () => {
     walking = null;
     if (
+      token !== travelRevision ||
       !path.length ||
       state.over ||
       state.busy ||
@@ -1070,56 +905,44 @@ function travel(tile) {
     if (
       state.tiles.some(
         (t) =>
-          t.monster &&
+          isHostile(t) &&
           Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
       )
     ) {
       toast("A creature is near. Travel stopped.");
-      return;
+      stopTravel(); return;
     }
+    const next = path[0];
+    const cell = state.tiles.find((cell) => cell.x === next.x && cell.y === next.y);
+    if (!cell || cell.wall || cell.closed || isHostile(cell) || (cell.hazard && (cell.x !== tile.x || cell.y !== tile.y))) { stopTravel(); return; }
     const before = `${state.x},${state.y}`;
-    engine.key(path.shift());
-    if (before === `${state.x},${state.y}`) return;
+    sendCommand(path.shift().key);
+    if (token !== travelRevision) return;
+    if (before === `${state.x},${state.y}`) { stopTravel(); return; }
+    if (state.x !== next.x || state.y !== next.y) { toast("Your route changed. Travel stopped."); stopTravel(); return; }
     if (state.hp < hp) {
       toast("You were hurt. Travel stopped.");
-      return;
+      stopTravel(); return;
     }
     hp = state.hp;
-    if (path.length) walking = setTimeout(step, 110);
+    if (path.length) { setRoute([{ x: state.x, y: state.y }, ...path]); walking = setTimeout(step, MOVE_INTERVAL); }
+    else stopTravel();
   };
   step();
 }
-$("minimap").addEventListener("click", (event) => {
-  if (!state) return;
-  const canvas = event.currentTarget;
-  const r = canvas.getBoundingClientRect(),
-    cols = Number(canvas.dataset.cols) || state.width,
-    rows = Number(canvas.dataset.rows) || state.height,
-    x0 = Number(canvas.dataset.x0) || 0,
-    y0 = Number(canvas.dataset.y0) || 0,
-    x = x0 + Math.floor(((event.clientX - r.left) / r.width) * cols),
-    y = y0 + Math.floor(((event.clientY - r.top) / r.height) * rows);
-  const t = state.tiles.find((tile) => tile.x === x && tile.y === y);
-  if (t) travel(t);
-});
+$("map-expand").addEventListener("click", () => gameMap.open());
+$("map-zoom-in").addEventListener("click", () => gameMap.setZoom(gameMap.zoom * 1.35));
+$("map-zoom-out").addEventListener("click", () => gameMap.setZoom(gameMap.zoom / 1.35));
+$("map-fit").addEventListener("click", () => gameMap.setZoom(1));
+$("map-center").addEventListener("click", () => gameMap.center());
 $("sound").addEventListener("click", () => {
-  soundOn = !soundOn;
-  $("sound").setAttribute(
-    "aria-label",
-    soundOn ? "Disable sound" : "Enable sound",
-  );
-  $("sound").title = soundOn ? "Disable sound" : "Enable sound";
-  $("sound").setAttribute("aria-pressed", String(soundOn));
-  setIcon(
-    $("sound").querySelector("[data-icon]"),
-    soundOn ? "soundOn" : "soundOff",
-  );
-  $("sound").querySelector(".button-label").textContent = soundOn
-    ? "Sound on"
-    : "Sound off";
-  if (soundOn) audio.enable(state?.level ?? 0);
-  else audio.suspend();
+  if (soundOn && ["blocked", "error"].includes(audio.metrics().status)) audio.resume();
+  else setAudioPreference({ enabled: !soundOn });
+  if (soundOn) sound("open");
 });
+$("audio-enabled").addEventListener("change", (event) => setAudioPreference({ enabled: event.target.checked }));
+$("music-volume").addEventListener("input", (event) => setAudioPreference({ music: Number(event.target.value) / 100 }));
+$("effects-volume").addEventListener("input", (event) => setAudioPreference({ effects: Number(event.target.value) / 100 }));
 const openFieldGuide = (sectionId) => {
   stopTravel();
   const dialog = $("guide-dialog");
@@ -1168,6 +991,13 @@ $("original-help").addEventListener("click", () => {
   $("pause-dialog").close();
   command("?");
 });
+$("view-scores").addEventListener("click", () => {
+  $("pause-dialog").close();
+  stopTravel();
+  engine.showScoreboard();
+});
+$("global-scores").addEventListener("click", () => engine.showScoreboard());
+$("local-scores").addEventListener("click", () => engine.showScoreboard(true));
 $("new-after-death").addEventListener("click", () => location.reload());
 $("rotate-left").addEventListener("click", () => world.rotate(-1));
 $("rotate-right").addEventListener("click", () => world.rotate(1));
@@ -1178,7 +1008,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     stopTravel();
     engine.save();
-    audio.hold();
+    audio.suspend();
   } else if (soundOn) audio.resume();
 });
 
@@ -1210,7 +1040,9 @@ window.addEventListener("ularn:graphics-restored", () => {
 
 // Menus and background tabs need no continuous scene rendering.
 function syncRenderPause() {
-  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]"));
+  if (document.hidden || document.querySelector("dialog[open]")) stopTravel();
+  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]") || !!state && (!state.maze || state.over));
+  audio.setMenu(!!document.querySelector("dialog[open]") || !!state && !state.maze);
 }
 const dialogObserver = new MutationObserver(syncRenderPause);
 for (const dialog of document.querySelectorAll("dialog"))
@@ -1220,5 +1052,29 @@ document.addEventListener("visibilitychange", syncRenderPause);
 const mapObserver = new ResizeObserver(() => {
   const bounds = document.querySelector(".map-panel").getBoundingClientRect();
   document.body.style.setProperty("--map-bottom", `${Math.ceil(bounds.bottom)}px`);
+  updateViewport();
 });
 mapObserver.observe(document.querySelector(".map-panel"));
+
+function updateViewport() {
+  if (!world || !document.body.classList.contains("playing")) return;
+  const dock = document.querySelector(".adventure-bar").getBoundingClientRect();
+  const map = document.querySelector(".map-panel").getBoundingClientRect();
+  const topbar = document.querySelector(".topbar").getBoundingClientRect();
+  const effects = $("effects-panel").getBoundingClientRect();
+  const portrait = innerWidth <= 700 && innerWidth < innerHeight * 4 / 3;
+  const inventory = $("inventory-panel").getBoundingClientRect();
+  const tools = document.querySelector(".camera-tools").getBoundingClientRect();
+  const left = portrait ? inventory.width && !$("inventory-panel").hidden ? inventory.right + 16 : 12 : Math.max(map.right + 24, 270);
+  const right = portrait ? innerWidth - 12 : effects.width && !$("effects-panel").hidden ? effects.left - 18 : innerWidth - 30;
+  const top = portrait ? Math.max(map.bottom, tools.bottom) + 12 : topbar.bottom + 34;
+  const bottom = Math.max(top + 40, dock.top - 16);
+  world.setViewportRect({ left: Math.min(left, right - 80), right, top, bottom });
+}
+const viewportObserver = new ResizeObserver(updateViewport);
+viewportObserver.observe(document.querySelector(".adventure-bar"));
+viewportObserver.observe($("inventory-panel"));
+viewportObserver.observe(document.querySelector(".camera-tools"));
+window.addEventListener("resize", () => { gameMap.resize(); updateViewport(); });
+
+window.addEventListener("pagehide", () => audio.suspend());

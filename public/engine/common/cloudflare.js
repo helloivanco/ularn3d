@@ -221,20 +221,36 @@ async function cloudflareWriteHighScore(score) {
 
 
 
+function fetchScoreboard(path) {
+  return fetch(`${CF_BROADCAST_PROTOCOL}${CF_BROADCAST_HOST}/api/${path}`, {
+    signal: AbortSignal.timeout(8000),
+    credentials: "omit",
+    referrerPolicy: "no-referrer",
+  });
+}
+
 async function getHighscores() {
   try {
     const board = GOTW ? 'gotw' : 'highscores';
     const game = ULARN ? 'ularn' : 'larn';
-    const response = await fetch(`${CF_BROADCAST_PROTOCOL}${CF_BROADCAST_HOST}/api/${CF_HIGHSCORE_ENDPOINT}/${board}/${game}`);
+    const response = await fetchScoreboard(`${CF_HIGHSCORE_ENDPOINT}/${board}/${game}`);
 
     const minMoves = GOTW ? 0 : 1000;
 
+    if (response.status === 404) return { winners: [], visitors: [] };
     if (response.ok) {
       const highscores = await response.json();
+      if (!Array.isArray(highscores)) throw new Error('Invalid scoreboard response');
+      const validScores = highscores.filter(score => score &&
+        typeof score.gameID === 'string' && /^[\w+-]{1,100}$/.test(score.gameID) &&
+        typeof score.who === 'string' && (!score.ularn || typeof score.character === 'string') &&
+        typeof score.what === 'string' && typeof score.level === 'string' &&
+        [score.hardlev, score.score, score.timeused].every(Number.isFinite));
+      if (highscores.length && !validScores.length) throw new Error('Invalid scoreboard entries');
       console.log(`getHighscores() numhighscores:`, highscores.length);
       const highscoregroup = {};
-      highscoregroup.winners = highscores.filter(score => score.ularn === ULARN && score.winner === true).sort(sortScore).slice(0, 72);
-      highscoregroup.visitors = highscores.filter(score => score.ularn === ULARN && score.winner === false && score.moves >= minMoves).sort(sortScore).slice(0, 72);
+      highscoregroup.winners = validScores.filter(score => score.ularn === ULARN && score.winner === true).sort(sortScore).slice(0, 72);
+      highscoregroup.visitors = validScores.filter(score => score.ularn === ULARN && score.winner === false && score.moves >= minMoves).sort(sortScore).slice(0, 72);
       return highscoregroup;
     }
     
@@ -251,7 +267,7 @@ async function getHighscores() {
 
 async function cloudflareLoadGame(gameID) {
   try {
-    const response = await fetch(`${CF_BROADCAST_PROTOCOL}${CF_BROADCAST_HOST}/api/${CF_SCORE_ENDPOINT}/${gameID}`);
+    const response = await fetchScoreboard(`${CF_SCORE_ENDPOINT}/${encodeURIComponent(gameID)}`);
 
     if (response.status === 200) {
       const score = await response.json();
@@ -366,4 +382,3 @@ async function uploadFile(gameID, filename, filecontents, metadata) {
     console.error(`uploadFile(): Error uploading ${filename}`, error);
   }
 }
-

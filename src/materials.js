@@ -3,6 +3,7 @@ import * as THREE from "three";
 const maps = new Map();
 const materials = new Map();
 const TEX = 128;
+const details = new Map();
 export const noise = (x, y = 0) => {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
   return n - Math.floor(n);
@@ -10,11 +11,13 @@ export const noise = (x, y = 0) => {
 
 // Deterministic, locally generated surface maps: no network assets or loading races.
 // 128² textures keep the look while cutting GPU memory and upload cost ~4× vs 256.
-export function texture(kind) {
-  if (maps.has(kind)) return maps.get(kind);
+export function texture(kind, resolution = 128) {
+  const TEX=resolution, mapKey=resolution===128 ? kind : `${kind}@${resolution}`;
+  if (maps.has(mapKey)) return maps.get(mapKey);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = TEX;
   const c = canvas.getContext("2d");
+  c.scale(2, 2);
   c.fillStyle = kind === "grass" ? "#7c886d" : "#8a8980";
   c.fillRect(0, 0, TEX, TEX);
   if (kind === "grass") {
@@ -148,7 +151,7 @@ export function texture(kind) {
   map.magFilter = THREE.LinearFilter;
   map.minFilter = THREE.LinearMipmapNearestFilter;
   map.generateMipmaps = true;
-  maps.set(kind, map);
+  maps.set(mapKey, map);
   return map;
 }
 
@@ -164,6 +167,39 @@ export function shiftedTexture(kind, key, ox, oy) {
   map.needsUpdate = true;
   maps.set(id, map);
   return map;
+}
+function surfaceDetails(kind, resolution=512) {
+  const key=`${kind}:${resolution}`;
+  if (details.has(key)) return details.get(key);
+  const source = texture(kind,resolution).image;
+  const { width, height } = source;
+  const pixels = source.getContext("2d").getImageData(0, 0, width, height).data;
+  const normals = new Uint8Array(width * height * 4), rough = new Uint8Array(normals.length);
+  const luminance = (x, y) => {
+    const i = (((y + height) % height) * width + ((x + width) % width)) * 4;
+    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 765;
+  };
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 4;
+    const dx = (luminance(x - 2, y) - luminance(x + 2, y)) * 1.6;
+    const dy = (luminance(x, y - 2) - luminance(x, y + 2)) * 1.6;
+    const length = Math.hypot(dx, dy, 1);
+    normals[i] = (dx / length * .5 + .5) * 255;
+    normals[i + 1] = (dy / length * .5 + .5) * 255;
+    normals[i + 2] = (1 / length * .5 + .5) * 255; normals[i + 3] = 255;
+    const value = Math.round(190 + (1 - luminance(x, y)) * 60);
+    rough[i] = rough[i + 1] = rough[i + 2] = value; rough[i + 3] = 255;
+  }
+  const normalMap = new THREE.DataTexture(normals, width, height);
+  const roughnessMap = new THREE.DataTexture(rough, width, height);
+  for (const map of [normalMap, roughnessMap]) {
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    map.magFilter = THREE.LinearFilter; map.minFilter = THREE.LinearMipmapLinearFilter;
+    map.generateMipmaps = true; map.needsUpdate = true;
+    map.anisotropy = 8;
+  }
+  const result = { normalMap, roughnessMap };
+  details.set(key, result); return result;
 }
 export function mat(color, extra = {}) {
   const key = `${color?.isColor ? color.getHex() : color}|${Object.entries(
@@ -211,8 +247,8 @@ export function surface(kind, color, extra = {}) {
   const map = texture(kind);
   return mat(color, {
     map,
-    bumpMap: map,
-    bumpScale: kind === "grass" ? 0.018 : 0.035,
+    ...surfaceDetails(kind),
+    normalScale: new THREE.Vector2(kind === "grass" ? .2 : .45, kind === "grass" ? .2 : .45),
     roughness: kind === "roof" ? 0.85 : 0.88,
     ...extra,
   });
@@ -261,3 +297,10 @@ export const stoneTint = (level = 0) => {
     cap: STONE_TINT.caveCap,
   };
 };
+
+
+export function releaseMaterialResources() {
+  maps.forEach((map) => map.dispose());
+  details.forEach(({ normalMap, roughnessMap }) => { normalMap.dispose(); roughnessMap.dispose(); });
+  materials.forEach((material) => material.dispose());
+}

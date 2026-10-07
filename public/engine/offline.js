@@ -1,11 +1,14 @@
-// Hosting adapter for the optional classic fallback. No external score or replay service.
+// Hosting adapter for the optional classic fallback. Scores use their own edition.
 ENABLE_RECORDING = false;
 ENABLE_RECORDING_REALTIME = false;
 initRB = updateRB = initFS = () => {};
 uploadStyle = () => true;
-cloudflareWriteHighScore = async () => {};
-dbQueryHighScores = async (score, winners, losers) =>
-  showLocalScoreBoard(score, winners, losers, 0, "Local expedition records");
+cloudflareWriteHighScore = score => ularnScoreService.submit(score, "classic");
+getHighscores = () => ularnScoreService.highscores(ULARN, "classic");
+cloudflareLoadGame = async id => {
+  const score = await ularnScoreService.details(id, "classic");
+  return scoreDetailsText(score);
+};
 
 // Preserve diagnostics without calling an uninstalled telemetry client.
 doRollbar = (severity, title, detail) => {

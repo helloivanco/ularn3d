@@ -849,6 +849,13 @@ button.primary:not(.button) {
 #LARN mark {
   color: #111;
 }
+#score-details {
+  white-space: pre-wrap;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: #c8d4c9;
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
+}
 .terminal-footer {
   display: flex;
   gap: 8px;
@@ -952,13 +959,14 @@ kbd {
   color: var(--gold);
   font: 22px Georgia;
 }
-.damage #world {
-  animation: hurt 0.4s;
+#health-text {
+  transition: color .16s ease;
 }
-@keyframes hurt {
-  50% {
-    filter: sepia(0.5) saturate(2);
-  }
+.damage #health-text {
+  color: #efa78f;
+}
+.damage #health-bar {
+  box-shadow: 0 0 9px #d8785e80;
 }
 /* SVG artwork follows the surrounding control color and never intercepts clicks. */
 .icon {

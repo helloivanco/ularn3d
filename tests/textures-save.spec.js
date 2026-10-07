@@ -69,16 +69,16 @@ test("walking does not write the expedition to disk every move", async ({
     // New game start() already persisted once; count only walk-driven writes.
     const before = ularn.saveStats();
     for (const key of ["l", "l", "j", "j", "h", "h", "k", "k"]) ularn.key(key);
-    // Former path debounced ~2s — wait past that window to prove no auto disk write.
+    // The worker coalesces the burst into one background write after two seconds.
     await new Promise((r) => setTimeout(r, 2500));
     const afterWalk = ularn.saveStats();
     const saved = ularn.save();
     const afterSave = ularn.saveStats();
     return { before, afterWalk, saved, afterSave };
   });
-  expect(report.afterWalk.diskWrites).toBe(report.before.diskWrites);
+  expect(report.afterWalk.diskWrites).toBe(report.before.diskWrites + 1);
   expect(report.afterWalk.dirty).toBe(true);
   expect(report.saved).toBe(true);
-  expect(report.afterSave.diskWrites).toBe(report.before.diskWrites + 1);
+  expect(report.afterSave.diskWrites).toBe(report.afterWalk.diskWrites + 1);
   expect(report.afterSave.dirty).toBe(false);
 });

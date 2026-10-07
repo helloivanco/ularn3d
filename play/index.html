@@ -182,15 +182,17 @@
         <p>15 dungeon floors · 5 volcanic depths · One chance</p>
       </div>
       <div id="hud" hidden>
+        <div class="map-stack">
         <aside class="map-panel panel">
           <div class="panel-heading">
             <span>CHARTED TERRITORY</span><span id="map-depth">SURFACE</span>
+            <button id="map-expand" type="button" aria-label="Expand explored map" aria-controls="map-dialog" aria-expanded="false">Expand ↗</button>
           </div>
           <canvas
             id="minimap"
             width="684"
             height="240"
-            aria-label="Symbol map of the entire explored floor; @ marks your position"
+            aria-label="Symbol map of nearby explored tiles; @ marks your position"
           ></canvas>
           <div id="town-travel">
             <select id="destination" aria-label="Travel to town landmark">
@@ -203,20 +205,6 @@
           <div id="inventory-list"></div>
           <div class="inventory-help">Manage items with <kbd>i</kbd> · Hide with <kbd>F3</kbd></div>
         </aside>
-        <aside id="effects-panel" aria-label="Active effects" hidden>
-          <div class="panel-heading">ACTIVE EFFECTS</div>
-          <div id="effects"></div>
-        </aside>
-        <div id="tile-label" hidden></div>
-        <div id="monster-card" class="monster-card" hidden>
-          <img class="monster-card-art" alt="" width="64" height="84" />
-          <div class="monster-card-copy">
-            <strong class="monster-card-name"></strong>
-            <p class="monster-card-desc"></p>
-          </div>
-        </div>
-        <div id="party-hud" class="party-hud" hidden aria-label="Party"></div>
-        <div id="turn-strip" class="turn-strip" hidden aria-label="Turn order"></div>
         <div class="camera-tools">
           <button
             id="rotate-left"
@@ -242,6 +230,21 @@
             <span data-icon="minus"></span>
           </button>
         </div>
+        </div>
+        <aside id="effects-panel" aria-label="Active effects" hidden>
+          <div class="panel-heading">ACTIVE EFFECTS</div>
+          <div id="effects"></div>
+        </aside>
+        <div id="tile-label" hidden></div>
+        <div id="monster-card" class="monster-card" hidden>
+          <img class="monster-card-art" alt="" width="64" height="84" />
+          <div class="monster-card-copy">
+            <strong class="monster-card-name"></strong>
+            <p class="monster-card-desc"></p>
+          </div>
+        </div>
+        <div id="party-hud" class="party-hud" hidden aria-label="Party"></div>
+        <div id="turn-strip" class="turn-strip" hidden aria-label="Turn order"></div>
         <div class="adventure-bar panel" aria-label="Adventure controls">
         <aside class="hero-panel panel">
           <div class="hero-heading">
@@ -356,7 +359,12 @@
               Esc <span data-icon="close"></span>
             </button>
           </div>
-          <div class="terminal-scroll"><pre id="LARN" tabindex="-1"></pre></div>
+          <div id="scoreboard-controls" class="terminal-footer" hidden>
+            <button id="global-scores" aria-pressed="true">Global scores</button>
+            <button id="local-scores" aria-pressed="false">Local records</button>
+          </div>
+          <p id="score-sync-status" role="status" hidden></p>
+          <div class="terminal-scroll"><pre id="LARN" tabindex="-1"></pre><pre id="score-details" hidden aria-live="polite"></pre></div>
           <div class="terminal-footer">
             <button data-key="space">Continue / next page</button
             ><button data-key="return">Enter ↵</button
@@ -367,6 +375,18 @@
           </div>
         </div>
       </section>
+      <dialog id="map-dialog" class="panel dialog" aria-labelledby="expanded-map-title">
+        <div class="expanded-map-heading">
+          <div><div class="eyebrow">CHARTED TERRITORY</div><h2 id="expanded-map-title">Plan your route.</h2></div>
+          <button class="close-dialog" aria-label="Close explored map">Close <span data-icon="close"></span></button>
+        </div>
+        <p>Choose an explored tile to travel. Drag to pan; scroll or use the buttons to zoom.</p>
+        <div class="map-toolbar">
+          <button id="map-zoom-out" aria-label="Zoom map out">−</button><button id="map-zoom-in" aria-label="Zoom map in">+</button>
+          <button id="map-fit">Whole floor</button><button id="map-center">Find me @</button>
+        </div>
+        <div id="map-viewport"><canvas id="expanded-map" width="1072" height="272" aria-label="Expanded symbol map of explored tiles; select a known tile to travel"></canvas></div>
+      </dialog>
       <dialog id="guide-dialog" class="panel dialog">
         <button class="close-dialog" aria-label="Close field guide">
           <span data-icon="close"></span>
@@ -460,14 +480,25 @@
         ><button id="save-exit" class="button secondary">Save & return to title</button
         ><button id="original-help" class="button secondary">
           Original game manual
-        </button>
+        </button><button id="view-scores" class="button secondary">Scoreboard</button>
         <label class="quality-setting" for="graphics-quality"
           >Graphics
           <select id="graphics-quality" class="field">
+            <option value="auto">Auto · smooth adaptive graphics</option>
             <option value="cinematic">Cinematic · bloom & detail</option>
             <option value="balanced">Balanced · lighter rendering</option>
           </select>
         </label>
+        <fieldset class="audio-settings">
+          <legend>Sound &amp; music</legend>
+          <label class="audio-enable"><input id="audio-enabled" type="checkbox" /> Enable audio</label>
+          <label for="music-volume">Music <output id="music-volume-text">55%</output></label>
+          <input id="music-volume" type="range" min="0" max="100" value="55" aria-label="Music volume" />
+          <label for="effects-volume">Effects <output id="effects-volume-text">80%</output></label>
+          <input id="effects-volume" type="range" min="0" max="100" value="80" aria-label="Effects volume" />
+          <p id="audio-track" class="audio-track">The Caves Below</p>
+          <p id="audio-status" role="status" aria-live="polite"></p>
+        </fieldset>
         <p id="pause-status" role="status"></p>
       </dialog>
       <div id="graphics-status" role="alert" class="panel" hidden>
@@ -494,6 +525,7 @@
     <script src="/engine/lib/lz-string.min.js"></script>
     <script src="/engine/lib/mousetrap.min.js"></script>
     <script src="/engine/lib/diff_match_patch.js"></script>
+    <script src="/engine/score-config.js"></script>
     <script src="/engine/game.js"></script>
     <script type="module" src="/src/main.js"></script>
   </body>

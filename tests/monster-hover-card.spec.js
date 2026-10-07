@@ -16,29 +16,6 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async ({ page }) => expect(faults.get(page)).toEqual([]));
 
-const project = (snapshot, offset, tx, ty) => {
-  const [ox, oy, oz] = offset;
-  const length = Math.hypot(...offset);
-  const horizontal = Math.hypot(ox, oz);
-  const relative = [tx - snapshot.x - ox, 0.35 - oy, ty - snapshot.y - oz];
-  const dot = (a, b) => a.reduce((value, n, i) => value + n * b[i], 0);
-  const depth = -dot(
-    relative,
-    offset.map((n) => n / length),
-  );
-  const right = [oz / horizontal, 0, -ox / horizontal];
-  const up = [
-    (-ox * oy) / (horizontal * length),
-    horizontal / length,
-    (-oz * oy) / (horizontal * length),
-  ];
-  const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
-  return {
-    x: 720 + (dot(relative, right) / depth) * scale,
-    y: 500 - (dot(relative, up) / depth) * scale,
-  };
-};
-
 test("monster hover card respects visibility and leaves items on the label", async ({
   page,
 }) => {
@@ -107,10 +84,8 @@ test("monster hover card respects visibility and leaves items on the label", asy
     });
 
   await page.locator("#camera-reset").click();
-  const snapshot = await page.evaluate(() => ularn.snapshot());
-  const offset = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
   const moveTo = async (x, y) => {
-    const point = project(snapshot, offset, x, y);
+    const point = await page.evaluate(({ x, y }) => ularnGraphics.projectTile(x, y, 0.35), { x, y });
     await page.mouse.move(point.x, point.y);
   };
 

@@ -42,11 +42,15 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
               [0, -1],
               [1, 0],
               [-1, 0],
+              [1, 1],
+              [1, -1],
+              [-1, 1],
+              [-1, -1],
             ]) {
               const nx = cx + dx,
                 ny = cy + dy,
                 nk = `${nx},${ny}`;
-              if (claimed.has(nk) || !networkPassable(nx, ny)) continue;
+              if (claimed.has(nk) || !networkPassable(nx, ny) || !playerCanStep(cx, cy, nx, ny)) continue;
               claimed.add(nk);
               comp.add(nk);
               q.push([nx, ny]);

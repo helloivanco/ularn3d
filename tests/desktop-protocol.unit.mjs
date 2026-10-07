@@ -9,6 +9,23 @@ import { toArchivePath, toPosixPath } from "../desktop/asar-path.mjs";
 
 const root = path.resolve("/tmp/ularn-desktop-dist");
 
+test("desktop permits only reads and inserts on the configured Supabase scoreboard", () => {
+  const origin = "https://ularn-test.supabase.co";
+  for (const method of ["GET", "POST", "OPTIONS"])
+    assert.equal(protocol.isScoreboardRequest(origin + "/rest/v1/ularn_scores?select=score", method, origin), true, method);
+  for (const method of ["PUT", "PATCH", "DELETE"])
+    assert.equal(protocol.isScoreboardRequest(origin + "/rest/v1/ularn_scores", method, origin), false, method);
+  for (const url of [
+    "https://example.com/", "http://ularn-test.supabase.co/rest/v1/ularn_scores",
+    "https://ularn-test.supabase.co.evil/rest/v1/ularn_scores",
+    "https://user@ularn-test.supabase.co/rest/v1/ularn_scores",
+    "https://broadcast.larn.workers.dev/api/highscore/highscores/ularn",
+    origin + "/rest/v1/profiles", origin + "/auth/v1/signup",
+    origin + "/rest/v1/ularn_scores%2Fextra", origin + "/rest/v1/ularn_scores#fragment",
+  ]) assert.equal(protocol.isScoreboardRequest(url, "GET", origin), false, url);
+  assert.equal(protocol.isScoreboardRequest(origin + "/rest/v1/ularn_scores", "GET"), false);
+});
+
 test("desktop URLs resolve only within the bundled assets", () => {
   assert.equal(protocol.resolveAssetPath("ularn://game/", root), path.join(root, "index.html"));
   assert.equal(protocol.resolveAssetPath("ularn://game", root), path.join(root, "index.html"));
@@ -30,10 +47,11 @@ test("desktop URLs resolve only within the bundled assets", () => {
 test("desktop responses use correct module types and restrictive CSP", () => {
   assert.match(protocol.assetHeaders("/dist/assets/game.js")["content-type"], /^text\/javascript/);
   assert.match(protocol.assetHeaders("/dist/engine/LICENSE")["content-type"], /^text\/plain/);
-  const headers = protocol.assetHeaders(path.join(root, "index.html"));
+  const headers = protocol.assetHeaders(path.join(root, "index.html"), "https://ularn-test.supabase.co");
   assert.equal(headers["x-content-type-options"], "nosniff");
   assert.match(headers["content-security-policy"], /script-src 'self';/);
   assert.match(headers["content-security-policy"], /connect-src 'self'/);
+  assert.match(headers["content-security-policy"], /connect-src 'self' https:\/\/ularn-test\.supabase\.co;/);
   assert.match(headers["content-security-policy"], /object-src 'none'/);
   assert.doesNotMatch(headers["content-security-policy"], /unsafe-eval/);
   assert.match(protocol.assetHeaders(path.join(root, "engine", "larn_local.html"))["content-security-policy"], /script-src 'self' 'unsafe-inline'/);

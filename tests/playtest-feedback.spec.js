@@ -69,7 +69,7 @@ test("dungeon floors are 57 by 20 and town is a smaller square", async ({ page }
   expect(shape.town.stores).toBeGreaterThan(0);
 });
 
-test("character stats sit beside the adventurer frame and the map shows the whole floor", async ({ page }) => {
+test("character stats sit beside the adventurer frame and the compact map stays readable", async ({ page }) => {
   await start(page);
   await page.evaluate(() => {
     setItem(player.x + 1, player.y, createObject(OBOOK, 1));
@@ -132,8 +132,8 @@ test("character stats sit beside the adventurer frame and the map shows the whol
   expect(layout.besideHero).toBe(true);
   expect(layout.xpBesideStats).toBe(true);
   expect(layout.journalMoved).toBe(true);
-  expect(layout.cellWidth).toBeGreaterThanOrEqual(12);
-  expect(layout.cellHeight).toBeGreaterThanOrEqual(12);
+  expect(layout.cellWidth).toBeGreaterThanOrEqual(11);
+  expect(layout.cellHeight).toBeGreaterThanOrEqual(11);
   expect(layout.boxWidth).toBeGreaterThan(240);
   expect(layout.boxWidth).toBeLessThan(760);
   expect(layout.cols).toBeGreaterThanOrEqual(18);

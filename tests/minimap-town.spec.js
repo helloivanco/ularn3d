@@ -26,13 +26,13 @@ const mapView = () => {
   };
 };
 
-test("the symbol map shows the entire floor and does not follow the player", async ({ page }) => {
+test("the compact map follows the player and Expand shows the entire floor", async ({ page }) => {
   await start(page);
   const town = await page.evaluate(mapView);
   expect(town.overflow === "visible" || town.overflow === "hidden").toBeTruthy();
   expect(town.cols).toBeGreaterThanOrEqual(18);
-  expect(town.rows).toBeGreaterThanOrEqual(18);
-  expect(town.cell).toBeGreaterThanOrEqual(12);
+  expect(town.rows).toBe(13);
+  expect(town.cell).toBeGreaterThanOrEqual(11);
   const afterWalk = await page.evaluate(() => {
     const origin = { x: player.x, y: player.y };
     ularn.key("l");
@@ -50,8 +50,6 @@ test("the symbol map shows the entire floor and does not follow the player", asy
   });
   expect(afterWalk.moved).toBe(true);
   expect(afterWalk).toMatchObject({
-    x0: town.x0,
-    y0: town.y0,
     cols: town.cols,
     rows: town.rows,
   });
@@ -87,17 +85,17 @@ test("the symbol map shows the entire floor and does not follow the player", asy
       size: { width: MAXX, height: MAXY },
     };
   });
-  expect(dungeon.first.cols).toBe(dungeon.size.width);
-  expect(dungeon.first.rows).toBe(dungeon.size.height);
-  expect(dungeon.first.x0).toBe(0);
-  expect(dungeon.first.y0).toBe(0);
-  expect(dungeon.first.cell).toBeGreaterThanOrEqual(12);
-  expect(dungeon.after).toEqual({
-    x0: dungeon.first.x0,
-    y0: dungeon.first.y0,
-    cols: dungeon.first.cols,
-    rows: dungeon.first.rows,
-  });
+  expect(dungeon.first.cols).toBeLessThan(dungeon.size.width);
+  expect(dungeon.first.rows).toBeLessThan(dungeon.size.height);
+  expect(dungeon.first.cell).toBeGreaterThanOrEqual(11);
+  expect(dungeon.after.x0).toBeGreaterThan(dungeon.first.x0);
+  expect(dungeon.after.y0).toBeGreaterThan(dungeon.first.y0);
+  await page.locator("#map-expand").click();
+  const expanded = await page.locator("#expanded-map").evaluate(map => ({
+    x0: +map.dataset.x0, y0: +map.dataset.y0, cols: +map.dataset.cols, rows: +map.dataset.rows,
+  }));
+  expect(expanded).toEqual({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height });
+
 });
 
 test("the D1 town exit is reachable and returns the player to town every time", async ({ page }) => {
