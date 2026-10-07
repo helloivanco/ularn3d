@@ -55,7 +55,7 @@ The benchmark also accepts two URLs to compare a baseline with a build. It uses 
 
 ## Visual review
 
-[All 65 creature models](screenshots/creatures-gallery.png) · [Eight hero models](screenshots/heroes-gallery.png) · [Town](screenshots/feedback-town.png) · [Caves](screenshots/feedback-dungeon.png) · [Volcano](screenshots/volcanic-gameplay.png) · [Cinematic](screenshots/cinematic-volcano.png) · [Expanded map](screenshots/expanded-map.png) · [Phone](screenshots/mobile-graphics.png)
+[All 66 creature models](screenshots/creatures-gallery.png) · [Eight hero models](screenshots/heroes-gallery.png) · [Town](screenshots/feedback-town.png) · [Caves](screenshots/feedback-dungeon.png) · [Volcano](screenshots/volcanic-gameplay.png) · [Cinematic](screenshots/cinematic-volcano.png) · [Expanded map](screenshots/expanded-map.png) · [Phone](screenshots/mobile-graphics.png)
 
 ## Rendering stability
 
@@ -68,3 +68,11 @@ The stability update passed 55 hardware browser checks, all five production stab
 ## Earlier walking presentation
 
 The reconciliation retains the current 120 ms articulated, collision-aware step. The earlier 280 ms glide helper and its historical captures remain in the preserved local work. Input remains immediate and retargets the current displayed position without queuing. Feet alternate with displayed distance, body bob is subtle, and the weapon arm stays steadier during walking. Creature interpolation and combat animation retain their existing timings. World and map path lines and destination markers have been removed; click travel and its safety checks remain active. `routePoints` retains internal travel diagnostics and `routeVisible` is false. Desktop and phone walking captures are in `screenshots/walking-desktop.png` and `screenshots/walking-mobile.png`.
+
+## Full cast review in 1.3.64
+
+All eight player classes and all 66 enemies were inspected from front, back and actual gameplay-camera elevations. The Rogue hood and serpent proportions now use relative scales. Every enemy has an exact-ID model, including the loot goblin. Class rigs retain their named limbs, actual starting weapon and 120 ms movement contract. Enemy families use distinct anatomy and authored joint rest rotations; mirrored wing triangles retain correct winding after batching.
+
+Run `node scripts/visual-characters.mjs` against the development server to regenerate the three-angle galleries and geometry measurements. `CHARACTER_OUTPUT` selects another output folder. The node checks cover native enemy coverage, corridor-sized player bodies, finite/shared enemy geometry, reduced-motion rest poses and wing winding. The historical benchmark numbers above have not been rerun for this model pass.
+
+[Front views of all enemies](screenshots/creatures-front.png) · [Back views of all enemies](screenshots/creatures-back.png) · [Player front views](screenshots/heroes-front.png) · [Player back views](screenshots/heroes-back.png) · [In the caves](screenshots/characters-desktop.png) · [On a phone](screenshots/characters-mobile.png)
