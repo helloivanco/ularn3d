@@ -3,6 +3,9 @@
  *  bitten a hole in long plaza walls when walking past. */
 export const WALL_FULL = 1.15;
 export const WALL_CUT = 0.36;
+export const WALL_TILE_SIZE = 1;
+/** The floor box's upper face. Bodies and caps meet without overlapping skins. */
+export const WALL_BASE_Y = -0.015;
 /** Cap on a full-height wall. Cutaway columns keep the shorter lip below. */
 export const WALL_LIP = 0.08;
 export const WALL_LIP_CUT = 0.028;
@@ -18,10 +21,10 @@ export const wallHeight = (dx, dz, towardX, towardZ, town = false) => {
 /** Thickness, overhang, and cap center for the existing wall top. */
 export const wallLip = (height, town = false) => {
   const cut = !town && height < WALL_FULL - 0.001;
-  if (!cut) return { thickness: WALL_LIP, overhang: 1.015, y: height + 0.025 };
+  const thickness = cut ? WALL_LIP_CUT : WALL_LIP;
   return {
-    thickness: WALL_LIP_CUT,
-    overhang: 0.992,
-    y: height + WALL_LIP_CUT * 0.35,
+    thickness,
+    overhang: WALL_TILE_SIZE,
+    y: WALL_BASE_Y + height + thickness / 2,
   };
 };

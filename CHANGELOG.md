@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.65 — Joined walls and stable rooftops
+
+- Walls, lowered caps and floor tiles meet at shared edges, closing seams and removing overlapping strips that flickered during camera movement
+- Town roofs render as solid surfaces; buildings fade only when they obscure the hero, then restore their depth
+- Roof shingles blend smoothly between texture detail levels while zooming or rotating
+
 ## 1.3.64 — A second look at the full cast
 
 - All eight player classes have clearer clothing, faces and silhouettes; the Rogue's hood no longer stretches behind its head

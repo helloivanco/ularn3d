@@ -21,7 +21,7 @@ import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } 
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
 import { TorchLighting, stabilizeShadow } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { wallHeight, wallLip } from "./wall-cut.js";
+import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import { auraControl } from "./cooperation-aura.js";
 import {
@@ -295,11 +295,9 @@ export class World {
     this.aimGrid.visible = false;
     this.aimGrid.frustumCulled = false;
     this.scene.add(this.aimGrid);
-    // 0.993 left a gap between cells. A close view looks through that gap onto
-    // the dark dungeon slab, which reads as a black seam. Tiles overlap a little
-    // so the seam stays covered. Tops are coplanar, so the overlap does not flicker.
-    // The stone map is unchanged.
-    const floorGeo = new THREE.BoxGeometry(1.02, 0.18, 1.02);
+    // Exact shared edges: undersized tiles leak, oversized coplanar tops fight
+    // for the same depth samples. Integer centers and half-tile edges join.
+    const floorGeo = new THREE.BoxGeometry(WALL_TILE_SIZE, 0.18, WALL_TILE_SIZE);
     this.floor = new ChunkedTerrainMesh(
       floorGeo,
       surface("stone", 0xffffff),
@@ -754,6 +752,11 @@ export class World {
           footfalls: this.footfalls || 0,
         };
       },
+      buildings: () => (this.cutawayBuildings || []).map(mesh => ({
+        tile: {...mesh.userData.tile}, opacity: mesh.userData.opacity ?? 1,
+        depthWrite: mesh.children.filter(child => child.material?.userData.cutaway)
+          .every(child => child.material.depthWrite),
+      })),
       ambientRats: () => this.ambientRats?.snapshot() ?? {
         pool: AMBIENT_RAT_POOL,
         enabled: false,
@@ -1827,7 +1830,7 @@ export class World {
             if (!object.isMesh) return;
             object.material = object.material.clone();
             object.material.transparent = true;
-            object.material.depthWrite = false;
+            object.material.depthWrite = true;
             object.material.userData.cutaway = true;
           });
         }
@@ -1864,7 +1867,9 @@ export class World {
       }
     this.billboards.length = 0;
     this.draining.length = 0;
+    this.cutawayBuildings = [];
     for (const { mesh } of this.objects.values()) {
+      if (mesh.userData.building) this.cutawayBuildings.push(mesh);
       if (mesh.userData.itemArt) this.billboards.push(mesh.userData.itemArt);
       let fountain = mesh.userData.fountainMesh;
       if (!fountain) {
@@ -2073,8 +2078,8 @@ export class World {
       if (!layoutChanged && this.wallHeightAt[i] === h) continue;
       this.wallHeightAt[i] = h;
       changed++;
-      this.scratchPosition.set(t.x, h / 2 - 0.01, t.y);
-      this.scratchScale.set(0.985, h, 0.985);
+      this.scratchPosition.set(t.x, h / 2 + WALL_BASE_Y, t.y);
+      this.scratchScale.set(WALL_TILE_SIZE, h, WALL_TILE_SIZE);
       this.spinQ.setFromAxisAngle(
         UP,
         Math.floor(noise(t.x + 4, t.y + 9) * 4) * (Math.PI / 2),
@@ -2397,6 +2402,7 @@ export class World {
       if(tile)this.marker.position.set(tile.x,0,tile.y);
       this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
     }
+    if (this.state?.level === 0) this.updateCutaways(dt);
     this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) this.composer.render(dt);
@@ -2421,8 +2427,7 @@ export class World {
     if (!this.state) return;
     const toward = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
     const heroPoint = this.project(this.player.position.clone().add(new THREE.Vector3(0, .6, 0)));
-    for (const { mesh } of this.objects.values()) {
-      if (!mesh.userData.building) continue;
+    for (const mesh of this.cutawayBuildings || []) {
       const dx = mesh.position.x - this.player.position.x, dz = mesh.position.z - this.player.position.z;
       let obscures = false;
       const wasHidden = mesh.userData.obscuresHero;

@@ -63,6 +63,8 @@ Neighboring wall caps no longer overlap. Wall cutaways ease from the displayed p
 
 `tests/render-stability.spec.js` verifies shadow phase, lamp identity and zero-intensity handover, disjoint cap bounds, smooth cutaway settling, batching flags and repeated-damage feedback.
 
+The 1.3.65 repair uses exact one-tile floor, wall and cap footprints. Neighboring surfaces share edges without overlapping area; wall bases sit on the floor at −0.015, and cap undersides meet wall tops. This replaces undersized wall bodies, oversized full caps and floating cutaway caps. Town building materials write depth when solid, and the previously disconnected building-cutaway update now runs for a cached list of town buildings. It disables depth writing while a building fades around the hero and restores it when opaque. Roof color maps use trilinear mip blending to avoid abrupt detail changes during zoom/orbit; stone filtering remains unchanged. No triangles, lights or render passes are added. `tests/surface-seams.spec.js` checks the actual World matrices and browser fade/depth restoration; zoom brightness compares the same floor patch at both distances.
+
 The stability update passed 55 hardware browser checks, all five production stability checks with software rendering, the production build, and offline desktop protocol/smoke tests. Town, cave, volcano, Cinematic, phone and complete galleries were visually reviewed. On the Apple M2 Pro at 1440 × 1000 in Auto, the updated production fixture recorded 60.0 FPS, 18.5 ms frame p95, 16.3 ms input-to-render p95 and 122 average draw calls. Combat recorded 60.0 FPS and 18.4 ms frame p95. [Stability benchmark](render-stability-benchmark.json).
 
 ## Walking presentation

@@ -9,6 +9,7 @@ import {
   WALL_FULL,
   WALL_LIP,
   WALL_LIP_CUT,
+  WALL_BASE_Y,
 } from "../src/wall-cut.js";
 import { hero, itemModel, monsterModel } from "../src/models.js";
 import { ITEM_SPRITE_TINT, itemSprite } from "../src/item-art.js";
@@ -24,7 +25,7 @@ const paeth = (a, b, c) => {
   return c;
 };
 
-const centerLuma = (path, fraction = 0.34, percentile = 0.9) => {
+const groundLuma = (path, polygon) => {
   const buf = readFileSync(path);
   let offset = 8;
   let width = 0;
@@ -67,20 +68,25 @@ const centerLuma = (path, fraction = 0.34, percentile = 0.9) => {
     }
     rows[y] = row;
   }
-  const x0 = Math.floor(width * (0.5 - fraction / 2));
-  const x1 = Math.floor(width * (0.5 + fraction / 2));
-  const y0 = Math.floor(height * (0.5 - fraction / 2));
-  const y1 = Math.floor(height * (0.5 + fraction / 2));
+  const x0 = Math.max(0,Math.floor(Math.min(...polygon.map(p=>p.x))));
+  const x1 = Math.min(width,Math.ceil(Math.max(...polygon.map(p=>p.x))));
+  const y0 = Math.max(0,Math.floor(Math.min(...polygon.map(p=>p.y))));
+  const y1 = Math.min(height,Math.ceil(Math.max(...polygon.map(p=>p.y))));
   const lumas = [];
   for (let y = y0; y < y1; y++) {
     const row = rows[y];
     for (let x = x0; x < x1; x++) {
+      const sides=polygon.map((a,index)=>{
+        const b=polygon[(index+1)%polygon.length];
+        return (b.x-a.x)*(y+.5-a.y)-(b.y-a.y)*(x+.5-a.x);
+      });
+      if (!sides.every(value=>value>=0)&&!sides.every(value=>value<=0)) continue;
       const i = x * channels;
       lumas.push(0.2126 * row[i] + 0.7152 * row[i + 1] + 0.0722 * row[i + 2]);
     }
   }
-  lumas.sort((a, b) => a - b);
-  return lumas[Math.floor(percentile * (lumas.length - 1))];
+  if(!lumas.length)throw new Error("Floor patch is outside the capture");
+  return lumas.reduce((sum,value)=>sum+value,0)/lumas.length;
 };
 
 test("floor and wall tints differ, and deeper stone matches the volcano", () => {
@@ -99,14 +105,14 @@ test("cutaway walls keep a shorter lip than full-height walls", () => {
   const full = wallLip(WALL_FULL, false);
   const cut = wallLip(WALL_CUT, false);
   expect(full.thickness).toBe(WALL_LIP);
-  expect(full.overhang).toBe(1.015);
+  expect(full.overhang).toBe(1);
   expect(cut.thickness).toBe(WALL_LIP_CUT);
   expect(cut.thickness).toBeLessThan(full.thickness);
-  expect(cut.overhang).toBeLessThan(full.overhang);
+  expect(cut.overhang).toBe(full.overhang);
   expect(wallLip(WALL_CUT, true)).toEqual({
     thickness: WALL_LIP,
-    overhang: 1.015,
-    y: WALL_CUT + 0.025,
+    overhang: 1,
+    y: WALL_CUT + WALL_BASE_Y + WALL_LIP / 2,
   });
 });
 
@@ -319,12 +325,18 @@ test("the same corridor stays as bright zoomed out as zoomed in", async ({
   for (let i = 0; i < 4; i++) await page.locator("#zoom-in").click();
   await settle();
   const world = page.locator("canvas[data-engine]");
+  // Measure the same open tile at both zooms. A screen-center percentile also
+  // changes with the mix of wall caps, creatures and floor inside the crop.
+  const patch=()=>page.evaluate(()=>[[11.6,10.6],[12.4,10.6],[12.4,11.4],[11.6,11.4]]
+    .map(([x,y])=>ularnGraphics.projectTile(x,y,-.015)));
+  const nearPatch=await patch();
   const zoomIn = testInfo.outputPath("balanced-zoom-in.png");
   await world.screenshot({ path: zoomIn });
   await page.locator("#camera-reset").click();
   for (let i = 0; i < 5; i++) await page.locator("#zoom-out").click();
   await settle();
   const zoomOut = testInfo.outputPath("balanced-zoom-out.png");
+  const farPatch=await patch();
   await world.screenshot({ path: zoomOut });
   const media = process.env.BALANCED_GRAPHICS_MEDIA;
   if (media) {
@@ -332,8 +344,8 @@ test("the same corridor stays as bright zoomed out as zoomed in", async ({
     copyFileSync(zoomIn, join(media, "balanced-graphics-zoom-in.png"));
     copyFileSync(zoomOut, join(media, "balanced-graphics-zoom-out.png"));
   }
-  const near = centerLuma(zoomIn);
-  const far = centerLuma(zoomOut);
+  const near = groundLuma(zoomIn,nearPatch);
+  const far = groundLuma(zoomOut,farPatch);
   console.log("corridor luma", { near, far, ratio: far / near });
   expect(far).toBeGreaterThan(80);
   expect(near).toBeGreaterThan(80);
