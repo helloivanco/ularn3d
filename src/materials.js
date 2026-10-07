@@ -151,7 +151,9 @@ export function texture(kind, resolution = 128) {
   // so the mortar does not turn into nearest-neighbor blocks.
   map.anisotropy = 2;
   map.magFilter = THREE.LinearFilter;
-  map.minFilter = THREE.LinearMipmapNearestFilter;
+  // Roof shingles cross LOD boundaries while orbiting. Blend adjacent mips to
+  // avoid abrupt crawling bands; stone retains its existing crisp sampling.
+  map.minFilter = kind === "roof" ? THREE.LinearMipmapLinearFilter : THREE.LinearMipmapNearestFilter;
   map.generateMipmaps = true;
   maps.set(mapKey, map);
   return map;

@@ -933,10 +933,10 @@ export function itemModel(tile) {
     n = tile.name.toLowerCase();
   if (tile.store && id !== 56) return building(id);
   if (tile.wall) {
-    box(g, 0x52605c, 0, 0.52, 0, 0.98, 1.04, 0.98);
-    box(g, 0x67716a, 0, 1.08, 0, 1.015, 0.09, 1.015);
+    box(g, 0x52605c, 0, 0.52, 0, 1, 1.04, 1);
+    box(g, 0x67716a, 0, 1.085, 0, 1, 0.09, 1);
     for (let i = 0; i < 2; i++)
-      box(g, 0x36423f, 0, 0.34 + i * 0.37, 0.493, 0.98, 0.025, 0.015);
+      box(g, 0x36423f, 0, 0.34 + i * 0.37, 0.504, 0.98, 0.025, 0.015);
     return g;
   }
   if (id === 56) {

@@ -53,7 +53,7 @@ function gridFixture() {
   return { grid, chunk };
 }
 
-test("neighboring caps never overlap and cutaways recover smoothly before settling", () => {
+test("neighboring caps meet without overlapping area and cutaways settle smoothly", () => {
   const { grid, chunk } = gridFixture(), toward = new THREE.Vector3(1, 0, 0), matrix = new THREE.Matrix4();
   grid.walls({ x: 10, y: 10 }, toward);
   const bounds = [];
@@ -61,7 +61,7 @@ test("neighboring caps never overlap and cutaways recover smoothly before settli
     chunk.caps.getMatrixAt(i, matrix);
     bounds.push(new THREE.Box3(new THREE.Vector3(-.5, -.5, -.5), new THREE.Vector3(.5, .5, .5)).applyMatrix4(matrix));
   }
-  expect(bounds[0].intersectsBox(bounds[1])).toBe(false);
+  expect(bounds[0].max.x).toBeCloseTo(bounds[1].min.x,6);
   grid.walls({ x: 0, y: 0 }, toward, 1 / 60);
   expect(chunk.heights[0]).toBeLessThan(1.15);
   expect(chunk.heights[0]).toBeGreaterThan(.36);

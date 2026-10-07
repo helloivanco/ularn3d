@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { noise, surface } from "./materials.js";
+import { wallLip, WALL_TILE_SIZE, WALL_BASE_Y } from "./wall-cut.js";
 
 const SIZE = 8, matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
 export class TerrainGrid {
@@ -83,10 +84,11 @@ export class TerrainGrid {
         else chunk.animating = true;
         if (!Number.isFinite(previous) || Math.abs(height - previous) > .0001) dirty = true;
         chunk.heights[i] = height;
-        position.set(tile.x, height / 2 - .01, tile.y); scale.set(.985, height, .985);
+        position.set(tile.x, height / 2 + WALL_BASE_Y, tile.y); scale.set(WALL_TILE_SIZE, height, WALL_TILE_SIZE);
         matrix.compose(position, rotation, scale); chunk.walls.setMatrixAt(i, matrix);
         // Neighboring caps must never overlap on the same horizontal plane.
-        position.y = height + .025; scale.set(.982, .08, .982);
+        const lip = wallLip(height);
+        position.y = lip.y; scale.set(lip.overhang, lip.thickness, lip.overhang);
         matrix.compose(position, rotation, scale); chunk.caps.setMatrixAt(i, matrix);
       }
       this.animating ||= chunk.animating;
