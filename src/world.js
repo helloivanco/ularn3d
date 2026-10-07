@@ -4,14 +4,23 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, stoneTint } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { createCreatureModel } from "./creature-models.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
+import { StaticTiles } from "./static-world.js";
+import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
+import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
+import { compact, percentile, sample, releaseCompactMaterials } from "./graphics-utils.js";
+import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
+import { TorchLighting, stabilizeShadow } from "./lighting.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { wallHeight, wallLip } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import { auraControl } from "./cooperation-aura.js";
@@ -26,12 +35,14 @@ import {
   orb,
   tree,
   hero,
+  equipHero,
+  releaseModelResources,
   cone,
   building,
   itemModel,
-  monsterModel,
   ring,
   fillWieldedWeapon,
+  monsterModel,
   LANDMARK_NAMES,
 } from "./models.js";
 import {
@@ -90,6 +101,7 @@ const writeCameraPrefs = (offset) => {
 function destroy(group) {
   group.traverse((o) => {
     if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+    if (o.material?.userData.cutaway) o.material.dispose();
     if (o.isSprite) {
       o.material.map?.dispose();
       o.material.dispose();
@@ -169,6 +181,9 @@ export class World {
     this.state = null;
     this.level = null;
     this.objects = new Map();
+    this.tileIndex = new Map();
+    this.frameSamples = []; this.renderSamples = []; this.inputSamples = []; this.updateSamples = [];
+    this.autoTier = 1; this.qualityChangedAt = performance.now();
     this.monsters = new Map();
     this.tick = 0;
     this.lastPlayer = null;
@@ -184,7 +199,7 @@ export class World {
     this.paused = false;
     this.disposed = false;
     this.events = new AbortController();
-    this.quality = "balanced";
+    this.quality = "auto";
     try {
       this.quality = localStorage.getItem("ularn3d.quality") || this.quality;
     } catch {}
@@ -194,8 +209,8 @@ export class World {
     this.camera = new THREE.PerspectiveCamera(
       37,
       innerWidth / innerHeight,
-      0.1,
-      240,
+      0.3,
+      180,
     );
     this.camera.position.set(13, 17, 19);
     this.renderer = new THREE.WebGLRenderer({
@@ -236,14 +251,14 @@ export class World {
     this.sun.castShadow = this.quality === "cinematic";
     this.sun.shadow.mapSize.set(this.quality === "cinematic" ? 2048 : 256, this.quality === "cinematic" ? 2048 : 256);
     Object.assign(this.sun.shadow.camera, {
-      left: -20,
-      right: 20,
-      top: 20,
-      bottom: -20,
+      left: -12,
+      right: 12,
+      top: 12,
+      bottom: -12,
       near: 1,
       far: 80,
     });
-    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.bias = -0.0002;
     this.sun.shadow.normalBias = 0.025;
     this.scene.add(this.sun, this.sun.target);
     this.fill = new THREE.DirectionalLight(0x78b9cf, 1.1);
@@ -253,6 +268,7 @@ export class World {
     this.props = new THREE.Group();
     this.actors = new THREE.Group();
     this.scene.add(this.terrain, this.props, this.actors);
+    this.staticTiles = new StaticTiles(this.props);
     this.effects = new CombatEffects(this.scene);
     // Thin aim-assist spokes shown while a spell waits for a direction.
     const aimPositions = new Float32Array(8 * 2 * 3);
@@ -282,7 +298,7 @@ export class World {
     // so the seam stays covered. Tops are coplanar, so the overlap does not flicker.
     // The stone map is unchanged.
     const floorGeo = new THREE.BoxGeometry(1.02, 0.18, 1.02);
-    this.floor = new THREE.InstancedMesh(
+    this.floor = new ChunkedTerrainMesh(
       floorGeo,
       surface("stone", 0xffffff),
       FLOOR_LIMIT,
@@ -291,7 +307,7 @@ export class World {
     this.floor.count = 0;
     this.floor.receiveShadow = true;
     this.scene.add(this.floor);
-    this.grassFloor = new THREE.InstancedMesh(
+    this.grassFloor = new ChunkedTerrainMesh(
       floorGeo,
       surface("grass", 0xffffff),
       FLOOR_LIMIT,
@@ -320,12 +336,14 @@ export class World {
     this.cooperationAura = createCooperationAura();
     this.scene.add(this.cooperationAura);
     const wallGeo = new THREE.BoxGeometry(1, 1, 1);
-    this.walls = new THREE.InstancedMesh(
+    floorGeo.userData.shared=wallGeo.userData.shared=true;
+    this.floorGeometry=floorGeo; this.wallGeometry=wallGeo;
+    this.walls = new ChunkedTerrainMesh(
       wallGeo,
       surface("stone", 0x99aba7),
       FLOOR_LIMIT,
     );
-    this.caps = new THREE.InstancedMesh(
+    this.caps = new ChunkedTerrainMesh(
       wallGeo,
       surface("stone", 0xb2bbad),
       FLOOR_LIMIT,
@@ -337,7 +355,10 @@ export class World {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.scene.add(mesh);
     }
+    const terrainFamilies = [this.floor, this.grassFloor, this.walls, this.caps];
+    this.grid = { clear: () => terrainFamilies.forEach(mesh => mesh.clear()), get rebuilds() { return terrainFamilies.reduce((sum, mesh) => sum + mesh.rebuilds, 0); } };
     this.player = hero();
+    this.heroAnimation = new HeroAnimation(this.scene, this.player);
     this.player.visible = false;
     this.bindHero();
     this.scene.add(this.player);
@@ -364,10 +385,12 @@ export class World {
       this.scene.add(l);
       return l;
     });
+    this.lighting = new TorchLighting(this.torchLights);
     this.marker = new THREE.Group();
     ring(this.marker, 0xf0d491, 0.46, 0.018);
     this.marker.visible = false;
     this.scene.add(this.marker);
+    this.routePointCount = 0;
     this.waterMaterial = mat(0x123b43, { metalness: 0.65, roughness: 0.28 });
     this.waterTime = { value: 0 };
     this.waterMaterial.onBeforeCompile = (shader) => {
@@ -479,10 +502,7 @@ export class World {
       const p = this.pointers.get(e.pointerId);
       if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.moved = true;
       if (p?.moved || this.gesture || this.pointers.size > 1) return;
-      const tile = this.pick(e);
-      this.marker.visible = !!tile;
-      if (tile) this.marker.position.set(tile.x, 0, tile.y);
-      this.onHover(tile, e);
+      this.hoverPointer={clientX:e.clientX,clientY:e.clientY}; this.hoverDirty=true;
     });
     listen(canvas, "pointerup", (e) => {
       const p = this.pointers.get(e.pointerId);
@@ -498,13 +518,16 @@ export class World {
       if (!this.pointers.size) this.gesture = false;
     });
     listen(canvas, "pointerleave", () => {
+      this.hoverPointer = null;
       this.marker.visible = false;
+      this.hoverPointer=null; this.hoverDirty=false;
       this.onHover(null);
       this.invalidate();
     });
     listen(canvas, "webglcontextlost", (e) => {
       e.preventDefault();
       this.lost = true;
+      this.heroAnimation.clear();
       this.stopFrames();
       this.releaseLostResources();
       window.dispatchEvent(new Event("ularn:graphics-lost"));
@@ -519,7 +542,7 @@ export class World {
     });
     listen(window, "resize", () => this.resize());
     listen(document, "visibilitychange", () => {
-      if (document.hidden) this.stopFrames();
+      if (document.hidden) { this.heroAnimation.clear(); this.stopFrames(); }
       else { this.lastTime = performance.now(); this.effects.clear(); this.invalidate(); }
     });
     listen(window, "ularn:combat", (event) => {
@@ -529,6 +552,8 @@ export class World {
         this.attackAge = 0;
         this.attackStartedAt = performance.now();
         this.attackStyle = attackStyle(detail.weapon);
+        const visible = !!detail.to && this.state.tiles.some(tile => tile.x === detail.to.x && tile.y === detail.to.y && tile.monster);
+        this.heroAnimation.start(detail, performance.now(), this.reduced, visible);
       }
       if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
@@ -575,6 +600,13 @@ export class World {
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
         frameLimit: this.frameLimit(),
+        effectiveQuality: ["low", "balanced", "high"][this.effectiveTier],
+        activeFrameP95: percentile(this.frameSamples), renderP95: percentile(this.renderSamples),
+        inputLatencyP95: percentile(this.inputSamples), updateP95: percentile(this.updateSamples),
+        terrainRebuilds: this.grid.rebuilds, staticChunks: this.staticTiles.chunks.size,
+        routePoints: this.routePointCount, routeVisible: false,
+        heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect,
+        ...creatureMetrics(), ...window.ularnPersistence?.metrics(),
         idle: performance.now() > this.activeUntil,
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
@@ -599,6 +631,9 @@ export class World {
         floorSpan: this.floor.geometry?.parameters?.width ?? null,
         wallInstances: this.walls.count,
         shadowUpdates: this.shadowUpdates,
+        shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
+        torchReassignments:this.lighting.reassignments,
+        antialiasing:this.effectiveTier===2 ? "SMAA" : "MSAA",
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
         wallCastShadow: this.walls.castShadow,
@@ -627,17 +662,20 @@ export class World {
         ...this.creaturePresentation(),
         ...itemArtMetrics(),
         ...this.effects.metrics(),
+        ...this.heroAnimation.metrics(),
       }),
       beginExpeditionCamera: () => this.beginExpeditionCamera(),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
         uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
         facing: { ...mesh.userData.facing },
+        model: mesh.userData.model, family: mesh.userData.family, position: mesh.position.toArray(),
         facingYaw: mesh.rotation.y,
         presentation: mesh.userData.presentation || (mesh.userData.artPath ? "sprite" : "fallback"),
         model: mesh.userData.modelKey || null,
         art: mesh.userData.artPath || null,
         mirrored: mesh.userData.artwork?.scale.x < 0,
       })),
+      projectTile: (x,y,height=0) => this.project(new THREE.Vector3(x,height,y)),
       props: () => [...this.objects.values()].flatMap(({ mesh }) => {
         const art = mesh.userData.itemArt;
         if (!art) return [];
@@ -719,6 +757,10 @@ export class World {
   }
   invalidate() {
     if (this.disposed) return;
+    if (performance.now() > this.activeUntil) {
+      this.lastTime = performance.now() - 1000 / 60;
+      this.nextFrameTime = 0;
+    }
     this.activeUntil = performance.now() + 1100;
     this.scheduleFrame();
   }
@@ -729,7 +771,7 @@ export class World {
     if (this.paused) return 4;
     const idle = performance.now() > this.activeUntil;
     const follow = this.followLive();
-    if (idle && this.state && this.quality === "balanced" && !this.hasMotion && !follow && !this.cameraLive)
+    if (idle && this.state && ["auto", "balanced"].includes(this.quality) && !this.hasMotion && !follow && !this.cameraLive)
       return 0;
     if (this.state && (this.cameraLive || this.hasMotion || follow || !idle)) return 60;
     return 12;
@@ -746,7 +788,7 @@ export class World {
     const ambientActive = !!this.ambientRatsNear;
     const follow = this.followLive();
     if (idle && !this.hasMotion && !follow && !this.cameraLive && !effectsActive && !ambientActive &&
-      (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
+      (["auto", "balanced"].includes(this.quality) || this.reduced || this.paused) && this.state) return;
     const live = !this.paused && !!this.state && (this.cameraLive || this.hasMotion || follow || effectsActive || ambientActive || !idle);
     // A pending low-rate timeout would hold the first step frame off vsync.
     if (live && this.frameTimer != null) {
@@ -770,14 +812,17 @@ export class World {
     } else kick();
   }
   setPaused(paused) {
+    if (this.paused === !!paused) return;
     this.paused = !!paused;
+    if (this.paused) this.heroAnimation.clear();
+    this.nextFrameTime = 0;
     this.invalidate();
   }
   releaseLostResources(clearArtCache = false) {
     // Remove disposal listeners tied to the lost GL context before restoration.
     // Keep the CPU-side artwork: Three.js uploads it again on the next render.
     // Otherwise later level/quality changes try to delete stale WebKit handles.
-    const geometries = new Set(),
+    const geometries = new Set([this.floorGeometry, this.wallGeometry].filter(Boolean)),
       materials = new Set(),
       textures = new Set();
     this.scene.traverse((object) => {
@@ -797,6 +842,8 @@ export class World {
     }
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
+    releaseCreatureResources(clearArtCache);
+    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials();
     releaseMonsterArtResources(clearArtCache);
     releaseItemArtResources(clearArtCache);
     this.sun.shadow.dispose();
@@ -1040,6 +1087,7 @@ export class World {
     if (key === this.heroWeaponKey) return;
     this.heroWeaponKey = key;
     fillWieldedWeapon(grip, weapon);
+    this.heroAnimation?.bind(this.player);
     // Unique 3D grip meshes only — no tiny floor-art plate stuck on the blade.
   }
   buildEnvironment() {
@@ -1073,11 +1121,15 @@ export class World {
       0.4,
       1.45,
     );
+    this.ao = new SSAOPass(this.scene, this.camera, width / 2, height / 2);
+    this.ao.kernelRadius=8; this.ao.minDistance=.001; this.ao.maxDistance=.12;
+    this.composer.addPass(this.ao);
     this.composer.addPass(this.bloom);
+    this.antialias=new SMAAPass(); this.composer.addPass(this.antialias);
     this.composer.addPass(new OutputPass());
   }
   applyLevelLighting() {
-    const cinematic = this.quality === "cinematic";
+    const cinematic = this.cinematicRendering();
     const town = !this.state || this.state.level === 0;
     const volcano = this.state?.level > 15;
     if (town) {
@@ -1111,8 +1163,9 @@ export class World {
       light.intensity = 0;
     });
   }
+  cinematicRendering() { return this.effectiveTier === 2; }
   applyGpuQuality() {
-    const cinematic = this.quality === "cinematic";
+    const cinematic = this.cinematicRendering();
     // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.75));
     // Balanced never runs a shadow pass — walls already do not cast, and the
@@ -1160,6 +1213,12 @@ export class World {
       object.castShadow = cinematic;
       object.receiveShadow = cinematic;
     });
+    for (const actor of this.monsters.values()) actor.mesh.traverse(object => {
+      const flags = object.userData.presentationShadows;
+      if (!object.isMesh || !flags) return;
+      object.castShadow = cinematic && flags.cast;
+      object.receiveShadow = cinematic && flags.receive;
+    });
     this.cooperationAura?.traverse((object) => {
       if (!object.isMesh) return;
       object.castShadow = false;
@@ -1175,7 +1234,7 @@ export class World {
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
     if (dungeon) return surfaceBasic(kind, color, extra);
-    return this.quality === "cinematic"
+    return this.cinematicRendering()
       ? surface(kind, color, extra)
       : surfaceLambert(kind, color, extra);
   }
@@ -1214,18 +1273,61 @@ export class World {
     this.shadowUpdates++;
   }
   syncPlayerLight() {
-    this.disablePointLights();
+    const enabled=this.effectiveTier===2 && this.state?.level===0;
+    if (!enabled) { this.disablePointLights(); return; }
+    this.playerLight.visible=true; this.playerLight.intensity=3.5;
+    this.torchLights.forEach((light,index)=>{light.visible=index<4;});
+    if(this.playerTarget)this.lighting.assign(this.lamps,this.playerTarget,4);
   }
   setQuality(value, persist = true) {
-    this.quality = ["cinematic", "balanced"].includes(value)
+    this.quality = ["auto", "cinematic", "balanced"].includes(value)
       ? value
       : "balanced";
-    this.applyGpuQuality();
     if (persist)
       try {
         localStorage.setItem("ularn3d.quality", this.quality);
       } catch {}
+    this.applyQuality();
+  }
+  applyQuality() {
+    this.effectiveTier = this.quality === "auto" ? this.autoTier : this.quality === "cinematic" ? 2 : 1;
+    this.applyGpuQuality();
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, [.65, .75, 1.5][this.effectiveTier]));
+    const cinematic=this.effectiveTier===2;
+    if (cinematic) this.ensureComposer(); else this.disposeComposer();
+    if (this.composer) {
+      this.bloom.enabled=this.ao.enabled=this.antialias.enabled=cinematic;
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    }
     this.resize();
+  }
+  adaptQuality(now, frameMs) {
+    if (this.quality !== "auto" || this.frameSamples.length < 20) return;
+    const p95 = percentile(this.frameSamples);
+    this.overBudgetMs = p95 > 20 ? (this.overBudgetMs || 0) + frameMs : 0;
+    this.headroomMs = p95 < 18 ? (this.headroomMs || 0) + frameMs : 0;
+    if (this.overBudgetMs > 2000 && this.autoTier > 0) this.autoTier--;
+    else if (this.headroomMs > 10000 && this.autoTier < 2) this.autoTier++;
+    else return;
+    this.qualityChangedAt = now; this.overBudgetMs = this.headroomMs = 0;
+    this.frameSamples.length = 0; this.applyQuality();
+  }
+  project(position) {
+    this.camera.updateMatrixWorld();
+    const point = position.clone().project(this.camera);
+    return { x: (point.x + 1) * innerWidth / 2, y: (1 - point.y) * innerHeight / 2 };
+  }
+  setViewportRect(rect) {
+    this.viewportRect = { ...rect };
+    this.camera.setViewOffset(innerWidth, innerHeight,
+      innerWidth / 2 - (rect.left + rect.right) / 2,
+      innerHeight / 2 - (rect.top + rect.bottom) / 2, innerWidth, innerHeight);
+    this.invalidate();
+  }
+  setRoute(points = []) {
+    // Preserve read-only travel diagnostics without drawing guidance lines.
+    this.routePointCount = Math.min(points.length, FLOOR_LIMIT + 1);
+    this.invalidate();
   }
   resize() {
     const width = this.container.clientWidth || innerWidth;
@@ -1376,15 +1478,24 @@ export class World {
     return this.heldCameraOffset.clone();
   }
   update(state) {
+    const updateStarted = performance.now();
     const old = this.state;
     if (old && this.level != null) this.captureCamera();
     this.state = state;
+    this.hoverDirty = true;
+    this.tileIndex = new Map(state.tiles.map((tile) => [tile.y * state.width + tile.x, tile]));
     this.controls.autoRotate = false;
     const isNew = this.level !== state.level;
     if (isNew) {
+      this.frameSamples.length = 0; this.overBudgetMs = this.headroomMs = 0; this.lastFrameActive = false;
       destroy(this.terrain);
+      this.staticTiles.clear();
+      this.grid.clear();
       destroy(this.props);
+      this.objects.forEach(({ mesh }) => { if (!mesh.parent) destroy(mesh); });
       this.objects.clear();
+      this.tileGeometrySignature = null;
+      this.setRoute();
       destroy(this.actors);
       this.monsters.clear();
       this.effects.clear();
@@ -1396,6 +1507,7 @@ export class World {
       this.structureKey = null;
       this.level = state.level;
       this.lastPlayer = null;
+      this.walkPhase = 0; this.walkStartedAt = undefined;
       const town = state.level === 0,
         volcano = state.level > 15;
       this.scene.background.set(
@@ -1467,6 +1579,7 @@ export class World {
       this.scene.remove(this.player);
       destroy(this.player);
       this.player = hero(state.character);
+      this.heroAnimation.bind(this.player);
       this.character = state.character;
       this.bindHero();
       this.scene.add(this.player);
@@ -1622,6 +1735,7 @@ export class World {
       // HAVESEEN tile made large dungeon rooms walk like molasses.
       if (t.wall || t.id === 0) {
         if (prev) {
+          this.staticTiles.remove(key,t);
           this.props.remove(prev.mesh);
           destroy(prev.mesh);
           this.objects.delete(key);
@@ -1630,6 +1744,7 @@ export class World {
       }
       if (prev?.sig === sig) continue;
       if (prev) {
+        this.staticTiles.remove(key, t);
         this.props.remove(prev.mesh);
         destroy(prev.mesh);
       }
@@ -1677,10 +1792,24 @@ export class World {
               : 2.7;
         g.add(text);
       }
-      this.props.add(g);
+      const dynamic = !!art || t.store || [7, 17, 5, 13, 56, 93].includes(t.id);
+      if (dynamic) {
+        this.props.add(g);
+        if (t.store && ![54, 55, 56].includes(t.id)) {
+          g.userData.building = true;
+          g.traverse((object) => {
+            if (!object.isMesh) return;
+            object.material = object.material.clone();
+            object.material.transparent = true;
+            object.material.depthWrite = false;
+            object.material.userData.cutaway = true;
+          });
+        }
+      } else this.staticTiles.set(key, g);
       this.objects.set(key, { sig, mesh: g });
     }
     this.syncMonsterActors(state);
+    this.staticTiles.flush();
     if (rebuildFloors) {
       for (const [m, count] of [
         [this.floor, floorIndex],
@@ -1702,6 +1831,7 @@ export class World {
     }
     for (const [key, o] of this.objects)
       if (!ids.has(key)) {
+        this.staticTiles.remove(key,o.mesh.userData.tile);
         this.props.remove(o.mesh);
         destroy(o.mesh);
         this.objects.delete(key);
@@ -1723,7 +1853,7 @@ export class World {
     // Seed rats from the new wall set before the first cutaway pass.
     this.ambientRats.setLayout(this.wallCells, state.level, this.wallHeightAt);
     this.syncMovers(state, old);
-    if (isNew && this.quality === "cinematic") this.markShadowUpdate();
+    if (isNew && this.cinematicRendering()) this.markShadowUpdate();
     this.invalidate();
   }
   syncMonsterActors(state) {
@@ -1742,29 +1872,37 @@ export class World {
       }
       if (!actor) {
         const mesh =
+          creature(monster) ||
           createCreatureModel(monster) ||
           monsterSprite(monster, () => this.invalidate()) ||
           monsterModel(monster);
+        if (mesh.userData.model) { mesh.userData.presentation="model"; mesh.userData.modelKey=mesh.userData.model; }
         mesh.position.set(tile.x, 0, tile.y);
-        if (this.quality !== "cinematic") {
-          mesh.traverse((object) => {
-            if (!object.isMesh) return;
-            object.castShadow = false;
-            object.receiveShadow = false;
-          });
-        }
+        mesh.traverse((object) => {
+          if (!object.isMesh) return;
+          object.userData.presentationShadows = { cast: object.castShadow, receive: object.receiveShadow };
+          if (!this.cinematicRendering()) object.castShadow = object.receiveShadow = false;
+        });
         actor = {
           mesh,
           species: monster.id,
           target: new THREE.Vector3(tile.x, 0, tile.y),
+          start: new THREE.Vector3(tile.x, 0, tile.y), movedAt: performance.now() - 100,
         };
         this.monsters.set(uid, actor);
         this.actors.add(mesh);
       }
-      actor.target.set(tile.x, 0, tile.y);
+      if (actor.target.x !== tile.x || actor.target.z !== tile.y) {
+        actor.start.copy(actor.mesh.position); actor.movedAt = performance.now();
+        if (Math.max(Math.abs(actor.target.x - tile.x), Math.abs(actor.target.z - tile.y)) > 1) {
+          actor.start.set(tile.x, 0, tile.y); actor.mesh.position.copy(actor.start); actor.movedAt -= 100;
+        }
+        actor.target.set(tile.x, 0, tile.y);
+      }
       actor.mesh.userData.uid = uid;
       actor.mesh.userData.tile = { x: tile.x, y: tile.y };
-      faceMonster(actor.mesh, monster.facing, this.camera);
+      if (actor.mesh.userData.model) faceCreature(actor.mesh, monster.facing);
+      else faceMonster(actor.mesh, monster.facing, this.camera);
     }
     for (const [uid, actor] of this.monsters)
       if (!creatures.has(uid)) {
@@ -1821,7 +1959,7 @@ export class World {
     // chase the hero every step. Cinematic still follows the player.
     // Skip frustum rewrites entirely when shadows are off (Balanced / dungeon).
     if (this.renderer.shadowMap.enabled && this.sun.castShadow) {
-      if (this.quality === "cinematic") {
+      if (this.cinematicRendering()) {
         this.sun.position.set(state.x - 12, 24, state.y + 8);
         this.sun.target.position.copy(target);
       } else {
@@ -1873,7 +2011,7 @@ export class World {
     if (!show) return;
     placeCooperationAura(this.cooperationAura, state.x, state.y);
   }
-  updateWalls() {
+  updateWalls(dt = 0) {
     if (!this.state) return;
     const toward = this.scratchOffset
       .copy(this.camera.position)
@@ -1952,6 +2090,7 @@ export class World {
     }
     if (layoutChanged) this.markShadowUpdate();
   }
+
   pick(e) {
     if (!this.state || !this.state.maze || this.state.over || this.lost)
       return null;
@@ -1963,17 +2102,17 @@ export class World {
     this.pickHits.length = 0;
     this.ray.intersectObjects(this.actors.children, true, this.pickHits);
     this.ray.intersectObjects(this.props.children, true, this.pickHits);
+    this.ray.intersectObjects(this.staticTiles.pickTargets(this.ray.ray), true, this.pickHits);
     this.ray.intersectObject(this.walls, false, this.pickHits);
     this.ray.intersectObject(this.caps, false, this.pickHits);
     for (const hit of this.pickHits) {
       if (hit.object.isSprite) continue;
-      if (hit.object === this.walls || hit.object === this.caps)
-        return this.wallCells[hit.instanceId] || null;
+      if (hit.object.userData.wallCells) return hit.object.userData.wallCells[hit.instanceId] || null;
       let o = hit.object;
       while (o && !o.userData.tile) o = o.parent;
       if (o?.userData.tile) {
         const { x, y } = o.userData.tile;
-        return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
+        return this.tileIndex.get(y * this.state.width + x) || null;
       }
     }
     if (!this.ray.ray.intersectPlane(this.ground, this.scratchPosition)) return null;
@@ -2136,17 +2275,12 @@ export class World {
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
       this.heroLimbLive = this.poseHero(now);
+      this.heroAnimation.update(now);
+      this.heroLimbLive ||= this.heroAnimation.active;
       this.keepBodyOutOfRock();
     }
     if (!this.reduced) {
       this.dust.rotation.y = Math.sin(this.tick * 0.055) * 0.08;
-      this.torchLights.forEach((l, i) => {
-        if (l.intensity)
-          l.intensity =
-            4.5 +
-            Math.sin(this.tick * 5 + i) * 0.4 +
-            Math.sin(this.tick * 11 + i) * 0.15;
-      });
     }
     if (this.burst.visible) {
       this.burstAge = (now - this.burstStartedAt) / 1000;
@@ -2158,7 +2292,7 @@ export class World {
       if (this.burstAge > 0.55) this.burst.visible = false;
     }
     if (
-      this.quality === "cinematic" &&
+      this.cinematicRendering() &&
       this.playerTarget &&
       this.player.position.distanceToSquared(this.playerTarget) > 0.0001 &&
       this.tick - (this.shadowTime || 0) > 0.08
@@ -2179,10 +2313,10 @@ export class World {
       this.lastCamQuat.copy(this.camera.quaternion);
       this.lastCamQuatValid = true;
     }
-    for (const { mesh, target } of this.monsters.values()) {
+    for (const { mesh, target, start, movedAt } of this.monsters.values()) {
       const moving = mesh.position.distanceToSquared(target) > 0.0004;
       if (!moving) mesh.position.copy(target);
-      else mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
+      else mesh.position.lerpVectors(start,target,this.reduced ? 1 : Math.min(1,(now-movedAt)/100));
       const body = mesh.userData.body;
       if (body) {
         const base = mesh.userData.hover || 0;
@@ -2191,7 +2325,8 @@ export class World {
           : base;
       }
       if (moving) this.hasMotion = true;
-      if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
+      if (mesh.userData.model) animateCreature(mesh, now, moving, this.reduced);
+      else if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
     }
     if (camTurned) {
       for (const art of this.billboards) faceItem(art, this.camera);
@@ -2205,21 +2340,72 @@ export class World {
         if (water.visible) this.hasMotion = true;
       }
     }
-    if (this.wallCells.length) this.updateWalls();
+    if (this.wallCells.length) this.updateWalls(dt);
+    if (this.effectiveTier===2 && this.state?.level===0) {
+      this.syncPlayerLight();
+      const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
+      this.hasMotion ||= lightsMoving;
+      if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget);
+    }
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
     this.ambientRatsNear = this.ambientRats?.update(dt, this.camera) || false;
     if (this.ambientRatsNear) this.hasMotion = true;
+    if (this.hoverDirty && this.hoverPointer && !this.gesture) {
+      const tile=this.pick(this.hoverPointer); this.marker.visible=!!tile;
+      if(tile)this.marker.position.set(tile.x,0,tile.y);
+      this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
+    }
     this.applyPixelGrid();
     try {
-      if (this.quality === "cinematic" && this.composer) this.composer.render(dt);
+      if (this.composer && this.effectiveTier === 2) this.composer.render(dt);
       else this.renderer.render(this.scene, this.camera);
     } finally {
       this.restorePixelGrid();
     }
+    sample(this.renderSamples, performance.now() - now);
+    if (!this.paused && this.state && this.hasMotion) {
+      sample(this.frameSamples, Math.min(100, dt * 1000));
+      if (this.lastInputAt != null) { sample(this.inputSamples, performance.now() - this.lastInputAt); this.lastInputAt=null; }
+      this.adaptQuality(now, dt*1000);
+    }
     this.renderedFrames++;
     this.animating = false;
     this.scheduleFrame();
+  }
+  updateCutaways(dt) {
+    if (!this.state) return;
+    const toward = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
+    const heroPoint = this.project(this.player.position.clone().add(new THREE.Vector3(0, .6, 0)));
+    for (const { mesh } of this.objects.values()) {
+      if (!mesh.userData.building) continue;
+      const dx = mesh.position.x - this.player.position.x, dz = mesh.position.z - this.player.position.z;
+      let obscures = false;
+      const wasHidden = mesh.userData.obscuresHero;
+      if (dx * dx + dz * dz < (wasHidden ? 18 : 16) && dx * toward.x + dz * toward.z > -.6) {
+        const bounds = mesh.userData.bounds || (mesh.userData.bounds = new THREE.Box3().setFromObject(mesh));
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+          const point = this.project(new THREE.Vector3(x, y, z));
+          left = Math.min(left, point.x); right = Math.max(right, point.x);
+          top = Math.min(top, point.y); bottom = Math.max(bottom, point.y);
+        }
+        const margin = wasHidden ? 6 : 0;
+        obscures = heroPoint.x > left - margin && heroPoint.x < right + margin && heroPoint.y > top - margin && heroPoint.y < bottom + margin;
+      }
+      mesh.userData.obscuresHero = obscures;
+      const target = obscures ? .2 : 1;
+      let opacity = mesh.userData.opacity ?? 1;
+      opacity += (target - opacity) * (this.reduced ? 1 : 1 - Math.exp(-dt * 14));
+      if (Math.abs(target - opacity) < .005) opacity = target;
+      else this.hasMotion = true;
+      mesh.userData.opacity = opacity;
+      mesh.traverse((object) => {
+        if (!object.material?.userData.cutaway) return;
+        object.material.opacity = opacity;
+        object.material.depthWrite = opacity >= .995;
+      });
+    }
   }
   dispose() {
     if (this.disposed) return;
@@ -2228,6 +2414,7 @@ export class World {
     this.events.abort();
     this.controls.dispose();
     this.effects.dispose();
+    this.heroAnimation.dispose(); this.staticTiles.clear(); this.grid.clear();
     this.ambientRats?.dispose();
     this.ambientRats = null;
     if (this.aimGrid) {

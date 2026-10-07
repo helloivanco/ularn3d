@@ -105,32 +105,8 @@ test("trap landmarks and special-item ground hover work in play", async ({ page 
 
   // Drive the live hover UI over the Eye and a quiet potion.
   await page.locator("#camera-reset").click();
-  const s = await page.evaluate(() => ularn.snapshot());
-  const offset = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
-  const project = (tx, ty) => {
-    const [ox, oy, oz] = offset;
-    const length = Math.hypot(...offset);
-    const horizontal = Math.hypot(ox, oz);
-    const relative = [tx - s.x - ox, 0.35 - oy, ty - s.y - oz];
-    const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
-    const depth = -dot(
-      relative,
-      offset.map((n) => n / length),
-    );
-    const right = [oz / horizontal, 0, -ox / horizontal];
-    const up = [
-      (-ox * oy) / (horizontal * length),
-      horizontal / length,
-      (-oz * oy) / (horizontal * length),
-    ];
-    const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
-    return {
-      x: 720 + (dot(relative, right) / depth) * scale,
-      y: 500 - (dot(relative, up) / depth) * scale,
-    };
-  };
-
-  const eyePoint = project(8, 9);
+  const project = (x, y) => page.evaluate(({ x, y }) => ularnGraphics.projectTile(x, y, 0.35), { x, y });
+  const eyePoint = await project(8, 9);
   await page.mouse.move(eyePoint.x, eyePoint.y);
   await expect(page.locator("#tile-label .tile-label-title")).toHaveText(
     "Eye of Larn",
@@ -138,7 +114,7 @@ test("trap landmarks and special-item ground hover work in play", async ({ page 
   );
   await expect(page.locator("#tile-label")).toContainText("God of Hellfire");
 
-  const potionPoint = project(9, 9);
+  const potionPoint = await project(9, 9);
   await page.mouse.move(potionPoint.x, potionPoint.y);
   await expect(page.locator("#tile-label")).toBeHidden();
 });

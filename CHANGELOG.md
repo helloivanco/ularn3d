@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.63 — Reconciled graphics, controls and expedition records
+
+- Animated models cover all 65 classic Ularn species; detailed sword variants add bounded trails and confirmed-hit feedback while the thin dagger and class rigs remain
+- A compact symbol map expands to the full explored floor, and held directions stop cleanly on release, prompts or menus
+- Auto graphics, spatial terrain/prop caching, stable town lights and background save compression bring the local presentation work into the current game
+- Quiet regional music, tension stems and realistic effects have persistent music/effects controls
+- Completed solo expeditions save locally and sync their global records when online; room play retains its verified score, chat and spectator features
+
 ## 1.3.62 — A lemming is easy to hit
 
 - A level-1 adventurer with the starting dagger usually kills a lemming in one swing

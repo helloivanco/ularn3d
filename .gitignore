@@ -8,7 +8,15 @@ test-results/
 playwright-report/
 release/
 public/engine/game.js
+public/engine/score-config.js
+public/engine/score-config.json
+.env*
+!.env.example
+supabase/.temp/
 .vercel
 
 # Locally staged desktop download; do not commit binaries.
 public/downloads/*.exe
+
+# Finder metadata is kept in recovery snapshots, not application commits.
+.DS_Store

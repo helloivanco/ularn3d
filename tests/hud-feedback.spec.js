@@ -14,8 +14,12 @@ test.afterEach(() => expect(errors).toEqual([]));
 test("bottom HUD, symbol map, pinned inventory, and loot shortcut stay in sync", async ({ page }) => {
   await expect(page.locator(".quest-panel, .map-legend")).toHaveCount(0);
   const map = await page.locator("#minimap").boundingBox();
-  expect(map.width).toBeGreaterThan(240);
-  expect(map.width).toBeLessThan(760);
+  expect(map.width).toBeGreaterThan(280);
+  expect(map.width).toBeLessThan(360);
+  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", "27");
+  await page.locator("#map-expand").click();
+  await expect(page.locator("#map-dialog")).toBeVisible();
+  await page.getByRole("button", {name:"Close explored map"}).click();
   const hero = await page.locator(".hero-panel").boundingBox();
   expect(hero.y).toBeGreaterThan(750);
   await expect(page.locator("#inventory-list")).toContainText("dagger");
@@ -60,7 +64,7 @@ test("effect rail and persistent pack refresh from engine changes without openin
 
 test("every spell and weapon has a distinct sound and voices are released", async ({ page }) => {
   await expect(page.locator("#sound")).toBeVisible();
-  await page.locator("#sound").click();
+  await expect(page.locator("#sound")).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => page.evaluate(() => window.ularnAudio?.music?.kind || "")).toBe("town");
   const stepped = await page.evaluate(() => {
     const heard = [];
@@ -97,10 +101,10 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
       ...weaponIds.map((id) => JSON.stringify(weaponProfile({ id, type: "sword" }))),
     ];
     window.testAudio = new GameAudio();
-    await testAudio.load();
-    testAudio.play("spell", { spell: { id: 0, name: spelname[0] } });
+    await testAudio.unlock();
+    testAudio.renderFX("spell", { spell: { id: 0, name: spelname[0] } });
     const one = testAudio.voices.size;
-    for (let i = 0; i < 60; i++) testAudio.play("spell", { spell: { id: i % 39, name: spelname[i % 39] } });
+    for (let i = 0; i < 60; i++) testAudio.renderFX("spell", { spell: { id: i % 39, name: spelname[i % 39] } });
     return {
       spells: new Set(profiles).size,
       count: spelname.length,
@@ -119,6 +123,7 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
   await page.evaluate(async () => {
     await testAudio.suspend();
     if (testAudio.voices.size !== 0) throw new Error("Muted voices were not released");
+    await testAudio.resume();
     testAudio.play("weapon", { weapon: { id: 58, type: "sword" } });
   });
   await expect.poll(() => page.evaluate(() => testAudio.context.state)).toBe("running");

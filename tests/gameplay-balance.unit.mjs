@@ -168,9 +168,9 @@ test("adventurer name is remembered across sessions", () => {
 });
 
 test("makeobject keeps classic potion/scroll/gold counts", () => {
-  assert.match(create, /for \(i = 0; i < rnd\(4\) \+ 3; i\+\+\)/);
-  assert.match(create, /for \(i = 0; i < rnd\(5\) \+ 3; i\+\+\)/);
-  assert.match(create, /for \(i = 0; i < rnd\(12\) \+ 11; i\+\+\)/);
+  assert.match(create, /for \(i = 0; i < \(rnd\(4\) \+ 3\) \* coopScale\(\); i\+\+\)/);
+  assert.match(create, /for \(i = 0; i < \(rnd\(5\) \+ 3\) \* coopScale\(\); i\+\+\)/);
+  assert.match(create, /for \(i = 0; i < \(rnd\(12\) \+ 11\) \* coopScale\(\); i\+\+\)/);
 });
 
 test("town portal from town consumes the portal pair", () => {

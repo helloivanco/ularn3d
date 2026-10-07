@@ -1,8 +1,25 @@
 import * as THREE from "three";
 import { mat, matBasic, surface, noise } from "./materials.js";
 import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { compact, disposeGeometry } from "./graphics-utils.js";
 export { mat } from "./materials.js";
 const shared = new Map();
+const weaponModels = new Map();
+const BLADE_STYLES = {
+  dagger: { length: .46, width: .055, grip: .14, guard: .23, steel: 0xc2d4dc, gold: 0xbda06c, gem: 0x5b8998 },
+  longsword: { length: .84, width: .12, grip: .19, guard: .3, steel: 0xcbdce4, gold: 0xc8a564, gem: 0x39798c },
+  sunsword: { length: .8, width: .135, grip: .18, guard: .31, steel: 0xe2dec2, gold: 0xe3bb63, gem: 0xf4c875 },
+  greatsword: { length: 1.02, width: .155, grip: .27, guard: .38, steel: 0xbfcfd9, gold: 0xb29970, gem: 0x688fa0 },
+  slashing: { length: .87, width: .14, grip: .19, guard: .32, steel: 0xbadbec, gold: 0x93b7c8, gem: 0x63c4ea, bend: .065 },
+  vorpal: { length: .92, width: .135, grip: .21, guard: .33, steel: 0xb8c6cd, gold: 0xd3a061, gem: 0xebad63 },
+  slayer: { length: .98, width: .165, grip: .23, guard: .37, steel: 0x718c9b, gold: 0xbba176, gem: 0xd85956, bend: -.035 },
+};
+export function bladeStyle(weapon = {}) {
+  const key = weapon?.type === "dagger" ? "dagger" :
+    ({ 28: "sunsword", 29: "greatsword", 58: "longsword", 26: "slashing", 90: "vorpal", 91: "slayer" })[weapon?.id] || "longsword";
+  return { key, ...BLADE_STYLES[key] };
+}
 const geometry = (key, create) => {
   if (!shared.has(key)) {
     const g = create();
@@ -79,11 +96,11 @@ export function cone(g, color, x, y, z, r, h, n = 6) {
     r,
   );
 }
-export function cylinder(g, color, x, y, z, r, h, n = 6) {
+export function cylinder(g, color, x, y, z, r, h, n = 6, extra) {
   return mesh(
     g,
     geometry(`cylinder${n}`, () => new THREE.CylinderGeometry(1, 1, 1, n)),
-    mat(color),
+    mat(color, extra),
     x,
     y,
     z,
@@ -181,6 +198,7 @@ export function ring(g, color, r = 0.4, y = 0.025) {
     r,
   );
   m.rotation.x = -Math.PI / 2;
+  m.castShadow = m.receiveShadow = false;
   return m;
 }
 export function tree(scale = 1) {
@@ -232,10 +250,12 @@ export function torch(g, x, y, z, scale = 1) {
     roughness: 1,
   });
   flame.scale.y *= 1.8;
-  orb(holder, 0xfff0c0, 0, 0.29, -0.03, 0.05, {
+  flame.castShadow = flame.receiveShadow = false;
+  const core = orb(holder, 0xfff0c0, 0, 0.29, -0.03, 0.05, {
     emissive: 0xffdf92,
     emissiveIntensity: 5,
   });
+  core.castShadow = core.receiveShadow = false;
   holder.userData.flame = true;
   return holder;
 }
@@ -249,7 +269,7 @@ export function clearWieldedWeapon(grip) {
  * Build the in-hand weapon so attack swings show larger unique silhouettes
  * per weapon type — not tiny floor icons stuck on a default dagger blade.
  */
-export function fillWieldedWeapon(grip, weapon = null) {
+function fillClassicWieldedWeapon(grip, weapon = null) {
   clearWieldedWeapon(grip);
   const id = weapon?.id ?? null;
   const type = weapon?.type || "unarmed";
@@ -353,6 +373,28 @@ export function fillWieldedWeapon(grip, weapon = null) {
   box(grip, 0x463e32, 0, -0.1 * S, 0, 0.07 * S, 0.2 * S, 0.07 * S, haft);
   orb(grip, 0xdab26a, 0, -0.22 * S, 0, 0.05 * S, metal);
   return grip;
+}
+
+export function fillWieldedWeapon(pivot, weapon = {}) {
+  const type=weapon?.type || "unarmed";
+  if (type !== "sword") {
+    fillClassicWieldedWeapon(pivot, weapon);
+    pivot.userData.weaponModel=type;
+    pivot.userData.bladeLength=type === "dagger" ? .5 : 0; pivot.userData.bladeBend=0;
+    if (type === "dagger") {
+      const blade=pivot.getObjectByName("dagger-blade");
+      if (blade) { blade.geometry=detailedBladeGeometry(0,true); blade.position.y=.03; }
+      // Faceting and small grip details keep the latest thin dagger silhouette.
+      const gem=geometry("dagger-small-gem",()=>new THREE.TetrahedronGeometry(1));
+      markDetail(mesh(pivot,gem,mat(0xbda06c,{metalness:.6}),0,-.15,0,.03,.03,.03));
+      markDetail(mesh(pivot,gem,mat(0x5b8998,{emissive:0x5b8998,emissiveIntensity:.2}),0,-.15,-.025,.015,.015,.015));
+    }
+    return pivot;
+  }
+  equipHero({ getObjectByName: () => pivot }, weapon);
+  pivot.rotation.x=weaponRestX(type);
+  pivot.userData.weaponId=weapon?.id ?? null; pivot.userData.restRotationX=pivot.rotation.x;
+  return pivot;
 }
 
 const HERO_KITS = {
@@ -566,6 +608,94 @@ export function hero(character = "Adventurer") {
   });
   addHeroOutline(body);
   return g;
+}
+
+function detailedBladeGeometry(bend = 0, simple = false) {
+  return geometry(`blade:${bend}:${simple}`, () => {
+    const positions = [], uvs = [];
+    const stations = simple ? [[0,.55],[.72,.8],[1,0]] : [[0, .55], [.12, 1], [.72, .8], [.9, .46], [1, 0]];
+    const corners = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+    const vertex = (station, corner) => {
+      const [y, width] = stations[station], [x, z] = corners[corner % 4];
+      positions.push(x * width / 2 + bend * y * y, y, z * (1 - y * .25) / 2 * (station === stations.length - 1 ? 0 : 1));
+      uvs.push(corner / 4, y);
+    };
+    for (let i = 0; i < stations.length - 1; i++) for (let j = 0; j < 4; j++) {
+      vertex(i, j); vertex(i, j + 1); vertex(i + 1, j);
+      vertex(i, j + 1); vertex(i + 1, j + 1); vertex(i + 1, j);
+    }
+    const result = new THREE.BufferGeometry();
+    result.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    result.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    result.computeVertexNormals();
+    return result;
+  });
+}
+
+function detailedBlade(group, style) {
+  const metal = { metalness: .85, roughness: .23 };
+  mesh(group, detailedBladeGeometry(style.bend), mat(style.steel, metal), 0, .055, 0, style.width, style.length, .036);
+  // The fuller and faceted section make the edge readable at gameplay scale.
+  box(group, 0x758e9d, 0, style.length * .37 + .09, -.018, .014, style.length * .57, .006, { metalness: .8, roughness: .34 });
+  box(group, style.gold, 0, .027, 0, .115, .066, .085, { metalness: .72, roughness: .3 });
+  for (const side of [-1, 1]) {
+    const wing = box(group, style.gold, side * style.guard * .28, .035, 0, style.guard * .46, .038, .072, { metalness: .72, roughness: .3 });
+    wing.rotation.z = side * (style.key === "slayer" ? -.28 : .22);
+    orb(group, style.gold, side * style.guard * .49, .035 + (style.key === "slayer" ? -.025 : .025), 0, .028, { metalness: .72, roughness: .3 });
+  }
+  cylinder(group, 0x4c3530, 0, -style.grip / 2 - .022, 0, .034, style.grip, 10);
+  for (let i = 0; i < 6; i++)
+    cylinder(group, 0x725348, 0, -.03 - i * style.grip / 6, 0, .038, .012, 10);
+  for (const y of [-.025, -style.grip - .025])
+    cylinder(group, style.gold, 0, y, 0, .042, .022, 10, { metalness: .72, roughness: .3 });
+  const pommel = orb(group, style.gold, 0, -style.grip - .075, 0, .058, { metalness: .72, roughness: .3 });
+  pommel.scale.y *= .75;
+  orb(group, style.gem, 0, -style.grip - .075, -.047, .025, { metalness: .35, roughness: .18, emissive: style.gem, emissiveIntensity: .22 });
+  if (!["dagger", "longsword", "greatsword"].includes(style.key))
+    orb(group, style.gem, 0, .14, -.021, .018, { emissive: style.gem, emissiveIntensity: .7, metalness: .3, roughness: .22 });
+}
+
+export function weaponModel(weapon = {}) {
+  const type = weapon?.type || "unarmed", style = bladeStyle(weapon);
+  const key = ["sword", "dagger"].includes(type) ? style.key : type;
+  if (!weaponModels.has(key)) {
+    const model = new THREE.Group();
+    const steel = 0xc4d7d5, wood = 0x8d714c;
+    if (["sword", "dagger"].includes(type)) detailedBlade(model, style);
+    else if (["staff", "spear", "lance"].includes(type)) {
+      cylinder(model, wood, 0, .22, 0, .026, type === "lance" ? 1.4 : 1.08, 8);
+      if (type === "staff") orb(model, 0x9ccbdc, 0, .78, 0, .09, { emissive: 0x76b0cf, emissiveIntensity: 1.5 });
+      else cone(model, steel, 0, .87, 0, .065, .31, 4);
+    } else if (type === "axe") {
+      cylinder(model, wood, 0, .18, 0, .033, .8, 8);
+      box(model, steel, .08, .48, 0, .34, .24, .065, { metalness: .7 });
+    } else if (["hammer", "blunt", "flail"].includes(type)) {
+      cylinder(model, wood, 0, .15, 0, .035, .65, 8);
+      if (type === "hammer") box(model, steel, 0, .5, 0, .3, .16, .16, { metalness: .7 });
+      else orb(model, type === "flail" ? steel : wood, 0, .52, 0, .12);
+    }
+    compact(model, true);
+    model.userData = { weaponType: type, weaponModel: key, bladeLength: ["sword", "dagger"].includes(type) ? style.length + .055 : 0, bladeBend: (style.bend || 0) * style.width };
+    weaponModels.set(key, model);
+  }
+  return weaponModels.get(key).clone();
+}
+
+export function equipHero(group, weapon) {
+  const pivot = group.getObjectByName("weapon");
+  if (!pivot) return;
+  const type = weapon?.type || "unarmed";
+  const key = ["sword", "dagger"].includes(type) ? bladeStyle(weapon).key : type;
+  if (pivot.userData.weaponModel === key) return;
+  disposeGeometry(pivot);
+  const model = weaponModel(weapon);
+  Object.assign(pivot.userData, model.userData);
+  if (model.children.length) pivot.add(...model.children.slice());
+}
+
+export function releaseModelResources() {
+  shared.forEach((geometry) => geometry.dispose());
+  weaponModels.forEach((model) => model.traverse((part) => part.geometry?.dispose()));
 }
 function windowDetail(g, x, y, z, w = 0.25, h = 0.33) {
   block(g, "wood", 0x544c39, x, y, z, w + 0.07, h + 0.07, 0.055);
@@ -1059,7 +1189,15 @@ export function itemModel(tile) {
     ring(g, 0x8f7656, 0.4);
     return g;
   }
-  if (/sword|dagger|spear|lance|blade|slayer|axe|flail|hammer/.test(n)) {
+  if (/sword|dagger|blade|slayer/.test(n)) {
+    const model = weaponModel({ id, type: /dagger/.test(n) ? "dagger" : "sword" });
+    model.rotation.z = -.65;
+    model.scale.setScalar(.75);
+    model.position.y = .24;
+    g.add(model);
+    return g;
+  }
+  if (/spear|lance|axe|flail|hammer/.test(n)) {
     const blade = box(g, 0xc0cbc3, 0, 0.3, 0, 0.07, 0.61, 0.07);
     blade.rotation.z = -0.6;
     box(g, 0xba985d, -0.15, 0.1, 0, 0.25, 0.06, 0.09);

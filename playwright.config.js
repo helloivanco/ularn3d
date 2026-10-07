@@ -10,7 +10,7 @@ export default defineConfig({
       executablePath:
         process.env.CHROME_PATH ||
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+      args: process.env.TEST_GPU === "hardware" ? [] : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
     },
     screenshot: "only-on-failure",
   },

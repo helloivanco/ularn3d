@@ -28,4 +28,7 @@ writeFileSync(
   join(shared, "engine-bundle-meta.js"),
   `${header}export const BUNDLED_ENGINE_SHA256 = ${JSON.stringify(sha256)};\nexport const ENGINE_PART_COUNT = ${PART_COUNT};\n`,
 );
+const fileSha = createHash("sha256").update(readFileSync(out)).digest("hex");
+const bootPath = join(shared,"engine-boot.js");
+writeFileSync(bootPath,readFileSync(bootPath,"utf8").replace(/export const ENGINE_SOURCE_SHA256 = "[a-f0-9]+";/, `export const ENGINE_SOURCE_SHA256 = "${fileSha}";`));
 console.log(`wrote ${out} (${source.length} chars) and ${PART_COUNT} gzip parts`);

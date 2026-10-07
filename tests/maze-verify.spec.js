@@ -42,11 +42,15 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
               [0, -1],
               [1, 0],
               [-1, 0],
+              [1, 1],
+              [1, -1],
+              [-1, 1],
+              [-1, -1],
             ]) {
               const nx = cx + dx,
                 ny = cy + dy,
                 nk = `${nx},${ny}`;
-              if (claimed.has(nk) || !networkPassable(nx, ny)) continue;
+              if (claimed.has(nk) || !networkPassable(nx, ny) || !playerCanStep(cx, cy, nx, ny)) continue;
               claimed.add(nk);
               comp.add(nk);
               q.push([nx, ny]);
@@ -232,7 +236,7 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
       rows.push(analyze(7, "d7r" + i));
     }
 
-    /* Rock-enclosed stairs regression: force a bad pocket then ensure harden clears it. */
+    /* Rock-enclosed stairs regression: run the current region repair before filling missing stairs. */
     LEVELS[4] = null;
     newcavelevel(4);
     /* Carve a sealed 3×3 pocket and plant down stairs inside it. */
@@ -250,6 +254,7 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
     if (oldDown) setItem(oldDown.x, oldDown.y, OEMPTY);
     setItem(3, 3, OSTAIRSDOWN);
     const before = largest().has("3,3");
+    repairPlayableRegions(4);
     ensureLevelStairs(4);
     const afterMain = largest();
     const afterDown = findItemXY(OSTAIRSDOWN);

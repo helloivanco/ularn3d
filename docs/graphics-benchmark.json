@@ -1,0 +1,133 @@
+[
+  {
+    "url": "http://127.0.0.1:5174",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "averageFps": 21.574386308376447,
+    "drawCalls": {
+      "minimum": 93,
+      "maximum": 455,
+      "mean": 321.9579831932773,
+      "p95": 455,
+      "samples": 119
+    },
+    "fixture": "12288930db25c54d252bf2d42b1536a07b39e660367b358981511689fdc13ec9",
+    "frames": {
+      "mean": 46.17542372871254,
+      "p95": 51.40000003576279,
+      "samples": 118
+    },
+    "render": {
+      "mean": 2.1176470578217708,
+      "p95": 4.700000047683716,
+      "samples": 119
+    },
+    "graphics": {
+      "quality": "balanced",
+      "drawCalls": 94,
+      "triangles": 125974,
+      "geometries": 14,
+      "textures": 8,
+      "contextLost": false,
+      "frameMs": 46.40325408122335,
+      "renderedFrames": 133,
+      "frameLimit": 30,
+      "idle": false,
+      "suspended": false,
+      "cameraElevation": 59.99896736625072,
+      "monsterActors": 0,
+      "monsterTextures": 0,
+      "monsterMaterials": 0,
+      "activeEffects": 0,
+      "effectCapacity": 6,
+      "effectPoints": 0,
+      "lastSpell": null
+    },
+    "persistence": {
+      "manualSaveMs": 72.30000001192093,
+      "background": null
+    },
+    "errors": []
+  },
+  {
+    "url": "http://127.0.0.1:4173",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "averageFps": 59.990001666653754,
+    "drawCalls": {
+      "minimum": 84,
+      "maximum": 258,
+      "mean": 115.88888888888889,
+      "p95": 257,
+      "samples": 324
+    },
+    "fixture": "12288930db25c54d252bf2d42b1536a07b39e660367b358981511689fdc13ec9",
+    "frames": {
+      "mean": 16.667801857732766,
+      "p95": 17.100000023841858,
+      "samples": 323
+    },
+    "render": {
+      "mean": 1.434567900535501,
+      "p95": 2.5,
+      "samples": 324
+    },
+    "graphics": {
+      "quality": "auto",
+      "drawCalls": 84,
+      "triangles": 78030,
+      "geometries": 105,
+      "textures": 16,
+      "contextLost": false,
+      "frameMs": 16.667777778042687,
+      "renderedFrames": 359,
+      "frameLimit": 60,
+      "effectiveQuality": "balanced",
+      "pixelRatio": 1,
+      "activeFrameP95": 17.100000023841858,
+      "renderP95": 2.400000035762787,
+      "inputLatencyP95": 17.19999998807907,
+      "updateP95": 0.5,
+      "terrainRebuilds": 54,
+      "staticChunks": 27,
+      "routePoints": 0,
+      "heroScreen": {
+        "x": 896.0000000000003,
+        "y": 436.0000000000008
+      },
+      "viewport": {
+        "left": 382,
+        "right": 1410,
+        "top": 84,
+        "bottom": 788
+      },
+      "worker": true,
+      "pending": 0,
+      "compressionMs": 7.900000035762787,
+      "captureMs": 0.5,
+      "writeMs": 0,
+      "completed": 2,
+      "idle": false,
+      "suspended": false,
+      "cameraElevation": 59.99896736625072,
+      "monsterActors": 0,
+      "creatureTemplates": 0,
+      "monsterTextures": 0,
+      "monsterMaterials": 0,
+      "activeEffects": 0,
+      "effectCapacity": 6,
+      "effectPoints": 0,
+      "lastSpell": null
+    },
+    "persistence": {
+      "manualSaveMs": 66,
+      "background": {
+        "worker": true,
+        "pending": 0,
+        "compressionMs": 73.5,
+        "captureMs": 9.300000011920929,
+        "writeMs": 0.09999996423721313,
+        "completed": 3
+      }
+    },
+    "errors": []
+  }
+]

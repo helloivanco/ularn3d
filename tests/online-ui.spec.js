@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
-const media = "/cursor/stores/bc-466ce274-7861-4488-8dab-cd9c1768b330/media";
+const media = "test-results/cursor-media";
 
 test.beforeAll(() => {
   mkdirSync(media, { recursive: true });
@@ -62,7 +62,7 @@ test("chat emoji picker inserts at the cursor and enter still sends", async ({ p
   const right = Math.ceil(Math.max(row.send.right, row.picker.right) + 12);
   const bottom = Math.ceil(row.input.bottom + 12);
   await page.screenshot({
-    path: "/cursor/stores/self/media/chat-emoji-aligned.png",
+    path: "test-results/cursor-media/chat-emoji-aligned.png",
     clip: { x, y, width: right - x, height: bottom - y },
   });
   await expect(input).toBeFocused();
@@ -136,6 +136,28 @@ test("two adventurers show the turn strip", async ({ page }) => {
     const party = document.getElementById("party-hud");
     return strip && party && !strip.hidden && !party.hidden && /Bea/.test(strip.textContent);
   });
+  const allyOnMap = await page.evaluate(() => {
+    const ally = ularn.party().find(member => member.name === "Bea");
+    const canvas = document.getElementById("minimap");
+    const x = (ally.x - Number(canvas.dataset.originX)) * 16 + 2;
+    const y = (ally.y - Number(canvas.dataset.originY)) * 16 + 2;
+    return [...canvas.getContext("2d").getImageData(x, y, 1, 1).data];
+  });
+  expect(allyOnMap).toEqual([159, 215, 200, 255]);
+  const pingChangedMap = await page.evaluate(() => {
+    const tile = ularn.snapshot().tiles.find(tile => (tile.x !== player.x || tile.y !== player.y) &&
+      Math.abs(tile.x-player.x) < 8 && Math.abs(tile.y-player.y) < 4 &&
+      !ularn.party().some(member => member.x === tile.x && member.y === tile.y));
+    const canvas = document.getElementById("minimap");
+    const x = (tile.x - Number(canvas.dataset.originX)) * 16 + 1;
+    const y = (tile.y - Number(canvas.dataset.originY)) * 16 + 5;
+    const pixel = () => [...canvas.getContext("2d").getImageData(x, y, 1, 1).data].join(",");
+    const before = pixel();
+    ularnOnline.dropPing(tile);
+    window.dispatchEvent(new Event("ularn:update"));
+    return pixel() !== before;
+  });
+  expect(pingChangedMap).toBe(true);
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${media}/two-aura-encounter.png` });
   await page.evaluate(() => {

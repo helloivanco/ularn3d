@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { mapClick } from "./map-helper.js";
 const faults = new WeakMap();
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -21,19 +22,7 @@ async function start(page) {
 async function snap(page) {
   return page.evaluate(() => ularn.snapshot());
 }
-async function mapClick(page, x, y) {
-  const b = await page.locator("#minimap").boundingBox();
-  const view = await page.locator("#minimap").evaluate((el) => ({
-    x0: +el.dataset.x0,
-    y0: +el.dataset.y0,
-    cols: +el.dataset.cols,
-    rows: +el.dataset.rows,
-  }));
-  await page.mouse.click(
-    b.x + ((x - view.x0 + 0.5) / view.cols) * b.width,
-    b.y + ((y - view.y0 + 0.5) / view.rows) * b.height,
-  );
-}
+
 
 test("travel stops for an adjacent creature and keeps going when one is farther away", async ({
   page,
@@ -54,7 +43,7 @@ test("travel stops for an adjacent creature and keeps going when one is farther 
       for (let x = 0; x < MAXX; x++)
         if (monsterAt(x, y) && monsterAt(x, y).matches(LEMMING)) setMonster(x, y, null);
     // Two tiles south, and six tiles south. One step east never enters melee range.
-    setMonster(10, 10, createMonster(LEMMING));
+    setMonster(10, 10, createMonster(GNOME));
     setMonster(10, 14, createMonster(GNOME));
     setMazeMode(true);
     paint();
@@ -75,7 +64,7 @@ test("travel stops for an adjacent creature and keeps going when one is farther 
     for (let y = 0; y < MAXY; y++)
       for (let x = 0; x < MAXX; x++)
         if (monsterAt(x, y) && monsterAt(x, y).matches(LEMMING)) setMonster(x, y, null);
-    setMonster(12, 9, createMonster(LEMMING));
+    setMonster(12, 9, createMonster(GNOME));
     setKnow(12, 9, KNOWALL);
     paint();
     return { moves: player.MOVESMADE, x: player.x, y: player.y };
@@ -381,29 +370,7 @@ test("clicking a building roof selects that building rather than the floor behin
     return home;
   });
   await page.locator("#camera-reset").click();
-  const s = await snap(page);
-  // North reset camera: no yaw, elevation 15.5, distance hypot(2.8, 8.5).
-  const offset = [0, 15.5, Math.hypot(2.8, 8.5)],
-    [ox, oy, oz] = offset,
-    length = Math.hypot(...offset),
-    horizontal = Math.hypot(ox, oz);
-  const relative = [tile.x - s.x - ox, 1.6 - oy, tile.y + 0.5 - s.y - oz];
-  const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
-  const depth = -dot(
-    relative,
-    offset.map((n) => n / length),
-  );
-  const right = [oz / horizontal, 0, -ox / horizontal];
-  const up = [
-    (-ox * oy) / (horizontal * length),
-    horizontal / length,
-    (-oz * oy) / (horizontal * length),
-  ];
-  const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
-  const point = {
-    x: 720 + (dot(relative, right) / depth) * scale,
-    y: 500 - (dot(relative, up) / depth) * scale,
-  };
+  const point = await page.evaluate(({ x, y }) => ularnGraphics.projectTile(x, y + 0.5, 1.6), tile);
   await page.mouse.move(point.x, point.y);
   await expect(page.locator("#tile-label")).toContainText(/home/i);
   await page.mouse.click(point.x, point.y);

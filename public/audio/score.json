@@ -1,0 +1,90 @@
+{
+  "title": {
+    "title": "The Caves Below",
+    "tempo": 72,
+    "beats": 4,
+    "seconds": 53.333333333333336,
+    "channels": 2,
+    "sampleRate": 22050,
+    "peak": 0.41999998688697815,
+    "rms": 0.08828061996458164,
+    "seam": 0.0011829715222120285
+  },
+  "title-tension": {
+    "title": "The Caves Below",
+    "tempo": 72,
+    "beats": 4,
+    "seconds": 53.333333333333336,
+    "channels": 1,
+    "sampleRate": 22050,
+    "peak": 0.5,
+    "rms": 0.09646323479414126,
+    "seam": 0.0001333387626800686
+  },
+  "town": {
+    "title": "Hearth of Ularn",
+    "tempo": 78,
+    "beats": 3,
+    "seconds": 36.92308390022676,
+    "channels": 2,
+    "sampleRate": 22050,
+    "peak": 0.41999998688697815,
+    "rms": 0.08170003437307756,
+    "seam": 0.005052909255027771
+  },
+  "town-tension": {
+    "title": "Hearth of Ularn",
+    "tempo": 78,
+    "beats": 3,
+    "seconds": 36.92308390022676,
+    "channels": 1,
+    "sampleRate": 22050,
+    "peak": 0.5,
+    "rms": 0.10472608161264432,
+    "seam": 0.0018364489078521729
+  },
+  "caves": {
+    "title": "Stone and Shadow",
+    "tempo": 64,
+    "beats": 4,
+    "seconds": 60,
+    "channels": 2,
+    "sampleRate": 22050,
+    "peak": 0.41999998688697815,
+    "rms": 0.08878196295003643,
+    "seam": 0.0009526908397674561
+  },
+  "caves-tension": {
+    "title": "Stone and Shadow",
+    "tempo": 64,
+    "beats": 4,
+    "seconds": 60,
+    "channels": 1,
+    "sampleRate": 22050,
+    "peak": 0.5,
+    "rms": 0.09494367406061359,
+    "seam": 0.00004508021993387956
+  },
+  "volcano": {
+    "title": "Beneath the Ember",
+    "tempo": 88,
+    "beats": 4,
+    "seconds": 43.636371882086166,
+    "channels": 2,
+    "sampleRate": 22050,
+    "peak": 0.41999998688697815,
+    "rms": 0.08216587862232258,
+    "seam": 0.0012600049376487732
+  },
+  "volcano-tension": {
+    "title": "Beneath the Ember",
+    "tempo": 88,
+    "beats": 4,
+    "seconds": 43.636371882086166,
+    "channels": 1,
+    "sampleRate": 22050,
+    "peak": 0.5,
+    "rms": 0.09902623736311163,
+    "seam": 0.000012868549674749374
+  }
+}
