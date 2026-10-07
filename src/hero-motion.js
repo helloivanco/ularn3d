@@ -1,5 +1,11 @@
-/** One stride across a tile. The turn is still one action; only the body moves. */
-export const STEP_MS = 360;
+/** One stride across a tile. Clearly faster than a 200ms follow. The turn is still one action. */
+export const STEP_MS = 120;
+/**
+ * How close the hero's center may come to a wall cell.
+ * Tile centers sit 0.5 from a neighboring wall, so a straight step stays clear
+ * and a diagonal that cuts the corner does not.
+ */
+export const HERO_STEP_RADIUS = 0.32;
 /** Wind-up, cut, and recover. Long enough to read, short enough to stay out of the next turn. */
 export const SWING_MS = 480;
 /** Spell presentation. Not an attack. */
@@ -20,6 +26,177 @@ const smooth = (t) => {
 export const stepEase = (t) => {
   const x = clamp01(t);
   return x * x * x * (x * (x * 6 - 15) + 10);
+};
+
+const cellHits = (x, z, radius, ix, iz) => {
+  const nearestX = Math.max(ix - 0.5, Math.min(x, ix + 0.5));
+  const nearestZ = Math.max(iz - 0.5, Math.min(z, iz + 0.5));
+  const dx = x - nearestX;
+  const dz = z - nearestZ;
+  return dx * dx + dz * dz < radius * radius - 1e-10;
+};
+
+/** True when a hero center would stand inside rock. */
+export const pointEntersWall = (x, z, solid, radius = HERO_STEP_RADIUS) => {
+  const cx = Math.round(x);
+  const cz = Math.round(z);
+  for (let ix = cx - 2; ix <= cx + 2; ix++) {
+    for (let iz = cz - 2; iz <= cz + 2; iz++) {
+      if (!solid(ix, iz)) continue;
+      if (cellHits(x, z, radius, ix, iz)) return true;
+    }
+  }
+  return false;
+};
+
+/** True when the straight slide from a to b draws the center through rock. */
+export const segmentEntersWall = (a, b, solid, radius = HERO_STEP_RADIUS) => {
+  const dist = Math.hypot(b.x - a.x, b.z - a.z);
+  const steps = Math.max(1, Math.ceil(dist / 0.1));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (pointEntersWall(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, solid, radius)) return true;
+  }
+  return false;
+};
+
+const pathLength = (path) => {
+  let length = 0;
+  for (let i = 1; i < path.length; i++) {
+    length += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
+  }
+  return length;
+};
+
+const pathClear = (path, solid, radius) => {
+  for (let i = 1; i < path.length; i++) {
+    if (segmentEntersWall(path[i - 1], path[i], solid, radius)) return false;
+  }
+  return true;
+};
+
+/**
+ * Visual step from `from` to `to`. A clear line stays straight.
+ * A diagonal that would enter rock goes through the open shoulder instead.
+ * If both shoulders are rock, the route stays put — the caller lands on `to`
+ * only when the step ends, so the body is never drawn inside the wall.
+ */
+export const stepRoute = (from, to, solid, radius = HERO_STEP_RADIUS) => {
+  const start = { x: from.x, z: from.z };
+  const end = { x: to.x, z: to.z };
+  const straight = [start, end];
+  if (!segmentEntersWall(start, end, solid, radius)) return straight;
+
+  const sx = Math.round(start.x);
+  const sz = Math.round(start.z);
+  const tx = Math.round(end.x);
+  const tz = Math.round(end.z);
+  const dx = Math.sign(tx - sx);
+  const dz = Math.sign(tz - sz);
+  if (!dx || !dz) return [start, start];
+
+  const home = { x: sx, z: sz };
+  const vias = [
+    { x: sx + dx, z: sz },
+    { x: sx, z: sz + dz },
+  ];
+  let best = null;
+  for (const via of vias) {
+    if (solid(via.x, via.z)) continue;
+    const options = [[start, via, end]];
+    if (home.x !== start.x || home.z !== start.z) options.push([start, home, via, end]);
+    for (const path of options) {
+      if (!pathClear(path, solid, radius)) continue;
+      if (!best || pathLength(path) < pathLength(best)) best = path;
+    }
+  }
+  return best || [start, start];
+};
+
+/** Position along a route. t is 0 at the start and 1 at the end. */
+export const pointOnRoute = (route, t) => {
+  const time = clamp01(t);
+  if (!route?.length) return { x: 0, z: 0 };
+  if (route.length === 1 || time <= 0) return { x: route[0].x, z: route[0].z };
+  const lengths = [];
+  let total = 0;
+  for (let i = 1; i < route.length; i++) {
+    const len = Math.hypot(route[i].x - route[i - 1].x, route[i].z - route[i - 1].z);
+    lengths.push(len);
+    total += len;
+  }
+  if (total < 1e-8) return { x: route[0].x, z: route[0].z };
+  let remain = time * total;
+  for (let i = 0; i < lengths.length; i++) {
+    if (remain <= lengths[i] || i === lengths.length - 1) {
+      const span = lengths[i] < 1e-8 ? 1 : remain / lengths[i];
+      const a = route[i];
+      const b = route[i + 1];
+      return { x: a.x + (b.x - a.x) * span, z: a.z + (b.z - a.z) * span };
+    }
+    remain -= lengths[i];
+  }
+  const last = route[route.length - 1];
+  return { x: last.x, z: last.z };
+};
+
+/** Slide a center out of wall cells. A point already on open floor stays put. */
+export const pushOutOfWalls = (x, z, solid, radius = HERO_STEP_RADIUS) => {
+  let px = x;
+  let pz = z;
+  for (let pass = 0; pass < 4; pass++) {
+    const cx = Math.round(px);
+    const cz = Math.round(pz);
+    let best = null;
+    for (let ix = cx - 2; ix <= cx + 2; ix++) {
+      for (let iz = cz - 2; iz <= cz + 2; iz++) {
+        if (!solid(ix, iz)) continue;
+        const nearestX = Math.max(ix - 0.5, Math.min(px, ix + 0.5));
+        const nearestZ = Math.max(iz - 0.5, Math.min(pz, iz + 0.5));
+        let dx = px - nearestX;
+        let dz = pz - nearestZ;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= radius * radius - 1e-10) continue;
+        const dist = Math.sqrt(d2);
+        const push = radius - dist + 1e-4;
+        let ux;
+        let uz;
+        if (dist < 1e-6) {
+          ux = px - ix;
+          uz = pz - iz;
+          const mag = Math.hypot(ux, uz) || 1;
+          ux /= mag;
+          uz /= mag;
+        } else {
+          ux = dx / dist;
+          uz = dz / dist;
+        }
+        if (!best || push > best.push) best = { push, ux, uz };
+      }
+    }
+    if (!best) break;
+    px += best.ux * best.push;
+    pz += best.uz * best.push;
+  }
+  return { x: px, z: pz };
+};
+
+/** Blend a stride back toward the plant. 0 is standing; 1 is the full step. */
+export const dampStep = (pose, scale) => {
+  const s = clamp01(scale);
+  return {
+    bodyY: pose.bodyY * s,
+    lean: pose.lean * s,
+    roll: pose.roll * s,
+    leftLeg: pose.leftLeg * s,
+    rightLeg: pose.rightLeg * s,
+    leftLift: pose.leftLift * s,
+    rightLift: pose.rightLift * s,
+    leftArm: pose.leftArm * s,
+    rightArm: pose.rightArm * s,
+    forearmX: FOREARM_REST + (pose.forearmX - FOREARM_REST) * s,
+    capeX: CAPE_REST + (pose.capeX - CAPE_REST) * s,
+  };
 };
 
 export const blendKeys = (keys, t) => {
