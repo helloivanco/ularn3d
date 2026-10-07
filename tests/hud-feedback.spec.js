@@ -14,7 +14,12 @@ test.afterEach(() => expect(errors).toEqual([]));
 test("bottom HUD, symbol map, pinned inventory, and loot shortcut stay in sync", async ({ page }) => {
   await expect(page.locator(".quest-panel, .map-legend")).toHaveCount(0);
   const map = await page.locator("#minimap").boundingBox();
-  expect(map.width).toBeGreaterThan(650);
+  expect(map.width).toBeGreaterThan(280);
+  expect(map.width).toBeLessThan(360);
+  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", "27");
+  await page.locator("#map-expand").click();
+  await expect(page.locator("#map-dialog")).toBeVisible();
+  await page.getByRole("button", {name:"Close explored map"}).click();
   const hero = await page.locator(".hero-panel").boundingBox();
   expect(hero.y).toBeGreaterThan(750);
   await expect(page.locator("#inventory-list")).toContainText("dagger");
@@ -58,7 +63,7 @@ test("effect rail and persistent pack refresh from engine changes without openin
 });
 
 test("every spell and weapon family has a distinct sound and voices are released", async ({ page }) => {
-  await page.locator("#sound").click();
+  await expect(page.locator("#sound")).toHaveAttribute("aria-pressed", "true");
   const result = await page.evaluate(async () => {
     const { GameAudio, spellProfile, weaponProfile } = await import("/src/audio.js");
     const profiles = spelname.map((name, id) => JSON.stringify(spellProfile({name, id})));
@@ -73,9 +78,10 @@ test("every spell and weapon family has a distinct sound and voices are released
   await page.evaluate(async () => {
     await testAudio.suspend();
     if (testAudio.voices.size !== 0) throw new Error("Muted voices were not released");
+    await testAudio.resume();
     testAudio.play("weapon", { weapon: { type: "sword" } });
   });
   await expect.poll(() => page.evaluate(() => testAudio.context.state)).toBe("running");
   await expect.poll(() => page.evaluate(() => testAudio.voices.size)).toBe(0);
-  await page.evaluate(() => testAudio.context.close());
+  await page.evaluate(() => testAudio.dispose());
 });

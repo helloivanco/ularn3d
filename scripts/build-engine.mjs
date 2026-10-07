@@ -1,4 +1,25 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { loadEnv } from "vite";
+
+const mode = process.argv.includes("--production") ? "production" : "development";
+const env = loadEnv(mode, process.cwd(), "VITE_");
+const defaultScoreConfig = JSON.parse(readFileSync("scoreboard.config.json", "utf8"));
+const scoreConfig = {
+  url: env.VITE_SUPABASE_URL ?? defaultScoreConfig.url,
+  publishableKey: env.VITE_SUPABASE_PUBLISHABLE_KEY ?? defaultScoreConfig.publishableKey,
+};
+if (scoreConfig.url || scoreConfig.publishableKey) {
+  const url = new URL(scoreConfig.url);
+  if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash)
+    throw new Error("VITE_SUPABASE_URL must be an HTTPS project origin.");
+  const key = scoreConfig.publishableKey;
+  const legacyRole = key.startsWith("eyJ") ? JSON.parse(Buffer.from(key.split(".")[1], "base64url")).role : null;
+  if (!key.startsWith("sb_publishable_") && legacyRole !== "anon")
+    throw new Error("Score clients require a Supabase publishable key, never a secret or service_role key.");
+  scoreConfig.url = url.origin;
+}
+writeFileSync("public/engine/score-config.js", `window.ULARN_SCORE_CONFIG = Object.freeze(${JSON.stringify(scoreConfig)});\n`);
+writeFileSync("public/engine/score-config.json", `${JSON.stringify(scoreConfig)}\n`);
 const files = [
   "common/util",
   "common/larn_config",
@@ -6,6 +27,7 @@ const files = [
   "common/patch",
   "common/roll",
   "common/cloudflare",
+  "common/score-service",
   "common/movie",
   "common/live",
   "config",

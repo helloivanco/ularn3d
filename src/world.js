@@ -4,22 +4,29 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { mat, surface, noise } from "./materials.js";
-import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
+import { mat, surface, noise, releaseMaterialResources } from "./materials.js";
+import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
+import { compact, percentile, sample, releaseCompactMaterials } from "./graphics-utils.js";
+import { StaticTiles } from "./static-world.js";
+import { TerrainGrid } from "./terrain-grid.js";
 import { CombatEffects } from "./combat-effects.js";
+import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
+import { TorchLighting, stabilizeShadow } from "./lighting.js";
 import {
   box,
   block,
   orb,
   tree,
   hero,
+  equipHero,
+  releaseModelResources,
   cone,
   building,
   itemModel,
-  monsterModel,
   ring,
   torch,
   LANDMARK_NAMES,
@@ -31,6 +38,7 @@ const GAME_CAMERA = new THREE.Vector3(2.8, 15.5, 8.5);
 function destroy(group) {
   group.traverse((o) => {
     if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+    if (o.material?.userData.cutaway) o.material.dispose();
     if (o.isSprite) {
       o.material.map?.dispose();
       o.material.dispose();
@@ -38,38 +46,8 @@ function destroy(group) {
   });
   group.clear();
 }
-function batch(group) {
-  group.updateMatrixWorld(true);
-  const sets = new Map(),
-    sprites = [];
-  group.traverse((o) => {
-    if (o.isSprite) {
-      sprites.push(o);
-      return;
-    }
-    if (!o.isMesh) return;
-    const key = o.material.uuid;
-    if (!sets.has(key)) sets.set(key, { material: o.material, geometries: [] });
-    sets
-      .get(key)
-      .geometries.push(
-        (o.geometry.index
-          ? o.geometry.toNonIndexed()
-          : o.geometry.clone()
-        ).applyMatrix4(o.matrixWorld),
-      );
-  });
-  group.clear();
-  for (const { material, geometries } of sets.values()) {
-    const merged = mergeGeometries(geometries);
-    geometries.forEach((g) => g.dispose());
-    const m = new THREE.Mesh(merged, material);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    group.add(m);
-  }
-  sprites.forEach((s) => group.add(s));
-}
+function batch(group) { compact(group); }
+
 function label(text) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -110,6 +88,9 @@ export class World {
     this.state = null;
     this.level = null;
     this.objects = new Map();
+    this.tileIndex = new Map();
+    this.frameSamples = []; this.renderSamples = []; this.inputSamples = []; this.updateSamples = [];
+    this.autoTier = 1; this.qualityChangedAt = performance.now();
     this.monsters = new Map();
     this.tick = 0;
     this.lastPlayer = null;
@@ -125,7 +106,7 @@ export class World {
     this.paused = false;
     this.disposed = false;
     this.events = new AbortController();
-    this.quality = "balanced";
+    this.quality = "auto";
     try {
       this.quality = localStorage.getItem("ularn3d.quality") || this.quality;
     } catch {}
@@ -135,19 +116,19 @@ export class World {
     this.camera = new THREE.PerspectiveCamera(
       37,
       innerWidth / innerHeight,
-      0.1,
-      240,
+      0.3,
+      180,
     );
     this.camera.position.set(13, 17, 19);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: "low-power",
+      powerPreference: "high-performance",
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.info.autoReset = false;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
     container.appendChild(this.renderer.domElement);
@@ -175,14 +156,14 @@ export class World {
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, {
-      left: -20,
-      right: 20,
-      top: 20,
-      bottom: -20,
+      left: -12,
+      right: 12,
+      top: 12,
+      bottom: -12,
       near: 1,
       far: 80,
     });
-    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.bias = -0.0002;
     this.sun.shadow.normalBias = 0.025;
     this.scene.add(this.sun, this.sun.target);
     this.fill = new THREE.DirectionalLight(0x78b9cf, 1.1);
@@ -192,44 +173,15 @@ export class World {
     this.props = new THREE.Group();
     this.actors = new THREE.Group();
     this.scene.add(this.terrain, this.props, this.actors);
+    this.staticTiles = new StaticTiles(this.props);
     this.effects = new CombatEffects(this.scene);
     const floorGeo = new THREE.BoxGeometry(0.993, 0.18, 0.993);
-    this.floor = new THREE.InstancedMesh(
-      floorGeo,
-      surface("stone", 0xffffff),
-      FLOOR_LIMIT,
-    );
-    this.floor.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.floor.count = 0;
-    this.floor.receiveShadow = true;
-    this.scene.add(this.floor);
-    this.grassFloor = new THREE.InstancedMesh(
-      floorGeo,
-      surface("grass", 0xffffff),
-      FLOOR_LIMIT,
-    );
-    this.grassFloor.count = 0;
-    this.grassFloor.receiveShadow = true;
-    this.scene.add(this.grassFloor);
     const wallGeo = new RoundedBoxGeometry(1, 1, 1, 1, 0.035);
-    this.walls = new THREE.InstancedMesh(
-      wallGeo,
-      surface("stone", 0x99aba7),
-      FLOOR_LIMIT,
-    );
-    this.caps = new THREE.InstancedMesh(
-      wallGeo,
-      surface("stone", 0xb2bbad),
-      FLOOR_LIMIT,
-    );
-    for (const mesh of [this.walls, this.caps]) {
-      mesh.count = 0;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      this.scene.add(mesh);
-    }
+    floorGeo.userData.shared = wallGeo.userData.shared = true;
+    this.floorGeometry = floorGeo; this.wallGeometry = wallGeo;
+    this.grid = new TerrainGrid(this.scene, floorGeo, wallGeo);
     this.player = hero();
+    this.heroAnimation = new HeroAnimation(this.scene, this.player);
     this.player.visible = false;
     this.scene.add(this.player);
     this.playerLight = new THREE.PointLight(0xffc172, 6, 8, 2);
@@ -239,10 +191,12 @@ export class World {
       this.scene.add(l);
       return l;
     });
+    this.lighting = new TorchLighting(this.torchLights);
     this.marker = new THREE.Group();
     ring(this.marker, 0xf0d491, 0.46, 0.018);
     this.marker.visible = false;
     this.scene.add(this.marker);
+    this.routePointCount = 0;
     this.waterMaterial = mat(0x123b43, { metalness: 0.65, roughness: 0.28 });
     this.waterTime = { value: 0 };
     this.waterMaterial.onBeforeCompile = (shader) => {
@@ -296,6 +250,9 @@ export class World {
     this.burstAge = 1;
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.ao = new SSAOPass(this.scene, this.camera, innerWidth / 2, innerHeight / 2);
+    this.ao.kernelRadius = 8; this.ao.minDistance = .001; this.ao.maxDistance = .12;
+    this.composer.addPass(this.ao);
     this.bloom = new UnrealBloomPass(
       new THREE.Vector2(innerWidth, innerHeight),
       0.18,
@@ -303,14 +260,13 @@ export class World {
       1.5,
     );
     this.composer.addPass(this.bloom);
+    this.antialias = new SMAAPass();
+    this.composer.addPass(this.antialias);
     this.composer.addPass(new OutputPass());
     this.ray = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.ground = new THREE.Plane(UP, 0);
-    this.scratchMatrix = new THREE.Matrix4();
-    this.scratchScale = new THREE.Vector3();
     this.scratchPosition = new THREE.Vector3();
-    this.identityQ = new THREE.Quaternion();
     const canvas = this.renderer.domElement;
     const listen = (target, name, handler) => target.addEventListener(name, handler, { signal: this.events.signal });
     listen(canvas, "pointerdown", (e) => {
@@ -327,10 +283,7 @@ export class World {
       this.invalidate();
       const p = this.pointers.get(e.pointerId);
       if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) p.moved = true;
-      const tile = this.pick(e);
-      this.marker.visible = !!tile;
-      if (tile) this.marker.position.set(tile.x, 0, tile.y);
-      this.onHover(tile, e);
+      this.hoverPointer = { clientX: e.clientX, clientY: e.clientY }; this.hoverDirty = true;
     });
     listen(canvas, "pointerup", (e) => {
       const p = this.pointers.get(e.pointerId);
@@ -346,6 +299,7 @@ export class World {
       if (!this.pointers.size) this.gesture = false;
     });
     listen(canvas, "pointerleave", () => {
+      this.hoverPointer = null;
       this.marker.visible = false;
       this.onHover(null);
       this.invalidate();
@@ -353,6 +307,7 @@ export class World {
     listen(canvas, "webglcontextlost", (e) => {
       e.preventDefault();
       this.lost = true;
+      this.heroAnimation.clear();
       this.stopFrames();
       this.releaseLostResources();
       window.dispatchEvent(new Event("ularn:graphics-lost"));
@@ -372,20 +327,23 @@ export class World {
     });
     listen(window, "resize", () => this.resize());
     listen(document, "visibilitychange", () => {
-      if (document.hidden) this.stopFrames();
+      if (document.hidden) { this.heroAnimation.clear(); this.stopFrames(); }
       else { this.lastTime = performance.now(); this.effects.clear(); this.invalidate(); }
     });
     listen(window, "ularn:combat", (event) => {
       const detail = event.detail;
       if (!this.state || detail?.level !== this.level || document.hidden) return;
-      if (detail.kind === "weapon") { this.attackAge = 0; this.attackStartedAt = performance.now(); }
-      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
+      const cast = this.effects.event(detail, this.reduced) && detail.phase === "cast";
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
         (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y))
         this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
+      if (detail.kind === "weapon" || cast) {
+        const visibleTarget = !!detail.to && this.state.tiles.some((tile) => tile.x === detail.to.x && tile.y === detail.to.y && tile.monster);
+        this.heroAnimation.start(detail, performance.now(), this.reduced, visibleTarget);
+      }
       this.invalidate();
     });
-    this.controls.addEventListener("change", () => this.invalidate());
+    this.controls.addEventListener("change", () => { this.hoverDirty = true; this.invalidate(); });
     this.controls.addEventListener("start", () => this.invalidate());
     this.setQuality(this.quality, false);
     this.preview();
@@ -401,20 +359,40 @@ export class World {
         contextLost: this.lost,
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
-        frameLimit: this.quality === "cinematic" ? 45 : 30,
+        frameLimit: 60,
+        effectiveQuality: ["low", "balanced", "high"][this.effectiveTier],
+        pixelRatio: this.renderer.getPixelRatio(),
+        activeFrameP95: percentile(this.frameSamples),
+        renderP95: percentile(this.renderSamples),
+        inputLatencyP95: percentile(this.inputSamples),
+        updateP95: percentile(this.updateSamples),
+        terrainRebuilds: this.grid.rebuilds,
+        staticChunks: this.staticTiles.chunks.size,
+        routePoints: this.routePointCount,
+        routeVisible: false,
+        heroPosition: this.player.position.toArray(),
+        heroScreen: this.project(this.player.position),
+        viewport: this.viewportRect,
+        ...window.ularnPersistence?.metrics(),
         idle: performance.now() > this.activeUntil,
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
           Math.hypot(this.camera.position.x - this.controls.target.x, this.camera.position.z - this.controls.target.z)) * 180 / Math.PI,
+        shadowUpdates: this.shadowUpdates || 0,
+        shadowTexelSize: (this.sun.shadow.camera.right - this.sun.shadow.camera.left) / this.sun.shadow.mapSize.x,
+        torchReassignments: this.lighting.reassignments,
+        antialiasing: this.effectiveTier === 2 ? "SMAA" : "MSAA",
         monsterActors: this.monsters.size,
-        ...monsterArtMetrics(),
+        ...creatureMetrics(),
         ...this.effects.metrics(),
+        ...this.heroAnimation.metrics(),
       }),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
         uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
-        facing: { ...mesh.userData.facing }, art: mesh.userData.artPath,
-        mirrored: mesh.userData.artwork?.scale.x < 0,
+        facing: { ...mesh.userData.facing }, model: mesh.userData.model, family: mesh.userData.family,
+        position: mesh.position.toArray(),
       })),
+      projectTile: (x, y, height = 0) => this.project(new THREE.Vector3(x, height, y)),
       landmarks: () => [...this.objects.values()].flatMap(({ mesh }) => [mesh, ...mesh.children]
         .filter((child) => child.userData.fountain || child.userData.stairDirection)
         .map((child) => ({
@@ -429,6 +407,10 @@ export class World {
   }
   invalidate() {
     if (this.disposed) return;
+    if (performance.now() > this.activeUntil) {
+      this.lastTime = performance.now() - 1000 / 60;
+      this.nextFrameTime = 0;
+    }
     this.activeUntil = performance.now() + 1100;
     this.scheduleFrame();
   }
@@ -441,26 +423,28 @@ export class World {
     if (this.disposed || document.hidden || this.lost || this.frameTimer != null || this.frameRequest != null) return;
     const idle = performance.now() > this.activeUntil;
     if (idle && !this.hasMotion && !this.effects.slots.some((slot) => slot.active) &&
-      (this.quality === "balanced" || this.reduced || this.paused) && this.state) return;
-    const fps = this.paused ? 4 : !this.state || idle ? 12 : this.quality === "cinematic" ? 45 : 30;
-    const delay = Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
-    this.frameTimer = setTimeout(() => {
-      this.frameTimer = null;
-      this.frameRequest = requestAnimationFrame(() => {
-        this.frameRequest = null;
-        this.animate();
-      });
-    }, delay);
+      (this.quality !== "cinematic" || this.reduced || this.paused) && this.state) return;
+    this.frameRequest = requestAnimationFrame((now) => {
+      this.frameRequest = null;
+      const fps = this.paused ? 4 : !this.state || idle ? 12 : 60;
+      const interval = 1000 / fps;
+      if (now + .5 < (this.nextFrameTime || 0)) { this.scheduleFrame(); return; }
+      this.nextFrameTime = now + interval - Math.max(0, now - (this.nextFrameTime || now)) % interval;
+      this.animate();
+    });
   }
   setPaused(paused) {
+    if (this.paused === !!paused) return;
     this.paused = !!paused;
+    if (this.paused) this.heroAnimation.clear();
+    this.nextFrameTime = 0;
     this.invalidate();
   }
   releaseLostResources(clearArtCache = false) {
     // Remove disposal listeners tied to the lost GL context before restoration.
     // Keep the CPU-side artwork: Three.js uploads it again on the next render.
     // Otherwise later level/quality changes try to delete stale WebKit handles.
-    const geometries = new Set(),
+    const geometries = new Set([this.floorGeometry, this.wallGeometry]),
       materials = new Set(),
       textures = new Set();
     this.scene.traverse((object) => {
@@ -480,7 +464,8 @@ export class World {
     }
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
-    releaseMonsterArtResources(clearArtCache);
+    releaseCreatureResources(clearArtCache);
+    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials();
     this.sun.shadow.dispose();
     this.composer.passes.forEach((pass) => pass.dispose());
     this.composer.dispose();
@@ -489,26 +474,68 @@ export class World {
     this.scene.environment = null;
   }
   setQuality(value, persist = true) {
-    this.quality = ["cinematic", "balanced"].includes(value)
+    this.quality = ["auto", "cinematic", "balanced"].includes(value)
       ? value
-      : "balanced";
-    const cinematic = this.quality === "cinematic";
-    this.renderer.setPixelRatio(
-      Math.min(devicePixelRatio, cinematic ? 1.75 : 1.25),
-    );
-    this.bloom.enabled = cinematic;
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      : "auto";
+    this.autoTier = 1; this.qualityChangedAt = performance.now(); this.frameSamples.length = 0;
+    this.overBudgetMs = this.headroomMs = 0;
     if (persist)
       try {
         localStorage.setItem("ularn3d.quality", this.quality);
       } catch {}
+    this.applyQuality();
+  }
+  applyQuality() {
+    this.effectiveTier = this.quality === "auto" ? this.autoTier : this.quality === "cinematic" ? 2 : 1;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, this.quality === "cinematic" ? 1.75 : [.75, 1.25, 1.5][this.effectiveTier]));
+    this.bloom.enabled = this.ao.enabled = this.antialias.enabled = this.effectiveTier === 2;
+    const shadow = [512, 1024, 2048][this.effectiveTier];
+    if (this.sun.shadow.mapSize.x !== shadow) {
+      this.sun.shadow.mapSize.set(shadow, shadow);
+      this.sun.shadow.map?.dispose(); this.sun.shadow.map = null;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    this.torchLights.forEach((light, i) => { light.visible = i < [2, 4, 6][this.effectiveTier]; });
+    if (this.playerTarget) this.lighting.assign(this.lamps, this.playerTarget, [2, 4, 6][this.effectiveTier]);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.resize();
+  }
+  adaptQuality(now, frameMs) {
+    if (this.quality !== "auto" || this.frameSamples.length < 20) return;
+    const p95 = percentile(this.frameSamples);
+    this.overBudgetMs = p95 > 20 ? (this.overBudgetMs || 0) + frameMs : 0;
+    this.headroomMs = p95 < 18 ? (this.headroomMs || 0) + frameMs : 0;
+    if (this.overBudgetMs > 2000 && this.autoTier > 0) this.autoTier--;
+    else if (this.headroomMs > 10000 && this.autoTier < 2) this.autoTier++;
+    else return;
+    this.qualityChangedAt = now; this.overBudgetMs = this.headroomMs = 0;
+    this.frameSamples.length = 0; this.applyQuality();
+  }
+  project(position) {
+    this.camera.updateMatrixWorld();
+    const point = position.clone().project(this.camera);
+    return { x: (point.x + 1) * innerWidth / 2, y: (1 - point.y) * innerHeight / 2 };
+  }
+  setViewportRect(rect) {
+    this.viewportRect = { ...rect };
+    this.camera.setViewOffset(innerWidth, innerHeight,
+      innerWidth / 2 - (rect.left + rect.right) / 2,
+      innerHeight / 2 - (rect.top + rect.bottom) / 2, innerWidth, innerHeight);
+    this.invalidate();
+  }
+  setRoute(points = []) {
+    // Preserve read-only travel diagnostics without drawing guidance lines.
+    this.routePointCount = Math.min(points.length, FLOOR_LIMIT + 1);
+    this.invalidate();
   }
   resize() {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer.setSize(innerWidth, innerHeight);
+    this.ao.setSize(Math.round(innerWidth * this.renderer.getPixelRatio() / 2), Math.round(innerHeight * this.renderer.getPixelRatio() / 2));
+    this.bloom.setSize(Math.round(innerWidth * this.renderer.getPixelRatio() / 2), Math.round(innerHeight * this.renderer.getPixelRatio() / 2));
+    if (this.viewportRect) this.setViewportRect(this.viewportRect);
     this.invalidate();
   }
   mountains(width, height, offsetX = 0, offsetY = 0) {
@@ -616,20 +643,35 @@ export class World {
     return paths;
   }
   update(state) {
+    const updateStarted = performance.now();
     const old = this.state;
     this.state = state;
+    this.hoverDirty = true;
+    this.tileIndex = new Map(state.tiles.map((tile) => [tile.y * state.width + tile.x, tile]));
     this.controls.autoRotate = false;
     const isNew = this.level !== state.level;
     if (isNew) {
+      this.frameSamples.length = 0; this.overBudgetMs = this.headroomMs = 0; this.lastFrameActive = false;
       destroy(this.terrain);
+      this.staticTiles.clear();
+      this.grid.clear();
       destroy(this.props);
+      this.objects.forEach(({ mesh }) => { if (!mesh.parent) destroy(mesh); });
       this.objects.clear();
+      this.tileGeometrySignature = null;
+      this.setRoute();
       destroy(this.actors);
       this.monsters.clear();
       this.effects.clear();
+      this.heroAnimation.clear();
+      this.lighting.clear();
+      Object.assign(this.sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12 });
+      this.sun.shadow.camera.updateProjectionMatrix();
+      this.renderer.shadowMap.needsUpdate = true;
       this.lamps = [];
       this.level = state.level;
       this.lastPlayer = null;
+      this.walkPhase = 0; this.walkStartedAt = undefined;
       const town = state.level === 0,
         volcano = state.level > 15;
       this.scene.background.set(
@@ -641,7 +683,6 @@ export class World {
       this.sun.intensity = town ? 3.9 : 0.85;
       this.fill.intensity = town ? 1.1 : 0.5;
       this.fill.color.set(volcano ? 0xb54c35 : 0x659bbf);
-      this.floor.material = surface("stone", volcano ? 0xa77b62 : 0xc0c8c3);
       this.water.visible = town;
       this.paths = this.townPaths(state.tiles);
       if (!town)
@@ -696,35 +737,25 @@ export class World {
       this.scene.remove(this.player);
       destroy(this.player);
       this.player = hero(state.character);
+      this.heroAnimation.bind(this.player);
       this.character = state.character;
       this.scene.add(this.player);
     }
-    const ids = new Set(),
-      matrix = new THREE.Matrix4();
-    let floorIndex = 0,
-      grassIndex = 0;
-    this.wallCells = [];
-    this.lamps = [];
+    const previousWeapon = this.heroAnimation.weapon.userData.weaponModel;
+    equipHero(this.player, state.weapon);
+    if (state.over || previousWeapon !== this.heroAnimation.weapon.userData.weaponModel) this.heroAnimation.clear();
+    const geometrySignature = state.tiles.map((t) => `${t.x},${t.y}:${t.id}:${t.wall}:${t.stair?.blocked}`).join("|");
+    const geometryChanged = this.tileGeometrySignature !== geometrySignature;
+    if (geometryChanged) {
+    this.tileGeometrySignature = geometrySignature;
+    this.grid.update(state, this.paths);
+    const ids = new Set();
+    this.wallCells = []; this.lamps = [];
     for (const t of state.tiles) {
       const key = `${t.x},${t.y}`;
       ids.add(key);
       const sig = `${t.id}${t.stair?.blocked ? ":blocked" : ""}`;
       const prev = this.objects.get(key);
-      const grass = state.level === 0 && !this.paths.has(key);
-      const color = new THREE.Color(
-        grass
-          ? 0xa0af80
-          : state.level === 0
-            ? 0xb6b49c
-            : state.level > 15
-              ? 0xc29b81
-              : 0xb1c0ba,
-      ).multiplyScalar(0.82 + noise(t.x, t.y) * 0.23);
-      matrix.makeTranslation(t.x, -0.105, t.y);
-      const floor = grass ? this.grassFloor : this.floor,
-        index = grass ? grassIndex++ : floorIndex++;
-      floor.setMatrixAt(index, matrix);
-      floor.setColorAt(index, color);
       if (t.wall) this.wallCells.push(t);
       if (t.store && t.id !== 55)
         this.lamps.push(new THREE.Vector3(t.x - 0.2, 1.25, t.y + 0.75));
@@ -733,6 +764,7 @@ export class World {
         this.lamps.push(new THREE.Vector3(t.x, 1.45, t.y));
       if (prev?.sig === sig) continue;
       if (prev) {
+        this.staticTiles.remove(key, t);
         this.props.remove(prev.mesh);
         destroy(prev.mesh);
       }
@@ -741,6 +773,18 @@ export class World {
       g.userData.tile = { x: t.x, y: t.y };
       if (t.wall) {
         if (noise(t.x, t.y) > 0.87) torch(g, 0, 1.05, 0, 0.65);
+      } else if (t.id === 0 && noise(t.x + 31, t.y) > .88) {
+        const grass = state.level === 0 && !this.paths.has(key);
+        if (grass) {
+          for (let i = 0; i < 4; i++) {
+            const blade = cone(g, i % 2 ? 0x63835e : 0x91a36b, -.32 + i * .06, .07, .28, .025, .18 + noise(t.x, i) * .08, 3);
+            blade.rotation.z = (i - 1.5) * .15;
+          }
+        } else {
+          const pebble = orb(g, state.level > 15 ? 0x79665b : 0x7d8980, .35, .035, .3, .06);
+          pebble.scale.y *= .45;
+          if (state.level > 15) box(g, 0xb3835e, .35, .02, .26, .16, .015, .024, { emissive: 0x934f2d, emissiveIntensity: .4 });
+        }
       } else if (t.id !== 0) {
         const model = itemModel({ ...t, draining: t.id === 17 && prev?.sig === "7" && !this.reduced });
         g.add(model);
@@ -762,8 +806,27 @@ export class World {
           g.add(text);
         }
       }
-      this.props.add(g);
+      const dynamic = t.store || [7, 17, 5, 13, 56, 93].includes(t.id);
+      if (dynamic) {
+        this.props.add(g);
+        if (t.store && ![54, 55, 56].includes(t.id)) {
+          g.userData.building = true;
+          g.traverse((object) => {
+            if (!object.isMesh) return;
+            object.material = object.material.clone();
+            object.material.transparent = true;
+            object.material.depthWrite = false;
+            object.material.userData.cutaway = true;
+          });
+        }
+      } else this.staticTiles.set(key, g);
       this.objects.set(key, { sig, mesh: g });
+    }
+    for (const [key, object] of this.objects) if (!ids.has(key)) {
+      this.staticTiles.remove(key, object.mesh.userData.tile);
+      object.mesh.removeFromParent(); destroy(object.mesh); this.objects.delete(key);
+    }
+    this.staticTiles.flush();
     }
     const creatures = new Set();
     for (const tile of state.tiles) {
@@ -779,38 +842,28 @@ export class World {
         actor = null;
       }
       if (!actor) {
-        const mesh = monsterSprite(monster, () => this.invalidate()) || monsterModel(monster);
+        const mesh = creature(monster);
         mesh.position.set(tile.x, 0, tile.y);
-        actor = { mesh, species: monster.id, target: new THREE.Vector3(tile.x, 0, tile.y) };
+        actor = { mesh, species: monster.id, target: new THREE.Vector3(tile.x, 0, tile.y), start: mesh.position.clone(), movedAt: performance.now() };
         this.monsters.set(uid, actor);
         this.actors.add(mesh);
       }
-      actor.target.set(tile.x, 0, tile.y);
+      if (actor.target.x !== tile.x || actor.target.z !== tile.y) {
+        actor.start.copy(actor.mesh.position); actor.movedAt = performance.now();
+        if (Math.max(Math.abs(actor.target.x - tile.x), Math.abs(actor.target.z - tile.y)) > 1) {
+          actor.start.set(tile.x, 0, tile.y); actor.mesh.position.copy(actor.start); actor.movedAt -= 100;
+        }
+        actor.target.set(tile.x, 0, tile.y);
+      }
       actor.mesh.userData.uid = uid;
       actor.mesh.userData.tile = { x: tile.x, y: tile.y };
-      faceMonster(actor.mesh, monster.facing, this.camera);
+      faceCreature(actor.mesh, monster.facing);
     }
     for (const [uid, actor] of this.monsters) if (!creatures.has(uid)) {
       actor.mesh.removeFromParent();
       destroy(actor.mesh);
       this.monsters.delete(uid);
     }
-    for (const [m, count] of [
-      [this.floor, floorIndex],
-      [this.grassFloor, grassIndex],
-    ]) {
-      m.count = count;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-      m.computeBoundingSphere();
-    }
-    for (const [key, o] of this.objects)
-      if (!ids.has(key)) {
-        this.props.remove(o.mesh);
-        destroy(o.mesh);
-        this.objects.delete(key);
-      }
-    this.walls.count = this.caps.count = this.wallCells.length;
     this.player.visible = true;
     const target = new THREE.Vector3(state.x, 0, state.y);
     if (!this.lastPlayer) {
@@ -821,28 +874,20 @@ export class World {
         .add(
           GAME_CAMERA,
         );
+      this.moveStart = target.clone(); this.moveStartedAt = performance.now() - WALK_SETTLE_MS;
+      this.controls.update();
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
+      this.moveStart = this.player.position.clone(); this.moveStartedAt = performance.now();
+      if (Math.max(Math.abs(this.lastPlayer.x - state.x), Math.abs(this.lastPlayer.y - state.y)) > 1) {
+        const delta = target.clone().sub(this.player.position);
+        this.player.position.copy(target); this.controls.target.add(delta); this.camera.position.add(delta);
+        this.moveStart.copy(target); this.moveStartedAt -= WALK_SETTLE_MS;
+      }
       this.player.rotation.y =
         Math.atan2(state.x - this.lastPlayer.x, state.y - this.lastPlayer.y) +
         Math.PI;
       this.walkAge = 0;
       this.walkStartedAt = performance.now();
-    }
-    if (
-      old &&
-      old.moves !== state.moves &&
-      state.x === old.x &&
-      state.y === old.y &&
-      state.maze
-    ) {
-      if (
-        old.tiles.some(
-          (t) =>
-            t.monster &&
-            Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 1,
-        )
-      )
-        { this.attackAge = 0; this.attackStartedAt = performance.now(); }
     }
     if (
       old &&
@@ -858,68 +903,26 @@ export class World {
     this.playerTarget = target;
     this.lastPlayer = { x: state.x, y: state.y };
     this.playerLight.color.set(state.level > 15 ? 0xffa466 : 0xffce89);
-    this.sun.position.set(state.x - 12, 24, state.y + 8);
-    this.sun.target.position.copy(target);
     this.dust.position.set(state.x, 0, state.y);
-    this.lamps.sort(
-      (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
-    );
-    for (let i = 0; i < this.torchLights.length; i++) {
-      const lamp = this.lamps[i],
-        light = this.torchLights[i];
-      light.intensity = lamp ? 5 : 0;
-      if (lamp) light.position.copy(lamp);
-    }
-    this.wallView = null;
+    this.lighting.assign(this.lamps, target, [2, 4, 6][this.effectiveTier]);
+    if (geometryChanged) this.wallView = null;
     this.updateWalls();
-    this.renderer.shadowMap.needsUpdate = true;
+    if (geometryChanged || !old || old.x !== state.x || old.y !== state.y || old.tiles.some((tile) => tile.monster) || state.tiles.some((tile) => tile.monster))
+      this.shadowDirty = true;
+    if (!isNew) sample(this.updateSamples, performance.now() - updateStarted);
     this.invalidate();
   }
-  updateWalls() {
+  updateWalls(dt = 0) {
     if (!this.state) return;
     const toward = this.camera.position
       .clone()
       .sub(this.controls.target)
       .setY(0)
       .normalize();
-    const viewKey = [
-      this.state.x,
-      this.state.y,
-      Math.round(toward.x * 50),
-      Math.round(toward.z * 50),
-    ].join(":");
-    if (this.wallView === viewKey) return;
-    this.wallView = viewKey;
-    this.renderer.shadowMap.needsUpdate = true;
-    for (let i = 0; i < this.wallCells.length; i++) {
-      const t = this.wallCells[i],
-        dx = t.x - this.state.x,
-        dz = t.y - this.state.y;
-      const cut =
-        Math.hypot(dx, dz) < 2.8 && dx * toward.x + dz * toward.z > 0.2;
-      const h = cut ? 0.36 : 1.15;
-      this.scratchPosition.set(t.x, h / 2 - 0.01, t.y);
-      this.scratchScale.set(0.985, h, 0.985);
-      this.scratchMatrix.compose(
-        this.scratchPosition,
-        this.identityQ,
-        this.scratchScale,
-      );
-      this.walls.setMatrixAt(i, this.scratchMatrix);
-      this.scratchPosition.y = h + 0.025;
-      this.scratchScale.set(1.015, 0.08, 1.015);
-      this.scratchMatrix.compose(
-        this.scratchPosition,
-        this.identityQ,
-        this.scratchScale,
-      );
-      this.caps.setMatrixAt(i, this.scratchMatrix);
-    }
-    for (const mesh of [this.walls, this.caps]) {
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
+    const position = { x: this.player.position.x, y: this.player.position.z };
+    if (this.grid.walls(position, toward, dt, this.reduced)) this.shadowDirty = true;
   }
+
   pick(e) {
     if (!this.state || !this.state.maze || this.state.over || this.lost)
       return null;
@@ -929,25 +932,24 @@ export class World {
     );
     this.ray.setFromCamera(this.mouse, this.camera);
     const hits = this.ray.intersectObjects(
-      [...this.actors.children, ...this.props.children, this.walls, this.caps],
+      [...this.actors.children, ...this.props.children.filter((group) => group.userData.tile), ...this.staticTiles.pickTargets(this.ray.ray), ...this.grid.pickMeshes()],
       true,
     );
     for (const hit of hits) {
       if (hit.object.isSprite) continue;
-      if (hit.object === this.walls || hit.object === this.caps)
-        return this.wallCells[hit.instanceId] || null;
+      if (hit.object.userData.wallCells) return hit.object.userData.wallCells[hit.instanceId] || null;
       let o = hit.object;
       while (o && !o.userData.tile) o = o.parent;
       if (o?.userData.tile) {
         const { x, y } = o.userData.tile;
-        return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
+        return this.tileIndex.get(y * this.state.width + x) || null;
       }
     }
     const p = new THREE.Vector3();
     if (!this.ray.ray.intersectPlane(this.ground, p)) return null;
     const x = Math.round(p.x),
       y = Math.round(p.z);
-    return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
+    return this.tileIndex.get(y * this.state.width + x) || null;
   }
   rotate(direction) {
     const offset = this.camera.position.clone().sub(this.controls.target);
@@ -964,7 +966,7 @@ export class World {
   }
   reset() {
     if (this.state) {
-      this.controls.target.set(this.state.x, 0, this.state.y);
+      this.controls.target.copy(this.player.position);
       this.camera.position
         .copy(this.controls.target)
         .add(
@@ -980,60 +982,48 @@ export class World {
       dt = Math.min(0.1, elapsed);
     this.lastTime = now;
     if (document.hidden || this.lost) return;
-    this.frameMs =
-      (this.frameMs || elapsed * 1000) * 0.94 + elapsed * 1000 * 0.06;
+    const active = this.state && !this.paused && now <= this.activeUntil;
+    if (active && this.lastFrameActive && elapsed > .001) {
+      sample(this.frameSamples, elapsed * 1000);
+      this.frameMs = this.frameSamples.reduce((sum, value) => sum + value, 0) / this.frameSamples.length;
+    }
+    this.lastFrameActive = active;
+    const frameStarted = performance.now();
     this.tick += dt;
     this.effects.update(dt);
     this.waterTime.value = this.reduced ? 0 : this.tick;
     if (this.playerTarget) {
-      const alpha = this.reduced ? 1 : 1 - Math.exp(-dt * 11),
-        d = this.playerTarget
-          .clone()
-          .sub(this.controls.target)
-          .multiplyScalar(alpha);
-      this.controls.target.add(d);
-      this.camera.position.add(d);
-      this.player.position.lerp(this.playerTarget, alpha);
-      this.playerLight.position
-        .copy(this.player.position)
-        .add(new THREE.Vector3(0, 1.4, 0.2));
+      const eased = this.reduced ? 1 : walkProgress(now - (this.moveStartedAt || 0));
+      this.scratchPosition.copy(this.player.position);
+      this.player.position.lerpVectors(this.moveStart || this.playerTarget, this.playerTarget, eased);
+      this.scratchPosition.sub(this.player.position).negate();
+      this.walkPhase = ((this.walkPhase || 0) + this.scratchPosition.length() * Math.PI) % (Math.PI * 2);
+      this.controls.target.add(this.scratchPosition);
+      this.camera.position.add(this.scratchPosition);
+      this.playerLight.position.copy(this.player.position); this.playerLight.position.y += 1.4;
       const body = this.player.getObjectByName("body");
       if (body && !this.reduced) {
         this.walkAge = this.walkStartedAt === undefined ? 1 : (now - this.walkStartedAt) / 1000;
-        this.attackAge = this.attackStartedAt === undefined ? 1 : (now - this.attackStartedAt) / 1000;
-        this.castAge = this.castStartedAt === undefined ? 1 : (now - this.castStartedAt) / 1000;
         const walk = Math.max(0, 1 - this.walkAge / 0.28);
-        body.position.y = Math.abs(Math.sin(this.walkAge * 26)) * 0.045 * walk;
+        body.position.y = Math.abs(Math.sin(this.walkPhase * 2)) * .018 * walk;
         for (const name of ["left-leg", "right-leg"]) {
           const limb = this.player.getObjectByName(name);
           if (limb)
             limb.rotation.x =
-              Math.sin(this.walkAge * 26) *
+              Math.sin(this.walkPhase) *
               (name === "left-leg" ? 1 : -1) *
-              0.45 *
+              .28 *
               walk;
         }
-        const weapon = this.player.getObjectByName("weapon");
-        if (weapon)
-          weapon.rotation.x =
-            this.castAge < 0.65
-              ? -Math.sin(this.castAge / 0.65 * Math.PI) * 1.9
-              : this.attackAge < 0.3
-              ? -Math.sin((this.attackAge / 0.3) * Math.PI) * 1.4
-              : 0;
+        if (!this.heroAnimation.active)
+          this.heroAnimation.arm.rotation.x = .12 - Math.sin(this.walkPhase) * .05 * walk;
         const cape = this.player.getObjectByName("cape");
         if (cape) cape.rotation.x = -0.25 + Math.sin(this.tick * 2) * 0.035;
       }
+      this.heroAnimation.update(now);
     }
     if (!this.reduced) {
       this.dust.rotation.y = Math.sin(this.tick * 0.055) * 0.08;
-      this.torchLights.forEach((l, i) => {
-        if (l.intensity)
-          l.intensity =
-            4.5 +
-            Math.sin(this.tick * 5 + i) * 0.4 +
-            Math.sin(this.tick * 11 + i) * 0.15;
-      });
     }
     if (this.burst.visible) {
       this.burstAge = (now - this.burstStartedAt) / 1000;
@@ -1044,22 +1034,24 @@ export class World {
       }
       if (this.burstAge > 0.55) this.burst.visible = false;
     }
-    if (
-      this.playerTarget &&
-      this.player.position.distanceToSquared(this.playerTarget) > 0.0001 &&
-      this.tick - (this.shadowTime || 0) > 0.08
-    ) {
-      this.renderer.shadowMap.needsUpdate = true;
-      this.shadowTime = this.tick;
-    }
     this.renderer.info.reset();
     this.controls.update();
     this.camera.updateMatrixWorld();
-    this.hasMotion = !!this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001;
-    for (const { mesh, target } of this.monsters.values()) {
-      mesh.position.lerp(target, this.reduced ? 1 : 1 - Math.exp(-dt * 13));
-      if (mesh.position.distanceToSquared(target) > 0.0001) this.hasMotion = true;
-      faceMonster(mesh, null, this.camera);
+    this.hasMotion = this.heroAnimation.active || (!!this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001);
+    for (const { mesh, target, start, movedAt } of this.monsters.values()) {
+      const progress = this.reduced ? 1 : Math.min(1, (now - movedAt) / 100);
+      mesh.position.lerpVectors(start, target, progress * progress * (3 - 2 * progress));
+      const walking = mesh.position.distanceToSquared(target) > .0001;
+      if (walking) this.hasMotion = true;
+      animateCreature(mesh, now, walking, this.reduced);
+    }
+    this.updateCutaways(dt);
+    if (this.lighting.update(dt, this.tick, this.reduced)) this.hasMotion = true;
+    if (this.hoverPointer && this.hoverDirty && !this.pointers.size) {
+      const event = this.hoverPointer; this.hoverDirty = false;
+      const tile = this.pick(event); this.marker.visible = !!tile;
+      if (tile) this.marker.position.set(tile.x, 0, tile.y);
+      this.onHover(tile, event);
     }
     for (const { mesh } of this.objects.values()) {
       const fountain = mesh.children.find((child) => child.userData.drainAge !== undefined);
@@ -1072,11 +1064,66 @@ export class World {
         if (water.visible) this.hasMotion = true;
       }
     }
-    if (this.wallCells.length) this.updateWalls();
-    if (this.quality === "cinematic") this.composer.render(dt);
+    if (this.wallCells.length) this.updateWalls(dt);
+    this.hasMotion ||= this.grid.animating;
+    const shadowCamera = this.sun.shadow.camera, requiredSpan = this.camera.position.distanceTo(this.controls.target) * 1.3;
+    let span = shadowCamera.right - shadowCamera.left;
+    while (requiredSpan > span) span += 8;
+    while (span > 24 && requiredSpan < span - 10) span -= 8;
+    if (span !== shadowCamera.right - shadowCamera.left) {
+      Object.assign(shadowCamera, { left: -span / 2, right: span / 2, top: span / 2, bottom: -span / 2 });
+      shadowCamera.updateProjectionMatrix(); this.renderer.shadowMap.needsUpdate = true;
+    }
+    const shadowInterval = this.effectiveTier === 2 ? 1 / 60 : 1 / 30;
+    if ((this.shadowDirty || this.hasMotion) && this.tick - (this.shadowTime || 0) >= shadowInterval - .001)
+      this.renderer.shadowMap.needsUpdate = true;
+    if (this.renderer.shadowMap.needsUpdate) {
+      stabilizeShadow(this.sun, this.playerTarget ? this.player.position : this.controls.target);
+      this.shadowTime = this.tick; this.shadowDirty = false; this.shadowUpdates = (this.shadowUpdates || 0) + 1;
+    }
+    if (this.effectiveTier === 2) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     this.renderedFrames++;
+    if (active) {
+      sample(this.renderSamples, performance.now() - frameStarted);
+      if (this.lastInputAt != null) { sample(this.inputSamples, performance.now() - this.lastInputAt); this.lastInputAt = null; }
+      this.adaptQuality(now, elapsed * 1000);
+    }
     this.scheduleFrame();
+  }
+  updateCutaways(dt) {
+    if (!this.state) return;
+    const toward = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
+    const heroPoint = this.project(this.player.position.clone().add(new THREE.Vector3(0, .6, 0)));
+    for (const { mesh } of this.objects.values()) {
+      if (!mesh.userData.building) continue;
+      const dx = mesh.position.x - this.player.position.x, dz = mesh.position.z - this.player.position.z;
+      let obscures = false;
+      const wasHidden = mesh.userData.obscuresHero;
+      if (dx * dx + dz * dz < (wasHidden ? 18 : 16) && dx * toward.x + dz * toward.z > -.6) {
+        const bounds = mesh.userData.bounds || (mesh.userData.bounds = new THREE.Box3().setFromObject(mesh));
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+          const point = this.project(new THREE.Vector3(x, y, z));
+          left = Math.min(left, point.x); right = Math.max(right, point.x);
+          top = Math.min(top, point.y); bottom = Math.max(bottom, point.y);
+        }
+        const margin = wasHidden ? 6 : 0;
+        obscures = heroPoint.x > left - margin && heroPoint.x < right + margin && heroPoint.y > top - margin && heroPoint.y < bottom + margin;
+      }
+      mesh.userData.obscuresHero = obscures;
+      const target = obscures ? .2 : 1;
+      let opacity = mesh.userData.opacity ?? 1;
+      opacity += (target - opacity) * (this.reduced ? 1 : 1 - Math.exp(-dt * 14));
+      if (Math.abs(target - opacity) < .005) opacity = target;
+      else this.hasMotion = true;
+      mesh.userData.opacity = opacity;
+      mesh.traverse((object) => {
+        if (!object.material?.userData.cutaway) return;
+        object.material.opacity = opacity;
+        object.material.depthWrite = opacity >= .995;
+      });
+    }
   }
   dispose() {
     if (this.disposed) return;
@@ -1085,6 +1132,9 @@ export class World {
     this.events.abort();
     this.controls.dispose();
     this.effects.dispose();
+    this.heroAnimation.dispose();
+    this.staticTiles.clear(); this.grid.clear();
+    this.objects.forEach(({ mesh }) => { if (!mesh.parent) destroy(mesh); });
     this.releaseLostResources(true);
     destroy(this.scene);
     this.renderer.dispose();

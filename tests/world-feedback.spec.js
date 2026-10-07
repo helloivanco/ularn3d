@@ -33,7 +33,7 @@ async function room(page) {
   });
 }
 
-test("overhead view, species art and facing survive monster movement", async ({ page }) => {
+test("overhead view, species models and facing survive monster movement", async ({ page }) => {
   await room(page);
   await page.evaluate(() => {
     setMonster(12, 8, createMonster(GNOME));
@@ -48,9 +48,9 @@ test("overhead view, species art and facing survive monster movement", async ({ 
   await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().length)).toBe(3);
   const before = await page.evaluate(() => ({ creatures: ularnGraphics.creatures(), metrics: ularnGraphics.metrics() }));
   expect(before.metrics.cameraElevation).toBeGreaterThan(55);
-  expect(before.creatures.find((m) => m.species === 2).art).toBe("/engine/img/m2.png");
-  expect(before.creatures.find((m) => m.species === 4).art).toBe("/engine/img/m4.png");
-  expect(before.creatures.find((m) => m.species === 1).art).toBe("/art/monsters/lemming.png");
+  expect(before.creatures.find((m) => m.species === 2).model).toBe("gnome");
+  expect(before.creatures.find((m) => m.species === 4).model).toBe("jackal");
+  expect(before.creatures.find((m) => m.species === 1).model).toBe("lemming");
   const lemming = before.creatures.find((m) => m.species === 1);
   const facing = await page.evaluate(() => {
     mmove(11, 9, 10, 9); paint();
@@ -60,7 +60,8 @@ test("overhead view, species art and facing survive monster movement", async ({ 
   });
   expect(facing.left.uid).toBe(lemming.uid);
   expect(facing.right.uid).toBe(lemming.uid);
-  expect(facing.left.mirrored).not.toBe(facing.right.mirrored);
+  expect(facing.left.facing.x).toBe(-1);
+  expect(facing.right.facing.x).toBe(1);
   const gnome = before.creatures.find((m) => m.species === 2);
   await page.evaluate(() => { mmove(12, 8, 11, 8); paint(); });
   await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().find((m) => m.species === 2).facing.x)).toBe(-1);
@@ -124,6 +125,8 @@ test("accepted casts display bounded effects; cancelled and unknown spells do no
     player.INTELLIGENCE = 100;
     player.LEVEL = 30;
     learnSpell("pro");
+    const random = rnd;
+    rnd = (n) => n === 23 || n === 18 ? 1 : random(n); // Acceptance fixture excludes the engine's intentional fizzle.
     paint();
   });
   await page.keyboard.press("c");
@@ -164,7 +167,7 @@ test("accepted casts display bounded effects; cancelled and unknown spells do no
   effects.dispose();
 });
 
-test("context recovery releases off-scene sprite resources and full disposal clears the cache", async ({ page }) => {
+test("context recovery releases off-scene creature resources and full disposal clears the cache", async ({ page }) => {
   test.setTimeout(90000);
   await room(page);
   const state = await page.evaluate(() => {
@@ -184,12 +187,11 @@ test("context recovery releases off-scene sprite resources and full disposal cle
     window.fixtureState = snapshot;
     window.fixtureWorld = new World(document.querySelector("#fixture"), () => {}, () => {});
     fixtureWorld.update(snapshot);
-    window.spriteDisposals = 0;
-    window.cachedTexture = fixtureWorld.monsters.values().next().value.mesh.userData.artwork.material.map;
-    cachedTexture.addEventListener("dispose", () => spriteDisposals++);
+    window.creatureDisposals = 0;
+    window.cachedGeometry = fixtureWorld.monsters.values().next().value.mesh.getObjectByName("core").children[0].geometry;
+    cachedGeometry.addEventListener("dispose", () => creatureDisposals++);
   }, state);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(1);
-  await expect.poll(() => page.evaluate(() => !!cachedTexture.image?.complete)).toBe(true);
   for (let cycle = 0; cycle < 2; cycle++) {
     await page.evaluate(() => {
       fixtureWorld.update({ ...fixtureState,
@@ -199,7 +201,7 @@ test("context recovery releases off-scene sprite resources and full disposal cle
       contextExtension.loseContext();
     });
     await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().contextLost)).toBe(true);
-    expect(await page.evaluate(() => spriteDisposals)).toBe(cycle + 1);
+    expect(await page.evaluate(() => creatureDisposals)).toBe(cycle + 1);
     await page.evaluate(() => contextExtension.restoreContext());
     await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().contextLost), { timeout: 15000 }).toBe(false);
     const before = await page.evaluate(() => {
@@ -208,12 +210,12 @@ test("context recovery releases off-scene sprite resources and full disposal cle
     });
     await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(before);
     expect(await page.evaluate(() => {
-      return fixtureWorld.monsters.values().next().value.mesh.userData.artwork.material.map === cachedTexture;
+      return fixtureWorld.monsters.values().next().value.mesh.getObjectByName("core").children[0].geometry === cachedGeometry;
     })).toBe(true);
   }
   expect(await page.evaluate(() => {
     fixtureWorld.dispose();
-    const { monsterTextures, monsterMaterials } = ularnGraphics.metrics();
-    return { monsterTextures, monsterMaterials, canvases: document.querySelectorAll("canvas").length };
-  })).toEqual({ monsterTextures: 0, monsterMaterials: 0, canvases: 0 });
+    const { creatureTemplates } = ularnGraphics.metrics();
+    return { creatureTemplates, canvases: document.querySelectorAll("canvas").length };
+  })).toEqual({ creatureTemplates: 0, canvases: 0 });
 });

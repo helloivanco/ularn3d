@@ -1,7 +1,10 @@
 import "./style.css";
 import "./hud.css";
 import { GameAudio } from "./audio.js";
+import { audioSettings } from "./audio-score.js";
 import { World } from "./world.js";
+import { HeldMovement, movementKey, findRoute, isHostile, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
+import { GameMap } from "./map.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 mountIcons();
 const $ = (id) => document.getElementById(id),
@@ -29,10 +32,56 @@ let character = "Adventurer",
   world,
   walking = null,
   soundOn = false,
-  audio = new GameAudio(),
+  audio,
   toastTimer,
+  damageTimer,
   lastHP = null,
   graphicsLost = false;
+const AUDIO_SETTINGS_KEY = "ularn3d.audio.v1";
+let audioPreference = audioSettings(), audioStarted = false, lastAudioError = "", audioControlSignature = "";
+try { audioPreference = audioSettings(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY) || "{}")); } catch {}
+audio = new GameAudio({ ...audioPreference, enabled: false, onChange: syncAudioControls });
+window.ularnAudio = Object.freeze({ metrics: () => audio.metrics() });
+function syncAudioControls() {
+  if (!$("sound")) return;
+  const metrics = audio.metrics(), retry = soundOn && ["blocked", "error"].includes(metrics.status);
+  const signature = JSON.stringify([soundOn, metrics.status, metrics.error, metrics.track, audioPreference.music, audioPreference.effects, !!state?.over]);
+  if (signature === audioControlSignature) return;
+  audioControlSignature = signature;
+  const label = retry ? "Resume sound" : soundOn ? "Disable sound" : "Enable sound";
+  $("sound").setAttribute("aria-label", label); $("sound").title = label;
+  $("sound").setAttribute("aria-pressed", String(soundOn));
+  setIcon($("sound").querySelector("[data-icon]"), soundOn ? "soundOn" : "soundOff");
+  $("sound").querySelector(".button-label").textContent = retry ? "Resume sound" : soundOn ? "Sound on" : "Sound off";
+  $("audio-enabled").checked = soundOn;
+  $("music-volume").value = Math.round(audioPreference.music * 100);
+  $("effects-volume").value = Math.round(audioPreference.effects * 100);
+  $("music-volume-text").textContent = `${Math.round(audioPreference.music * 100)}%`;
+  $("effects-volume-text").textContent = `${Math.round(audioPreference.effects * 100)}%`;
+  $("audio-track").textContent = state?.over ? "Expedition ended" : metrics.track;
+  $("audio-status").textContent = metrics.error || (metrics.status === "loading" ? "Loading music…" : "");
+  if (metrics.error && metrics.error !== lastAudioError) toast(metrics.error);
+  lastAudioError = metrics.error;
+}
+function setAudioPreference(changes) {
+  audioPreference = audioSettings({ ...audioPreference, ...changes });
+  soundOn = audioPreference.enabled; audioStarted = true;
+  try { localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(audioPreference)); } catch {}
+  audio.configure(audioPreference); if (soundOn) audio.resume(); syncAudioControls();
+}
+function activateAudio() {
+  if (!state) audio.deferMusic = true;
+  if (!audioStarted) { audioStarted = true; soundOn = audioPreference.enabled; audio.configure(audioPreference); syncAudioControls(); }
+  if (soundOn) audio.resume();
+}
+syncAudioControls();
+
+let route = [], travelRevision = 0;
+const movementAllowed = () => !!state && state.maze && !state.over && !state.prompt && !state.busy && !graphicsLost && !document.hidden && !document.querySelector("dialog[open]");
+const held = new HeldMovement((key) => sendCommand(key), movementAllowed);
+const heldKeys = new Set();
+const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map"), dialog: $("map-dialog"), viewport: $("map-viewport"), travel: (tile) => travel(tile), stop: () => stopTravel() });
+let journalSignature = "", statsSignature = "";
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 function toast(message) {
   $("toast").textContent = message;
@@ -43,7 +92,16 @@ function toast(message) {
 function sound(kind = "step", detail) {
   if (soundOn) audio.play(kind, detail);
 }
+window.addEventListener("ularn:action", ({ detail }) => {
+  if (state?.over || detail.level !== state?.level) return;
+  sound(detail.kind, detail);
+});
 window.addEventListener("ularn:combat", ({ detail }) => {
+  if (state?.over) return;
+  if (detail.to && window.ularnGraphics) {
+    const point = ularnGraphics.projectTile(detail.to.x, detail.to.y, .4);
+    detail = { ...detail, pan: Math.max(-.65, Math.min(.65, (point.x - ularnGraphics.metrics().heroScreen.x) / 250)) };
+  }
   if (detail.kind === "weapon") sound("weapon", detail);
   else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
     sound("spell", detail);
@@ -57,6 +115,7 @@ let inventorySignature = "", effectsSignature = "";
 function syncInventoryPin() {
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
+  updateViewport();
 }
 function toggleInventoryPin() {
   inventoryPinned = !inventoryPinned;
@@ -99,6 +158,7 @@ function updateInventoryAndEffects() {
   const effectsKey = JSON.stringify(effects);
   if (effectsKey !== effectsSignature) {
     effectsSignature = effectsKey;
+    requestAnimationFrame(updateViewport);
     $("effects-panel").hidden = effects.length === 0;
     $("effects").replaceChildren(...effects.map((effect) => {
       const row = document.createElement("div");
@@ -159,6 +219,7 @@ try {
     '<div style="max-width:440px;padding:30px;text-align:center">3D graphics could not start.<p style="font:14px Arial;line-height:1.7">Enable hardware acceleration in your browser, then reload. You can also play the complete classic edition below.</p><a style="color:#d7bc83;font:14px Arial" href="/engine/larn_local.html?ularn=true">Open classic Ularn →</a></div>';
 }
 async function start(resume) {
+  activateAudio();
   $("begin").disabled = true;
   $("continue").disabled = true;
   try {
@@ -174,6 +235,7 @@ async function start(resume) {
     $("pause").hidden = false;
     document.body.classList.add("playing");
     update();
+    updateViewport();
     sound("open");
   } catch (error) {
     $("start-error").textContent = error.message;
@@ -190,8 +252,18 @@ let townOptions = "";
 function update() {
   const next = engine.snapshot();
   if (!next) return;
+  const previous = state;
   state = next;
+  audio.deferMusic = false;
+  if (!movementAllowed() || (previous && previous.level !== state.level)) stopTravel();
   world?.update(state);
+  if (!state.over) {
+    const danger = state.tiles.filter((tile) => isHostile(tile) && Math.max(Math.abs(tile.x - state.x), Math.abs(tile.y - state.y)) <= 6).length;
+    audio.scene(state.level === 0 ? "town" : state.level > 15 ? "volcano" : "caves", Math.min(1, danger / 3));
+  }
+  if (previous && !previous.over && state.over) audio.finish(state.winner ? "victory" : "death");
+  if (previous && previous.level !== state.level && !state.over) sound("stairs", { down: state.level > previous.level });
+  if (previous && state.gold > previous.gold && state.bank === previous.bank && state.maze && previous.maze && !state.over) sound("coins");
   $("player-name").textContent = state.name;
   $("player-class").textContent = state.character;
   setIcon(
@@ -208,9 +280,11 @@ function update() {
   $("gold").textContent = state.gold.toLocaleString();
   $("armor").textContent = state.ac;
   $("weapon").textContent = state.wc;
-  $("attributes").innerHTML = Object.entries(state.stats)
-    .map(([k, v]) => `<span>${k}<b>${v}</b></span>`)
-    .join("");
+  const statsKey = JSON.stringify(state.stats);
+  if (statsKey !== statsSignature) {
+    statsSignature = statsKey;
+    $("attributes").innerHTML = Object.entries(state.stats).map(([k, v]) => `<span>${k}<b>${v}</b></span>`).join("");
+  }
   updateInventoryAndEffects();
   const location =
     state.level === 0
@@ -226,15 +300,33 @@ function update() {
   $("turn-count").textContent = `TURN ${state.moves}`;
   $("time-left").textContent = Math.ceil(state.timeLeft);
   const log = state.log.filter((line) => line.trim()).slice(-60);
-  $("journal-lines").innerHTML = log
-    .map((line) => `<div>${line}</div>`)
-    .join("");
-  $("journal-lines").scrollTop = $("journal-lines").scrollHeight;
+  const logKey = JSON.stringify(log);
+  if (logKey !== journalSignature) {
+    journalSignature = logKey;
+    $("journal-lines").innerHTML = log.map((line) => `<div>${line}</div>`).join("");
+    $("journal-lines").scrollTop = $("journal-lines").scrollHeight;
+  }
   $("engine-modal").hidden = state.maze && !state.over;
   $("engine-title").textContent = state.over
     ? "EXPEDITION ENDED"
     : "ULARN";
   $("new-after-death").hidden = !state.over;
+  $("scoreboard-controls").hidden = !state.scoreboard;
+  $("global-scores").setAttribute("aria-pressed", String(!state.localScores));
+  $("local-scores").setAttribute("aria-pressed", String(state.localScores));
+  $("score-details").hidden = !state.scoreboard;
+  if (state.scoreboard) $("score-details").textContent = $("STATS").textContent;
+  $("score-sync-status").hidden = !state.scoreboard;
+  if (state.scoreboard) {
+    const sync = state.scoreSync;
+    $("score-sync-status").textContent = !sync.configured
+      ? "Global scores are not configured. Records are saved on this device."
+      : sync.pending
+        ? sync.state === "syncing" ? "Sharing your completed scores…" : `${sync.pending} completed score${sync.pending === 1 ? "" : "s"} saved locally, waiting to sync.`
+        : sync.state === "error" ? sync.error
+          : sync.latestSyncedGame === state.gameID ? "This expedition’s score is saved globally."
+            : "Completed expeditions are shared automatically when online.";
+  }
   const hasActions =
     $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
   $("interaction").hidden =
@@ -248,9 +340,9 @@ function update() {
   $("interaction").classList.toggle("in-modal", !state.maze);
   if (lastHP !== null && state.hp < lastHP) {
     sound("hurt");
-    document.body.classList.remove("damage");
-    requestAnimationFrame(() => document.body.classList.add("damage"));
-    setTimeout(() => document.body.classList.remove("damage"), 450);
+    document.body.classList.add("damage");
+    clearTimeout(damageTimer);
+    damageTimer = setTimeout(() => document.body.classList.remove("damage"), 450);
   }
   lastHP = state.hp;
   if (state.saveError) toast(state.saveError);
@@ -269,37 +361,18 @@ function update() {
     }
   }
   drawMap();
+  syncRenderPause();
 }
 window.addEventListener("ularn:update", update);
-function drawMap() {
-  const canvas = $("minimap"),
-    ctx = canvas.getContext("2d");
-  const sx = canvas.width / state.width,
-    sy = canvas.height / state.height;
-  ctx.fillStyle = "#0a171c";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.font = `${Math.floor(Math.min(sx, sy) * 0.88)}px ui-monospace, SFMono-Regular, Consolas, monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (const t of state.tiles) {
-    const cx = (t.x + 0.5) * sx, cy = (t.y + 0.5) * sy;
-    ctx.fillStyle = t.wall ? "#344746" : "#13292b";
-    ctx.fillRect(t.x * sx, t.y * sy, sx, sy);
-    ctx.fillStyle = t.monster ? "#ffa590" : t.store ? "#c4d7ab" : "#ddc69a";
-    const symbol = t.monster?.symbol || ({ 5: "<", 13: ">" })[t.id] || t.symbol || (t.wall ? "#" : t.id ? "?" : ".");
-    if (!t.wall && (t.monster || t.id > 0) && symbol !== "." && symbol !== " ") ctx.fillText(symbol, cx, cy);
-    else if (!t.wall) {
-      ctx.fillStyle = "#425d57";
-      ctx.fillRect(cx - 1, cy - 1, 2, 2);
-    }
-  }
-  ctx.fillStyle = "#f8dea0";
-  ctx.fillRect(state.x * sx, state.y * sy, sx, sy);
-  ctx.fillStyle = "#132325";
-  ctx.fillText("@", (state.x + 0.5) * sx, (state.y + 0.5) * sy);
-
+function drawMap() { gameMap.update(state); }
+function setRoute(points = []) {
+  route = points; world?.setRoute(points); drawMap();
 }
+
 function stopTravel() {
+  travelRevision++;
+  held.stop();
+  if (route.length) setRoute();
   engine.interruptTravel();
   if (walking) {
     clearTimeout(walking);
@@ -307,17 +380,38 @@ function stopTravel() {
   }
 }
 function command(key, shift = false) {
-  stopTravel();
+  stopTravel(); sendCommand(key, shift);
+}
+function sendCommand(key, shift = false) {
   if (!state || graphicsLost) return;
+  if (world) world.lastInputAt = performance.now();
   const before = `${state.level}:${state.x},${state.y}`;
   engine.key(key, shift);
-  if (before !== `${state.level}:${state.x},${state.y}`) sound("step");
+  if (before !== `${state.level}:${state.x},${state.y}` && before.split(":")[0] === String(state.level)) {
+    const tile = state.tiles.find((tile) => tile.x === state.x && tile.y === state.y);
+    sound("step", { surface: state.level === 0 && !tile?.store && !world?.paths.has(`${state.x},${state.y}`) ? "grass" : "stone" });
+  }
 }
-document
-  .querySelectorAll("[data-key]")
-  .forEach((button) =>
-    button.addEventListener("click", () => command(button.dataset.key)),
-  );
+document.querySelectorAll("[data-key]").forEach((button) => {
+  let pointerClick = false;
+  const key = button.dataset.key;
+  if (button.closest(".dpad") && movementKey(key)) {
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !movementAllowed()) return;
+      event.preventDefault(); pointerClick = true; button.setPointerCapture(event.pointerId);
+      stopTravel(); held.start(key, event.pointerId);
+    });
+    button.addEventListener("pointerup", (event) => held.release(event.pointerId));
+    button.addEventListener("pointercancel", (event) => held.release(event.pointerId));
+    button.addEventListener("lostpointercapture", (event) => held.release(event.pointerId));
+  }
+  button.addEventListener("click", (event) => {
+    if (pointerClick && event.detail !== 0) { pointerClick = false; return; }
+    pointerClick = false; command(key);
+  });
+});
+window.addEventListener("keyup", (event) => { const source = event.code || event.key; held.release(source); heldKeys.delete(source); });
+window.addEventListener("blur", stopTravel);
 const keyMap = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -362,19 +456,15 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key.length === 1 || keyMap[event.key]) {
     event.preventDefault();
-    command(keyMap[event.key] || event.key, event.shiftKey);
+    const key = keyMap[event.key] || event.key;
+    const source = event.code || event.key;
+    if (event.repeat && heldKeys.has(source)) return;
+    if (!event.shiftKey && movementKey(key) && movementAllowed()) {
+      if (!event.repeat) { stopTravel(); heldKeys.add(source); held.start(key, source); }
+    } else command(key, event.shiftKey);
   }
 });
-const dirs = [
-  [-1, -1, "y"],
-  [0, -1, "k"],
-  [1, -1, "u"],
-  [-1, 0, "h"],
-  [1, 0, "l"],
-  [-1, 1, "b"],
-  [0, 1, "j"],
-  [1, 1, "n"],
-];
+const dirs = DIRECTIONS;
 function travel(tile) {
   stopTravel();
   if (
@@ -400,7 +490,6 @@ function travel(tile) {
     const dir = dirs.find((d) => d[0] === dx && d[1] === dy);
     if (tile.closed) {
       engine.openToward(dir[2]);
-      sound("open");
     } else command(dir[2]);
     return;
   }
@@ -412,50 +501,16 @@ function travel(tile) {
     toast("Move one step at a time while confused or blinded.");
     return;
   }
-  const cells = new Map(
-    state.tiles
-      .filter(
-        (t) =>
-          !t.wall &&
-          !t.closed &&
-          !t.monster &&
-          (!t.hazard || (t.x === tile.x && t.y === tile.y)),
-      )
-      .map((t) => [`${t.x},${t.y}`, t]),
-  );
-  const startKey = `${state.x},${state.y}`,
-    goal = `${tile.x},${tile.y}`;
-  const q = [[state.x, state.y]],
-    prev = new Map([[startKey, null]]);
-  let qi = 0;
-  while (qi < q.length && !prev.has(goal)) {
-    const [x, y] = q[qi++];
-    for (const [a, b, key] of dirs) {
-      const nx = x + a,
-        ny = y + b,
-        k = `${nx},${ny}`;
-      if (cells.has(k) && !prev.has(k)) {
-        prev.set(k, { from: `${x},${y}`, key });
-        q.push([nx, ny]);
-      }
-    }
-  }
-  if (!prev.has(goal)) {
-    toast("No explored route. Move closer to discover the way.");
-    return;
-  }
-  const path = [];
-  let cursor = goal;
-  while (cursor !== startKey) {
-    const p = prev.get(cursor);
-    path.unshift(p.key);
-    cursor = p.from;
-  }
+  const path = findRoute(state, tile);
+  if (!path) { toast("No explored route. Move closer to discover the way."); return; }
+  const token = travelRevision;
+  setRoute([{ x: state.x, y: state.y }, ...path]);
   const initialLevel = state.level;
   let hp = state.hp;
   const step = () => {
     walking = null;
     if (
+      token !== travelRevision ||
       !path.length ||
       state.over ||
       state.busy ||
@@ -466,56 +521,48 @@ function travel(tile) {
       state.level !== initialLevel ||
       state.hp < hp ||
       document.querySelector("dialog[open]")
-    )
-      return;
+    ) { stopTravel(); return; }
     if (
       state.tiles.some(
         (t) =>
-          t.monster &&
+          isHostile(t) &&
           Math.max(Math.abs(t.x - state.x), Math.abs(t.y - state.y)) <= 6,
       )
     ) {
       toast("A creature is near. Travel stopped.");
-      return;
+      stopTravel(); return;
     }
+    const next = path[0];
+    const cell = state.tiles.find((cell) => cell.x === next.x && cell.y === next.y);
+    if (!cell || cell.wall || cell.closed || isHostile(cell) || (cell.hazard && (cell.x !== tile.x || cell.y !== tile.y))) { stopTravel(); return; }
     const before = `${state.x},${state.y}`;
-    engine.key(path.shift());
-    if (before === `${state.x},${state.y}`) return;
+    sendCommand(path.shift().key);
+    if (token !== travelRevision) return;
+    if (before === `${state.x},${state.y}`) { stopTravel(); return; }
+    if (state.x !== next.x || state.y !== next.y) { toast("Your route changed. Travel stopped."); stopTravel(); return; }
     if (state.hp < hp) {
       toast("You were hurt. Travel stopped.");
-      return;
+      stopTravel(); return;
     }
     hp = state.hp;
-    if (path.length) walking = setTimeout(step, 110);
+    if (path.length) { setRoute([{ x: state.x, y: state.y }, ...path]); walking = setTimeout(step, MOVE_INTERVAL); }
+    else stopTravel();
   };
   step();
 }
-$("minimap").addEventListener("click", (event) => {
-  if (!state) return;
-  const r = event.currentTarget.getBoundingClientRect(),
-    x = Math.floor(((event.clientX - r.left) / r.width) * state.width),
-    y = Math.floor(((event.clientY - r.top) / r.height) * state.height);
-  const t = state.tiles.find((t) => t.x === x && t.y === y);
-  if (t) travel(t);
-});
+$("map-expand").addEventListener("click", () => gameMap.open());
+$("map-zoom-in").addEventListener("click", () => gameMap.setZoom(gameMap.zoom * 1.35));
+$("map-zoom-out").addEventListener("click", () => gameMap.setZoom(gameMap.zoom / 1.35));
+$("map-fit").addEventListener("click", () => gameMap.setZoom(1));
+$("map-center").addEventListener("click", () => gameMap.center());
 $("sound").addEventListener("click", () => {
-  soundOn = !soundOn;
-  $("sound").setAttribute(
-    "aria-label",
-    soundOn ? "Disable sound" : "Enable sound",
-  );
-  $("sound").title = soundOn ? "Disable sound" : "Enable sound";
-  $("sound").setAttribute("aria-pressed", String(soundOn));
-  setIcon(
-    $("sound").querySelector("[data-icon]"),
-    soundOn ? "soundOn" : "soundOff",
-  );
-  $("sound").querySelector(".button-label").textContent = soundOn
-    ? "Sound on"
-    : "Sound off";
+  if (soundOn && ["blocked", "error"].includes(audio.metrics().status)) audio.resume();
+  else setAudioPreference({ enabled: !soundOn });
   if (soundOn) sound("open");
-  else audio.suspend();
 });
+$("audio-enabled").addEventListener("change", (event) => setAudioPreference({ enabled: event.target.checked }));
+$("music-volume").addEventListener("input", (event) => setAudioPreference({ music: Number(event.target.value) / 100 }));
+$("effects-volume").addEventListener("input", (event) => setAudioPreference({ effects: Number(event.target.value) / 100 }));
 $("guide").addEventListener("click", () => {
   stopTravel();
   $("guide-dialog").showModal();
@@ -546,6 +593,13 @@ $("original-help").addEventListener("click", () => {
   $("pause-dialog").close();
   command("?");
 });
+$("view-scores").addEventListener("click", () => {
+  $("pause-dialog").close();
+  stopTravel();
+  engine.showScoreboard();
+});
+$("global-scores").addEventListener("click", () => engine.showScoreboard());
+$("local-scores").addEventListener("click", () => engine.showScoreboard(true));
 $("new-after-death").addEventListener("click", () => location.reload());
 $("rotate-left").addEventListener("click", () => world.rotate(-1));
 $("rotate-right").addEventListener("click", () => world.rotate(1));
@@ -557,7 +611,7 @@ document.addEventListener("visibilitychange", () => {
     stopTravel();
     engine.save();
     audio.suspend();
-  }
+  } else if (soundOn && audioStarted) audio.resume();
 });
 
 $("destination").addEventListener("change", (event) => {
@@ -588,7 +642,9 @@ window.addEventListener("ularn:graphics-restored", () => {
 
 // Menus and background tabs need no continuous scene rendering.
 function syncRenderPause() {
-  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]"));
+  if (document.hidden || document.querySelector("dialog[open]")) stopTravel();
+  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]") || !!state && (!state.maze || state.over));
+  audio.setMenu(!!document.querySelector("dialog[open]") || !!state && !state.maze);
 }
 const dialogObserver = new MutationObserver(syncRenderPause);
 for (const dialog of document.querySelectorAll("dialog"))
@@ -598,5 +654,29 @@ document.addEventListener("visibilitychange", syncRenderPause);
 const mapObserver = new ResizeObserver(() => {
   const bounds = document.querySelector(".map-panel").getBoundingClientRect();
   document.body.style.setProperty("--map-bottom", `${Math.ceil(bounds.bottom)}px`);
+  updateViewport();
 });
 mapObserver.observe(document.querySelector(".map-panel"));
+
+function updateViewport() {
+  if (!world || !document.body.classList.contains("playing")) return;
+  const dock = document.querySelector(".adventure-bar").getBoundingClientRect();
+  const map = document.querySelector(".map-panel").getBoundingClientRect();
+  const topbar = document.querySelector(".topbar").getBoundingClientRect();
+  const effects = $("effects-panel").getBoundingClientRect();
+  const portrait = innerWidth <= 700 && innerWidth < innerHeight * 4 / 3;
+  const inventory = $("inventory-panel").getBoundingClientRect();
+  const tools = document.querySelector(".camera-tools").getBoundingClientRect();
+  const left = portrait ? inventory.width && !$("inventory-panel").hidden ? inventory.right + 16 : 12 : Math.max(map.right + 24, 270);
+  const right = portrait ? innerWidth - 12 : effects.width && !$("effects-panel").hidden ? effects.left - 18 : innerWidth - 30;
+  const top = portrait ? Math.max(map.bottom, tools.bottom) + 12 : topbar.bottom + 34;
+  const bottom = Math.max(top + 40, dock.top - 16);
+  world.setViewportRect({ left: Math.min(left, right - 80), right, top, bottom });
+}
+const viewportObserver = new ResizeObserver(updateViewport);
+viewportObserver.observe(document.querySelector(".adventure-bar"));
+viewportObserver.observe($("inventory-panel"));
+viewportObserver.observe(document.querySelector(".camera-tools"));
+window.addEventListener("resize", () => { gameMap.resize(); updateViewport(); });
+
+window.addEventListener("pagehide", () => audio.suspend());

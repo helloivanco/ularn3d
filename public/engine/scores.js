@@ -20,6 +20,7 @@ let LocalScore = function () {
   this.hardlev = getDifficulty(); /* the level of difficulty player played at */
   this.score = player ? (player.GOLD + player.BANKACCOUNT + winBonus) : 0; /* the score of the player */
   this.timeused = Math.floor(gtime / 100); /* the time used in mobuls to win the game */
+  this.moves = player ? player.MOVESMADE : 0;
   this.what = getWhyDead(lastmonst); /* the number of the monster that killed player */
   this.level = LEVELNAMES[level]; /* the level player was on when he died */
   this.playerID = playerID; /* nothing nefarious, just a simple way to differentiate players in the game database */
@@ -189,6 +190,10 @@ function sortScore(a, b) {
 let winners = [];
 let losers = [];
 let scoreIndex = 0;
+let scoreboardActive = false;
+let scoreboardLocal = true;
+let scoreboardRequest = 0;
+let scoreDetailsRequest = 0;
 
 
 const MAX_SCORES_PER_PAGE = 18;
@@ -198,25 +203,35 @@ const MIN_TIME_PLAYED = 50;
 
 let A, R, O; // saved state for exiting scoreboard
 
-function loadScores(newScore, showWinners, showLosers) {
+function loadScores(newScore, showWinners, showLosers, local = false) {
 
   A = amiga_mode;
   R = getPref('retro_mode');
   O = getPref('original_objects');
+  scoreboardActive = true;
+  scoreboardLocal = local;
+  scoreIndex = 0;
+  winners = [];
+  losers = [];
+  ++scoreboardRequest;
+  bound_exitscores = exitscores.bind(null, newScore, local);
+  setCharCallback(GAMEOVER ? dead : bound_exitscores);
   mazeMode = false;
   amiga_mode = false;
+  if (GAMEOVER) detachDisplay();
   clear();
   lprcat(`Loading Scoreboard...\n`);
-
-  if (GAMEOVER) detachDisplay(); // stop using 80x24 grid, this is a pretty weird hack
-
-  dbQueryHighScores(newScore, showWinners, showLosers);
+  setDiv('STATS', 'Loading global records…');
+  blt();
+  if (local) showLocalScoreBoard(newScore, showWinners, showLosers, 0, 'Local expedition records on this device.');
+  else dbQueryHighScores(newScore, showWinners, showLosers);
 
 }
 
 
 
 async function dbQueryHighScores(newScore, showWinners, showLosers) {
+  const request = scoreboardRequest;
 
   // use this to keep local players off the scoreboard
   // if (!navigator.onLine || isLocal() || isFile()) {
@@ -229,16 +244,19 @@ async function dbQueryHighScores(newScore, showWinners, showLosers) {
 
   try {
     const cfhighscores = await getHighscores();
+    if (!scoreboardActive || request !== scoreboardRequest) return;
     if (cfhighscores) {
       winners = cfhighscores.winners;
       if (winners) console.log(`loaded winners: ${winners.length}`);
       losers = cfhighscores.visitors;
       if (losers) console.log(`loaded losers: ${losers.length}`);
+      setDiv('STATS', 'Global scores shared by players of this edition. Finished expeditions sync when online.');
       showScores(newScore, false, showWinners, showLosers, 0);
     } else {
       throw new Error('Error loading highscores');
     }
   } catch (error) {
+    if (!scoreboardActive || request !== scoreboardRequest) return;
     console.error('Failed to get highscores from Cloudflare:', error);
     const msg = `Error loading global scoreboard, showing local scoreboard`;
     showLocalScoreBoard(newScore, showWinners, showLosers, 0, msg);
@@ -248,8 +266,8 @@ async function dbQueryHighScores(newScore, showWinners, showLosers) {
 
 
 function showLocalScoreBoard(newScore, showWinners, showLosers, offset, message) {
-  showScores(newScore, true, showWinners, showLosers, offset);
   setDiv(`STATS`, message);
+  showScores(newScore, true, showWinners, showLosers, offset);
 }
 
 
@@ -263,6 +281,9 @@ const VISITOR_HEADER_ULARN = `     <b>Score  Diff  Visitor                   Cla
 let bound_exitscores; // for button callback comparison
 function exitscores(newScore, local, key) {
   if (key == ESC || key == ENTER) {
+    scoreboardActive = false;
+    ++scoreboardRequest;
+    ++scoreDetailsRequest;
     scoreIndex = 0;
     setMode(A, R, O);
     nomove = NOMOVE;
@@ -281,24 +302,26 @@ function exitscores(newScore, local, key) {
 }
 
 function showScores(newScore, local, showWinners, showLosers, offset) {
+  scoreboardLocal = local;
+  if (GAMEOVER) alternativeDisplay = ' ';
   mazeMode = false;
 
   const gotwLabel = GOTW ? ` Weekly ` : ` `;
-  const movesLabel = GOTW ? ` ` : ` (Games > ${MIN_TIME_PLAYED} mobuls)`;
+  const movesLabel = ``;
 
   if (!GAMEOVER) clear();
 
   if (local) {
-    lprcat(`                    <b>${GAMENAME} Scoreboard</b> (Global scoreboard not available)\n\n`);
+    lprcat(`                    <b>${GAMENAME} Local Scoreboard</b>\n\n`);
     winners = localStorageGetObject('winners', []).sort(sortScore);
     losers = localStorageGetObject('losers', []).sort(sortScore);
   } else {
     if (showWinners && !showLosers)
-      lprcat(`                  <b>${GAMENAME}${gotwLabel}Winners Scoreboard</b>\n\n`);
+      lprcat(`                  <b>${GAMENAME}${gotwLabel}Global Winners Scoreboard</b>\n\n`);
     else if (showLosers && !showWinners)
-      lprcat(`                  <b>${GAMENAME}${gotwLabel}Visitors Scoreboard</b>${movesLabel}\n\n`);
+      lprcat(`          <b>${GAMENAME}${gotwLabel}Global Visitors Scoreboard</b>${movesLabel}\n\n`);
     else
-      lprcat(`                  <b>${GAMENAME}${gotwLabel}Scoreboard</b>${movesLabel}\n\n`);
+      lprcat(`             <b>${GAMENAME}${gotwLabel}Global Scoreboard</b>\n\n`);
   }
 
   if (GAMEOVER) {
@@ -310,16 +333,16 @@ function showScores(newScore, local, showWinners, showLosers, offset) {
       lprcat(ULARN ? VISITOR_HEADER_ULARN : VISITOR_HEADER_LARN);
     }
     lprc(`\n`);
-    printScore(newScore);
+    printScore(newScore, true);
     lprc(`<hr>\n`);
   }
 
   if (winners.length != 0 || losers.length != 0) {
-    if (showWinners) {
+    if (showWinners && (winners.length || !showLosers)) {
       printScoreBoard(winners, ULARN ? WINNER_HEADER_ULARN : WINNER_HEADER_LARN, offset);
       lprc(`\n`);
     }
-    if (showLosers) {
+    if (showLosers && (GAMEOVER || !showWinners || !winners.length)) {
       printScoreBoard(losers, ULARN ? VISITOR_HEADER_ULARN : VISITOR_HEADER_LARN, offset);
     }
   } else {
@@ -342,7 +365,21 @@ function showScores(newScore, local, showWinners, showLosers, offset) {
 
 
 
-function printScore(p) {
+function escapeScoreText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
+
+function scoreDetailsText(score) {
+  if (!score) return "Could not load this expedition's details.";
+  if (score.player) {
+    try { return getStatString(score, true); } catch { /* Older records may lack full state. */ }
+  }
+  return `Player: ${escapeScoreText(score.who)}\nClass: ${escapeScoreText(score.character)}\nScore: ${score.score}\nDiff: ${score.hardlev}\nMobuls: ${score.timeused}\nWinner: ${score.winner ? 'Yes' : 'No'}\nFate: ${escapeScoreText(score.what)} on ${escapeScoreText(score.level)}`;
+}
+
+function printScore(p, local = scoreboardLocal) {
   let score;
   if (p.winner) {
     if (ULARN) {
@@ -361,6 +398,7 @@ function printScore(p) {
 
   const isNewScore = gameID ? p.gameID.split(`+`)[0] == gameID.split(`+`)[0] : false;
 
+  score = escapeScoreText(score);
   if (isNewScore) {
     score = `<b>${score}</b>`;
   }
@@ -370,8 +408,7 @@ function printScore(p) {
   // use this to keep local players off the scoreboard
   // const local = !navigator.onLine || isLocal() || isFile();
 
-  const local = !navigator.onLine;
-  lprcat(`<a href='javascript:dbQueryLoadGame("${p.gameID}", ${local}, ${p.winner})'>${score}</a>${endcode}`);
+  lprcat(`<a href='#' data-score-game='${escapeScoreText(p.gameID)}' data-score-local='${local}' data-score-winner='${p.winner}'>${score}</a>${endcode}`);
   if (!GAMEOVER) lprc(`\n`);
 }
 
@@ -400,8 +437,12 @@ function printScoreBoard(board, header, offset) {
 
 
 async function dbQueryLoadGame(gameID, local, winner) {
+  const request = ++scoreDetailsRequest;
+  const boardRequest = scoreboardRequest;
   const endGameScore = new LocalScore();
   let stats = ``;
+  setDiv('STATS', 'Loading expedition details…');
+  window.dispatchEvent(new Event('ularn:update'));
 
   // clicked on current game
   if (endGameScore.gameID === gameID) {
@@ -417,8 +458,21 @@ async function dbQueryLoadGame(gameID, local, winner) {
       stats = await cloudflareLoadGame(gameID); // loadgame calls getStatString()
     }
   }
-  setDiv(`STATS`, stats);
+  if (!scoreboardActive || request !== scoreDetailsRequest || boardRequest !== scoreboardRequest) return;
+  // Logs and character names are data, including those received from the service.
+  const template = document.createElement('template');
+  template.innerHTML = stats;
+  template.content.querySelectorAll('a[href^="https://larn.org/larn/tv/"]').forEach(link => link.remove());
+  setDiv(`STATS`, escapeScoreText(template.content.textContent.trim()));
+  window.dispatchEvent(new Event('ularn:update'));
 }
+
+document.addEventListener('click', event => {
+  const link = event.target.closest?.('a[data-score-game]');
+  if (!link) return;
+  event.preventDefault();
+  dbQueryLoadGame(link.dataset.scoreGame, link.dataset.scoreLocal === 'true', link.dataset.scoreWinner === 'true');
+});
 
 
 
@@ -685,11 +739,6 @@ async function writeScoreToDatabase(endGameScore) {
       !retriedGOTW // on first GOTW attempt
     ) {
     localWriteHighScore(endGameScore);
-
-    if (!navigator.onLine) {
-      console.error(`writeScoreToDatabase(): offline`);
-      return;
-    }
 
     // use this to keep local players off the scoreboard
     // if (!navigator.onLine || isLocal() || isFile()) {

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { mapClick } from "./map-helper.js";
 
 const faults = new WeakMap();
 test.beforeEach(async ({ page }) => {
@@ -82,7 +83,7 @@ test("focused interface controls activate with Enter and Space without spending 
   await expect(page.locator("#guide-dialog")).not.toBeVisible();
   await page.locator("#sound").focus();
   await page.keyboard.press("Space");
-  await expect(page.locator("#sound")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#sound")).toHaveAttribute("aria-pressed", "false");
   await page.locator("#pause").focus();
   await page.keyboard.press("Enter");
   await expect(page.locator("#pause-dialog")).toBeVisible();
@@ -122,13 +123,7 @@ test("door clicks resolve one action without leaving queued direction input", as
     setItem(11, 8, OCLOSEDDOOR);
     paint();
   });
-  const clickDoor = async () => {
-    const box = await page.locator("#minimap").boundingBox();
-    await page.mouse.click(
-      box.x + (11.5 / 67) * box.width,
-      box.y + (8.5 / 17) * box.height,
-    );
-  };
+  const clickDoor = () => mapClick(page, 11, 8);
   const before = await page.evaluate(() => player.MOVESMADE);
   await clickDoor();
   expect(

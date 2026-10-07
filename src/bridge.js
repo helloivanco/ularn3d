@@ -1,4 +1,4 @@
-/* Presentation adapter. The upstream engine remains the authority for all rules. */
+/* 3D adapter. The engine owns gameplay; explicit balance changes stay here. */
 ENABLE_RECORDING = false;
 ENABLE_RECORDING_REALTIME = false;
 isMobile = () => true; // Native contextual buttons are useful on every screen size.
@@ -19,9 +19,17 @@ doRollbar = (severity, title, detail) => {
   else if (severity === ROLLBAR_WARN) console.warn(title, detail);
 };
 uploadStyle = () => true;
-cloudflareWriteHighScore = async () => {}; // This fork never submits to larn.org.
-dbQueryHighScores = async (score, winners, losers) =>
-  showLocalScoreBoard(score, winners, losers, 0, "Local expedition records");
+cloudflareWriteHighScore = score => ularnScoreService.submit(score, "3d");
+getHighscores = () => ularnScoreService.highscores(ULARN, "3d");
+cloudflareLoadGame = async id => {
+  const score = await ularnScoreService.details(id, "3d");
+  return scoreDetailsText(score);
+};
+const originalShowScores3D = showScores;
+showScores = function (...args) {
+  originalShowScores3D(...args);
+  window.dispatchEvent(new Event("ularn:update"));
+};
 
 // Legacy checkpoint and winner-mail routines must not alter classic saves.
 const originalStorageGet3D = localStorageGetObject;
@@ -90,6 +98,125 @@ function readAutoLoot3D() {
 // also let dead monsters and discarded levels be collected normally.
 const monsterPresentation3D = new WeakMap();
 let nextMonsterID3D = 1;
+
+// Lemmings are small nuisances in this edition. Keep the classic scripts intact,
+// preserve existing saved swarms, and limit only new placements on each floor.
+const MAX_LEMMINGS_3D = 4;
+const placedLemmings3D = new WeakSet();
+let movingMonster3D = null;
+function lemmingLimitReached3D() {
+  let count = 0;
+  for (const column of LEVELS[level]?.monsters || [])
+    for (const monster of column)
+      if (monster?.matches(LEMMING) && ++count >= MAX_LEMMINGS_3D) return true;
+  return false;
+}
+const originalSetMonsterBalance3D = setMonster;
+setMonster = function (x, y, monster, placement) {
+  if (ULARN) {
+    const previous = inBounds(x, y) ? monsterAt(x, y) : null;
+    if (previous?.matches(LEMMING)) placedLemmings3D.add(previous);
+    const species = typeof monster === "number" ? monster : monster?.arg;
+    if (species === LEMMING) {
+      if (isGenocided(LEMMING) && !placedLemmings3D.has(monster)) return null;
+      // mmove's 2% birth must not replenish the swarm. Moving the original
+      // creature is still allowed, including old saves above the new cap.
+      if (movingMonster3D?.matches(LEMMING) && monster !== movingMonster3D)
+        return null;
+      const replacing = (!placement || placement === OVERWRITE) && previous?.matches(LEMMING);
+      if (!replacing && !placedLemmings3D.has(monster) && lemmingLimitReached3D())
+        return null;
+    }
+  }
+  const result = originalSetMonsterBalance3D(x, y, monster, placement);
+  if (ULARN && result?.matches(LEMMING)) placedLemmings3D.add(result);
+  return result;
+};
+const originalFillMonsterBalance3D = fillmonst;
+fillmonst = function (species, awake) {
+  if (ULARN && (species === LEMMING || species?.arg === LEMMING) &&
+    (isGenocided(LEMMING) || lemmingLimitReached3D()))
+    return null;
+  return originalFillMonsterBalance3D(species, awake);
+};
+
+function hasCaveRats3D() {
+  return LEVELS[level]?.monsters.some((column) => column.some((monster) => monster?.matches(LEMMING)));
+}
+function spawnCaveRat3D() {
+  if (!player || !ULARN || level < 1 || level > DBOTTOM || GAMEOVER || DEBUG_NO_MONSTERS ||
+    player.TIMESTOP || isGenocided(LEMMING) || lemmingLimitReached3D()) return null;
+  const nearby = [], distant = [];
+  for (let x = 1; x < MAXX - 1; x++) for (let y = 1; y < MAXY - 1; y++) {
+    const distance = Math.max(Math.abs(x - player.x), Math.abs(y - player.y));
+    // Stay clear of the hero, occupied squares, loot, doors, stairs and traps.
+    if (distance < 3 || monsterAt(x, y) || !itemAt(x, y).matches(OEMPTY)) continue;
+    (distance <= 7 ? nearby : distant).push({ x, y });
+  }
+  const candidates = nearby.length ? nearby : distant;
+  if (!candidates.length) return null;
+  const { x, y } = candidates[rnd(candidates.length) - 1];
+  return setMonster(x, y, LEMMING);
+}
+const originalSetHPBalance3D = sethp;
+sethp = function (newLevel) {
+  const result = originalSetHPBalance3D(newLevel);
+  if (newLevel && !hasCaveRats3D()) spawnCaveRat3D();
+  return result;
+};
+const originalRandomMonstersBalance3D = randmonst;
+let lastCaveRatTurn3D = -1;
+randmonst = function () {
+  const result = originalRandomMonstersBalance3D();
+  const turn = player?.MOVESMADE;
+  if (!player || !ULARN || level < 1 || level > DBOTTOM || GAMEOVER || player.TIMESTOP ||
+    DEBUG_NO_MONSTERS || isGenocided(LEMMING) || lemmingLimitReached3D() ||
+    !turn || turn % 24 !== 0 || lastCaveRatTurn3D === turn) return result;
+  lastCaveRatTurn3D = turn;
+  // Refill a cleared floor; otherwise add occasional wildlife without swarms.
+  // The saved turn count supplies the cadence, so reloads do not reset it.
+  if (!hasCaveRats3D() || rnd(100) <= 60) spawnCaveRat3D();
+  return result;
+};
+
+// Harmless lemmings must not set the engine's "under attack" interruption flag
+// or suppress nearby stairs, doors, rest and native exploration interactions.
+const originalHitPlayerBalance3D = hitplayer;
+hitplayer = function (x, y) {
+  if (ULARN && monsterAt(x, y)?.matches(LEMMING)) return;
+  return originalHitPlayerBalance3D(x, y);
+};
+const originalNearbyMonstersBalance3D = nearbymonsters;
+nearbymonsters = function () {
+  const monsters = originalNearbyMonstersBalance3D();
+  return ULARN ? monsters.filter((monster) => !monster.matches(LEMMING)) : monsters;
+};
+const originalNearbyMonsterBalance3D = nearbymonst;
+nearbymonst = function () {
+  return ULARN ? nearbymonsters().length > 0 : originalNearbyMonsterBalance3D();
+};
+const originalExplorerMonstersBalance3D = MazeExplorer.monstersAdjacentTo;
+MazeExplorer.monstersAdjacentTo = function (x, y) {
+  const monsters = originalExplorerMonstersBalance3D.call(this, x, y);
+  return ULARN ? monsters.filter((monster) => !monster.matches(LEMMING)) : monsters;
+};
+
+const originalPlayerMoveBalance3D = moveplayer;
+moveplayer = function (direction) {
+  const canAdvance = ULARN && !player.CONFUSE && !player.TIMESTOP &&
+    Number.isInteger(direction) && direction >= 1 && direction <= 8;
+  const from = { x: player.x, y: player.y, level };
+  const x = from.x + diroffx[direction], y = from.y + diroffy[direction];
+  const lemming = canAdvance && inBounds(x, y) && monsterAt(x, y)?.matches(LEMMING);
+  const result = originalPlayerMoveBalance3D(direction);
+  // Keep the normal attack, loot, XP and terrain interactions. Advancing into
+  // the cleared square is part of this one action, not another engine turn.
+  if (lemming && !GAMEOVER && !blocking_callback && level === from.level &&
+    player.x === from.x && player.y === from.y && !monsterAt(x, y))
+    return originalPlayerMoveBalance3D(direction);
+  return result;
+};
+
 function monsterView3D(monster) {
   if (!monsterPresentation3D.has(monster))
     monsterPresentation3D.set(monster, {
@@ -106,7 +233,13 @@ mmove = function (sx, sy, dx, dy) {
       x: Math.sign(dx - sx),
       y: Math.sign(dy - sy),
     };
-  return originalMonsterMove3D(sx, sy, dx, dy);
+  const previous = movingMonster3D;
+  movingMonster3D = monster;
+  try {
+    return originalMonsterMove3D(sx, sy, dx, dy);
+  } finally {
+    movingMonster3D = previous;
+  }
 };
 
 function plainText3D(value) {
@@ -170,6 +303,44 @@ const effectNames3D = {
 function emitCombat3D(detail) {
   window.dispatchEvent(new CustomEvent("ularn:combat", { detail }));
 }
+function emitAction3D(kind, location, detail = {}) {
+  window.dispatchEvent(new CustomEvent("ularn:action", { detail: { kind, level: location.level, from: location.from, ...detail } }));
+}
+const originalTakeAudio3D = take;
+take = function (item) {
+  const active = mazeMode, location = { level, from: { x: player.x, y: player.y } };
+  const result = originalTakeAudio3D(item);
+  if (active && result) emitAction3D("loot", location);
+  return result;
+};
+const originalQuaffAudio3D = quaffPotion;
+quaffPotion = function (item) {
+  const location = { level, from: { x: player.x, y: player.y } }, present = player.inventory.includes(item);
+  const result = originalQuaffAudio3D(item);
+  if (present && !player.inventory.includes(item)) emitAction3D("potion", location);
+  return result;
+};
+const originalReadAudio3D = readSomething;
+readSomething = function (item) {
+  const location = { level, from: { x: player.x, y: player.y } }, present = player.inventory.includes(item);
+  const result = originalReadAudio3D(item);
+  if (present && !player.inventory.includes(item)) emitAction3D("read", location);
+  return result;
+};
+const originalDoorAudio3D = act_open_door;
+act_open_door = function (x, y) {
+  const location = { level, from: { x: player.x, y: player.y } }, closed = itemAt(x, y)?.matches(OCLOSEDDOOR);
+  const result = originalDoorAudio3D(x, y);
+  if (closed && itemAt(x, y)?.matches(OOPENDOOR)) emitAction3D("door", location);
+  return result;
+};
+const originalChestAudio3D = act_open_chest;
+act_open_chest = function (x, y) {
+  const location = { level, from: { x: player.x, y: player.y } }, chest = itemAt(x, y)?.matches(OCHEST), hp = player.HP;
+  const result = originalChestAudio3D(x, y);
+  if (chest && !itemAt(x, y)?.matches(OCHEST)) emitAction3D("chest", location, { exploded: player.HP < hp });
+  return result;
+};
 const originalHitMonster3D = hitmonster;
 hitmonster = function (x, y) {
   const monster = monsterAt(x, y);
@@ -178,7 +349,16 @@ hitmonster = function (x, y) {
   const from = { x: player.x, y: player.y };
   const beforeHP = monster.hitpoints;
   const combatLevel = level;
-  const result = originalHitMonster3D(x, y);
+  let result;
+  if (ULARN && monster.matches(LEMMING)) {
+    const blind = ifblind(x, y);
+    updateLog(`You hit the ${blind ? "monster" : monster}${period}`);
+    // Use the normal death/loot/experience path, including weakened attacks.
+    // Bypassing the lemming attempt also removes its 40% post-attack birth.
+    result = hitm(x, y, Math.max(1, monster.hitpoints) * (player.HALFDAM > 0 ? 2 : 1));
+  } else {
+    result = originalHitMonster3D(x, y);
+  }
   emitCombat3D({
     kind: "weapon", phase: "impact", level: combatLevel,
     name: weapon.name, weapon, from, to: { x, y }, path: [from, { x, y }],
@@ -272,12 +452,121 @@ buttonCache.forEach((button, key) => {
 let saveTimer3D = null;
 let initialized3D = false;
 let saveError3D = "";
+let saveEpoch3D = 0, saveSequence3D = 0, saveWorker3D = null;
+let saveInFlight3D = null, saveWorkerFailed3D = false;
+const saveQueue3D = new Map();
+const saveMetrics3D = { worker: false, pending: 0, compressionMs: 0, captureMs: 0, writeMs: 0, completed: 0 };
+window.ularnPersistence = Object.freeze({ metrics: () => ({ ...saveMetrics3D }) });
+
+function reportSaveError3D() {
+  const previous = saveError3D;
+  saveError3D = "Saving unavailable. Check browser storage.";
+  if (!previous) window.dispatchEvent(new CustomEvent("ularn:storage", { detail: saveError3D }));
+}
+function invalidatePendingSaves3D() {
+  saveEpoch3D++;
+  saveQueue3D.clear();
+  saveMetrics3D.pending = 0;
+}
+function writeCompressed3D(job) {
+  if (job.epoch !== saveEpoch3D || GAMEOVER || !initialized3D) return;
+  // A newer capture for this slot supersedes an older worker response.
+  if (saveQueue3D.has(job.key)) return;
+  const started = performance.now();
+  try {
+    if (job.legacy) {
+      localStorage.setItem(job.key + COMPRESSED_DATA, job.compressed);
+      localStorage.setItem(job.key, COMPRESSED_DATA);
+    } else localStorage.setItem(job.key, job.compressed);
+    saveMetrics3D.writeMs = performance.now() - started;
+    saveMetrics3D.compressionMs = job.compressionMs || 0;
+    saveMetrics3D.completed++;
+    if (saveError3D) window.dispatchEvent(new CustomEvent("ularn:storage", { detail: "" }));
+    saveError3D = "";
+  } catch { reportSaveError3D(); }
+}
+function pumpSaves3D() {
+  saveMetrics3D.pending = saveQueue3D.size + (saveInFlight3D ? 1 : 0);
+  if (saveInFlight3D || !saveQueue3D.size) return;
+  const [key, job] = saveQueue3D.entries().next().value;
+  saveQueue3D.delete(key);
+  if (job.epoch !== saveEpoch3D || GAMEOVER) { pumpSaves3D(); return; }
+  if (!saveWorker3D && !saveWorkerFailed3D) {
+    try {
+      saveWorker3D = new Worker(new URL("/engine/workers/autosaveWorker.js", location.href));
+      saveMetrics3D.worker = true;
+      saveWorker3D.onmessage = ({ data }) => {
+        if (data.sequence !== saveInFlight3D?.sequence) return;
+        if (data.error) { failSaveWorker3D(); return; }
+        saveInFlight3D = null;
+        writeCompressed3D(data);
+        pumpSaves3D();
+      };
+      saveWorker3D.onerror = (event) => { event.preventDefault(); failSaveWorker3D(); };
+    } catch { saveWorkerFailed3D = true; }
+  }
+  saveInFlight3D = job;
+  saveMetrics3D.pending = saveQueue3D.size + 1;
+  if (saveWorker3D) {
+    try { saveWorker3D.postMessage(job); } catch { failSaveWorker3D(); }
+  } else {
+    // Worker-less hosts keep the original format, using an idle opportunity.
+    const compress = () => {
+      if (job !== saveInFlight3D) return;
+      saveInFlight3D = null;
+      if (job.epoch === saveEpoch3D && !GAMEOVER) {
+        try {
+          const started = performance.now();
+          writeCompressed3D({ ...job, compressed: LZString.compressToUTF16(job.value), compressionMs: performance.now() - started });
+        } catch { reportSaveError3D(); }
+      }
+      pumpSaves3D();
+    };
+    if (window.requestIdleCallback) requestIdleCallback(compress, { timeout: 1000 });
+    else setTimeout(compress, 0);
+  }
+}
+function failSaveWorker3D() {
+  saveWorker3D?.terminate(); saveWorker3D = null; saveWorkerFailed3D = true;
+  saveMetrics3D.worker = false;
+  if (saveInFlight3D?.epoch === saveEpoch3D && !saveQueue3D.has(saveInFlight3D.key))
+    saveQueue3D.set(saveInFlight3D.key, saveInFlight3D);
+  saveInFlight3D = null;
+  pumpSaves3D();
+}
+function equipmentSlots3D() {
+  return Object.fromEntries(["WIELD", "WEAR", "SHIELD"].map((field) =>
+    [field, player[field] ? player.inventory.indexOf(player[field]) : null]));
+}
+function enqueueSave3D(key, data, legacy = false) {
+  const started = performance.now();
+  try {
+    // Serialize now, while stable: GameState contains live engine references.
+    const value = JSON.stringify(data);
+    saveMetrics3D.captureMs = performance.now() - started;
+    saveQueue3D.set(key, { key, value, legacy, epoch: saveEpoch3D, sequence: ++saveSequence3D });
+    pumpSaves3D();
+  } catch { reportSaveError3D(); }
+}
+function autosave3D() {
+  if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping) return;
+  enqueueSave3D(SAVE_KEY_3D, { version: 1, state: new GameState(true), equipment: equipmentSlots3D() });
+}
+const originalCheckpointSave3D = saveGame;
+saveGame = function (checkpoint) {
+  if (!initialized3D || !checkpoint) return originalCheckpointSave3D(checkpoint);
+  const state = new GameState(true);
+  state.cheat = true;
+  enqueueSave3D(`ularn3d.legacy.checkpointbackup${ULARN ? "_ularn" : ""}`, state, true);
+  return true;
+};
 const originalPaint3D = paint;
 paint = function () {
   originalPaint3D();
   if (!initialized3D) return;
   window.dispatchEvent(new Event("ularn:update"));
   if (GAMEOVER) {
+    invalidatePendingSaves3D();
     clearTimeout(saveTimer3D);
     saveTimer3D = null;
     try {
@@ -290,12 +579,17 @@ paint = function () {
     // longer stalls. Coalesce changes, but still save during continuous travel.
     saveTimer3D = setTimeout(() => {
       saveTimer3D = null;
-      window.ularn.save();
+      autosave3D();
     }, 2000);
   }
 };
 
 window.ularn = {
+  showScoreboard(local = false) {
+    if (!initialized3D || (!scoreboardActive && (blocking_callback || !mazeMode))) return;
+    loadScores(GAMEOVER ? new LocalScore() : null, true, true, local);
+    window.dispatchEvent(new Event("ularn:update"));
+  },
   setAutoLoot(enabled) {
     const value = !!enabled;
     overridePref("auto_pickup", value);
@@ -470,15 +764,11 @@ window.ularn = {
       return false;
     clearTimeout(saveTimer3D);
     saveTimer3D = null;
+    invalidatePendingSaves3D();
     try {
       // Equal-looking items can occupy different slots. Preserve their identity,
       // since the original loader matches equipment only by item ID and bonus.
-      const equipment = Object.fromEntries(
-        ["WIELD", "WEAR", "SHIELD"].map((field) => [
-          field,
-          player[field] ? player.inventory.indexOf(player[field]) : null,
-        ]),
-      );
+      const equipment = equipmentSlots3D();
       const data = { version: 1, state: new GameState(true), equipment };
       localStorage.setItem(
         SAVE_KEY_3D,
@@ -489,12 +779,7 @@ window.ularn = {
       saveError3D = "";
       return true;
     } catch {
-      const wasError = saveError3D;
-      saveError3D = "Saving unavailable. Check browser storage.";
-      if (!wasError)
-        window.dispatchEvent(
-          new CustomEvent("ularn:storage", { detail: saveError3D }),
-        );
+      reportSaveError3D();
       return false;
     }
   },
@@ -535,6 +820,7 @@ window.ularn = {
                 name: mimic ? monsterlist[mimic].desc : monster.desc,
                 symbol: plainText3D(monsterlist[mimic || monster.arg].char),
                 hp: monster.hitpoints,
+                harmless: ULARN && monster.matches(LEMMING),
                 color: monsterlist[mimic || monster.arg].color,
               }
             : null,
@@ -549,9 +835,14 @@ window.ularn = {
       volcanoFloors: MAXVLEVEL,
       maze: mazeMode,
       over: GAMEOVER,
+      winner: !!player.winner,
       busy: napping,
       prompt: !!blocking_callback,
+      scoreboard: scoreboardActive,
+      localScores: scoreboardLocal,
+      scoreSync: ularnScoreService.status(),
       name: logname,
+      gameID,
       character: player.char_picked,
       x: player.x,
       y: player.y,

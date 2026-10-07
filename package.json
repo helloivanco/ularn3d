@@ -7,8 +7,9 @@
   "author": "Ularn contributors",
   "main": "desktop/main.cjs",
   "scripts": {
+    "audio:build": "node scripts/build-audio.mjs",
     "dev": "node scripts/build-engine.mjs && vite --host 0.0.0.0",
-    "build": "node scripts/build-engine.mjs && vite build",
+    "build": "node scripts/build-engine.mjs --production && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "playwright test",
     "desktop": "npm run build && electron .",

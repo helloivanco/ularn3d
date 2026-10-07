@@ -1,8 +1,24 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mat, surface, noise } from "./materials.js";
+import { compact, disposeGeometry } from "./graphics-utils.js";
 export { mat } from "./materials.js";
 const shared = new Map();
+const weaponModels = new Map();
+const BLADE_STYLES = {
+  dagger: { length: .46, width: .115, grip: .14, guard: .23, steel: 0xc2d4dc, gold: 0xbda06c, gem: 0x5b8998 },
+  longsword: { length: .84, width: .12, grip: .19, guard: .3, steel: 0xcbdce4, gold: 0xc8a564, gem: 0x39798c },
+  sunsword: { length: .8, width: .135, grip: .18, guard: .31, steel: 0xe2dec2, gold: 0xe3bb63, gem: 0xf4c875 },
+  greatsword: { length: 1.02, width: .155, grip: .27, guard: .38, steel: 0xbfcfd9, gold: 0xb29970, gem: 0x688fa0 },
+  slashing: { length: .87, width: .14, grip: .19, guard: .32, steel: 0xbadbec, gold: 0x93b7c8, gem: 0x63c4ea, bend: .065 },
+  vorpal: { length: .92, width: .135, grip: .21, guard: .33, steel: 0xb8c6cd, gold: 0xd3a061, gem: 0xebad63 },
+  slayer: { length: .98, width: .165, grip: .23, guard: .37, steel: 0x718c9b, gold: 0xbba176, gem: 0xd85956, bend: -.035 },
+};
+export function bladeStyle(weapon = {}) {
+  const key = weapon?.type === "dagger" ? "dagger" :
+    ({ 28: "sunsword", 29: "greatsword", 58: "longsword", 26: "slashing", 90: "vorpal", 91: "slayer" })[weapon?.id] || "longsword";
+  return { key, ...BLADE_STYLES[key] };
+}
 const geometry = (key, create) => {
   if (!shared.has(key)) {
     const g = create();
@@ -44,11 +60,11 @@ export function cone(g, color, x, y, z, r, h, n = 8) {
     r,
   );
 }
-export function cylinder(g, color, x, y, z, r, h, n = 12) {
+export function cylinder(g, color, x, y, z, r, h, n = 12, extra) {
   return mesh(
     g,
     geometry(`cylinder${n}`, () => new THREE.CylinderGeometry(1, 1, 1, n)),
-    mat(color),
+    mat(color, extra),
     x,
     y,
     z,
@@ -75,6 +91,7 @@ export function ring(g, color, r = 0.4, y = 0.025) {
     r,
   );
   m.rotation.x = -Math.PI / 2;
+  m.castShadow = m.receiveShadow = false;
   return m;
 }
 export function tree(scale = 1) {
@@ -126,10 +143,12 @@ export function torch(g, x, y, z, scale = 1) {
     roughness: 1,
   });
   flame.scale.y *= 1.8;
-  orb(holder, 0xfff0c0, 0, 0.29, -0.03, 0.05, {
+  flame.castShadow = flame.receiveShadow = false;
+  const core = orb(holder, 0xfff0c0, 0, 0.29, -0.03, 0.05, {
     emissive: 0xffdf92,
     emissiveIntensity: 5,
   });
+  core.castShadow = core.receiveShadow = false;
   holder.userData.flame = true;
   return holder;
 }
@@ -169,45 +188,41 @@ export function hero(character = "Adventurer") {
   cape.rotation.x = -0.25;
   cape.scale.z = 0.25;
   cape.name = "cape";
+  const arm = new THREE.Group();
+  arm.name = "right-arm";
+  arm.position.set(.28, .7, 0);
+  body.add(arm);
   for (const x of [-0.28, 0.28]) {
     orb(body, 0x849b93, x, 0.7, 0, 0.135, { metalness: 0.65, roughness: 0.4 });
-    box(body, cloth, x, 0.51, 0, 0.13, 0.3, 0.14);
-    orb(body, 0xbd9d78, x, 0.35, -0.02, 0.073);
+    const parent = x > 0 ? arm : body;
+    box(parent, cloth, x > 0 ? 0 : x, x > 0 ? -.16 : .54, 0, .13, .24, .14);
+    box(parent, 0x83978e, x > 0 ? 0 : x, x > 0 ? -.29 : .41, -.025, .14, .1, .15, { metalness: .65, roughness: .34 });
+    orb(parent, 0xbd9d78, x > 0 ? 0 : x, x > 0 ? -.35 : .35, -.05, .073);
   }
+  compact(arm);
   orb(body, 0xc4aa89, 0, 0.92, -0.005, 0.145);
   const helm = orb(body, 0x8ca5a0, 0, 1.0, 0.015, 0.167, {
     metalness: 0.8,
     roughness: 0.32,
   });
   helm.scale.y *= 0.78;
+  if (["Wizard", "Rogue", "Ogre", "Rambo"].includes(character)) {
+    helm.visible = false;
+    for (const side of [-1, 1]) orb(body, 0x253634, side * .045, .94, -.142, .014);
+  }
   box(body, 0x253634, 0, 0.959, -0.14, 0.19, 0.038, 0.035);
   box(body, 0xc4aa71, 0, 0.99, -0.162, 0.028, 0.15, 0.02, { metalness: 0.7 });
   if (character === "Wizard") {
     cone(body, cloth, 0, 1.21, 0, 0.24, 0.55, 8);
     const brim = cylinder(body, cloth, 0, 1.0, 0, 0.25, 0.045);
   }
-  const sword = new THREE.Group();
-  sword.name = "weapon";
-  sword.position.set(0.31, 0.38, -0.11);
-  body.add(sword);
-  box(sword, 0xc5dedb, 0, 0.3, 0, 0.048, 0.68, 0.045, {
-    metalness: 0.95,
-    roughness: 0.2,
-  });
-  box(sword, 0xddba70, 0, 0.02, 0, 0.24, 0.045, 0.07, {
-    metalness: 0.8,
-    roughness: 0.3,
-  });
-  box(sword, 0x463e32, 0, -0.085, 0, 0.06, 0.17, 0.06);
-  orb(sword, 0xdab26a, 0, -0.19, 0, 0.042, { metalness: 0.8 });
-  if (character === "Wizard") {
-    sword.children.forEach((m) => (m.visible = false));
-    cylinder(sword, 0x786249, 0, 0.12, 0, 0.032, 0.96);
-    orb(sword, 0x9ed6e3, 0, 0.66, 0, 0.12, {
-      emissive: 0x66bee7,
-      emissiveIntensity: 2,
-    });
-  }
+  const weapon = new THREE.Group();
+  weapon.name = "weapon";
+  weapon.position.set(.025, -.30, -.09);
+  weapon.rotation.x = -.3;
+  arm.add(weapon);
+  arm.rotation.x = .12;
+  arm.rotation.z = -.08;
   const lantern = new THREE.Group();
   lantern.position.set(-0.33, 0.24, 0);
   body.add(lantern);
@@ -221,8 +236,126 @@ export function hero(character = "Adventurer") {
   box(lantern, 0x7b714f, 0, -0.11, 0, 0.18, 0.04, 0.18);
   if (character === "Dwarf") body.scale.set(1.2, 0.83, 1.12);
   if (character === "Ogre") body.scale.set(1.28, 1.2, 1.18);
+  if (character === "Dwarf") {
+    for (const x of [-.07, 0, .07]) cone(body, 0xa88759, x, .8, -.17, .065, .23, 5);
+  } else if (character === "Elf") {
+    for (const side of [-1, 1]) cone(body, 0xc4aa89, side * .18, .94, 0, .045, .18, 4).rotation.z = -side * .65;
+    box(body, 0xaec196, 0, .71, -.17, .07, .12, .035, { metalness: .4 });
+  } else if (character === "Rogue") {
+    cone(body, cloth, 0, 1.02, .035, .2, .34, 7);
+    box(body, 0x35413e, 0, .89, -.145, .24, .085, .05);
+  } else if (character === "Klingon") {
+    for (let i = 0; i < 4; i++) box(body, 0xc4aa89, 0, 1.08 - i * .033, -.13, .08 + i * .012, .025, .045);
+    for (const side of [-1, 1]) cone(body, 0xadb6a3, side * .28, .84, .02, .06, .16, 5);
+  } else if (character === "Rambo") {
+    box(body, 0xa6634e, 0, 1.01, -.03, .33, .06, .29);
+    box(body, 0xa6634e, .17, .86, .09, .05, .3, .045);
+    for (let i = 0; i < 4; i++) cylinder(body, 0xc4a972, -.13 + i * .075, .58, -.165, .018, .1, 6);
+  } else if (character === "Ogre") {
+    for (const side of [-1, 1]) cone(body, 0xe1d3ac, side * .075, .85, -.15, .025, .12, 5);
+  } else if (character === "Adventurer") {
+    box(body, 0xa98a55, -.15, .57, -.17, .055, .35, .035);
+    orb(body, 0xe0c78a, -.17, .71, -.2, .04, { metalness: .6 });
+  }
+  // Static armor, face and clothing draw together; joints retain their pivots.
+  const moving = body.children.filter((child) => ["left-leg", "right-leg", "right-arm", "cape"].includes(child.name));
+  moving.forEach((child) => body.remove(child));
+  compact(body);
+  moving.forEach((child) => {
+    if (child.isGroup && child !== arm) compact(child);
+    body.add(child);
+  });
   ring(g, 0xe6d091, 0.38, 0.012);
+  equipHero(g, { type: character === "Wizard" ? "staff" : "sword", id: 58 });
   return g;
+}
+
+function bladeGeometry(bend = 0) {
+  return geometry(`blade:${bend}`, () => {
+    const positions = [], uvs = [];
+    const stations = [[0, .55], [.12, 1], [.72, .8], [.9, .46], [1, 0]];
+    const corners = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+    const vertex = (station, corner) => {
+      const [y, width] = stations[station], [x, z] = corners[corner % 4];
+      positions.push(x * width / 2 + bend * y * y, y, z * (1 - y * .25) / 2 * (station === 4 ? 0 : 1));
+      uvs.push(corner / 4, y);
+    };
+    for (let i = 0; i < stations.length - 1; i++) for (let j = 0; j < 4; j++) {
+      vertex(i, j); vertex(i, j + 1); vertex(i + 1, j);
+      vertex(i, j + 1); vertex(i + 1, j + 1); vertex(i + 1, j);
+    }
+    const result = new THREE.BufferGeometry();
+    result.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    result.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    result.computeVertexNormals();
+    return result;
+  });
+}
+
+function detailedBlade(group, style) {
+  const metal = { metalness: .85, roughness: .23 };
+  mesh(group, bladeGeometry(style.bend), mat(style.steel, metal), 0, .055, 0, style.width, style.length, .036);
+  // The fuller and faceted section make the edge readable at gameplay scale.
+  box(group, 0x758e9d, 0, style.length * .37 + .09, -.018, .014, style.length * .57, .006, { metalness: .8, roughness: .34 });
+  box(group, style.gold, 0, .027, 0, .115, .066, .085, { metalness: .72, roughness: .3 });
+  for (const side of [-1, 1]) {
+    const wing = box(group, style.gold, side * style.guard * .28, .035, 0, style.guard * .46, .038, .072, { metalness: .72, roughness: .3 });
+    wing.rotation.z = side * (style.key === "slayer" ? -.28 : .22);
+    orb(group, style.gold, side * style.guard * .49, .035 + (style.key === "slayer" ? -.025 : .025), 0, .028, { metalness: .72, roughness: .3 });
+  }
+  cylinder(group, 0x4c3530, 0, -style.grip / 2 - .022, 0, .034, style.grip, 10);
+  for (let i = 0; i < 6; i++)
+    cylinder(group, 0x725348, 0, -.03 - i * style.grip / 6, 0, .038, .012, 10);
+  for (const y of [-.025, -style.grip - .025])
+    cylinder(group, style.gold, 0, y, 0, .042, .022, 10, { metalness: .72, roughness: .3 });
+  const pommel = orb(group, style.gold, 0, -style.grip - .075, 0, .058, { metalness: .72, roughness: .3 });
+  pommel.scale.y *= .75;
+  orb(group, style.gem, 0, -style.grip - .075, -.047, .025, { metalness: .35, roughness: .18, emissive: style.gem, emissiveIntensity: .22 });
+  if (!["dagger", "longsword", "greatsword"].includes(style.key))
+    orb(group, style.gem, 0, .14, -.021, .018, { emissive: style.gem, emissiveIntensity: .7, metalness: .3, roughness: .22 });
+}
+
+export function weaponModel(weapon = {}) {
+  const type = weapon?.type || "unarmed", style = bladeStyle(weapon);
+  const key = ["sword", "dagger"].includes(type) ? style.key : type;
+  if (!weaponModels.has(key)) {
+    const model = new THREE.Group();
+    const steel = 0xc4d7d5, wood = 0x8d714c;
+    if (["sword", "dagger"].includes(type)) detailedBlade(model, style);
+    else if (["staff", "spear", "lance"].includes(type)) {
+      cylinder(model, wood, 0, .22, 0, .026, type === "lance" ? 1.4 : 1.08, 8);
+      if (type === "staff") orb(model, 0x9ccbdc, 0, .78, 0, .09, { emissive: 0x76b0cf, emissiveIntensity: 1.5 });
+      else cone(model, steel, 0, .87, 0, .065, .31, 4);
+    } else if (type === "axe") {
+      cylinder(model, wood, 0, .18, 0, .033, .8, 8);
+      box(model, steel, .08, .48, 0, .34, .24, .065, { metalness: .7 });
+    } else if (["hammer", "blunt", "flail"].includes(type)) {
+      cylinder(model, wood, 0, .15, 0, .035, .65, 8);
+      if (type === "hammer") box(model, steel, 0, .5, 0, .3, .16, .16, { metalness: .7 });
+      else orb(model, type === "flail" ? steel : wood, 0, .52, 0, .12);
+    }
+    compact(model, true);
+    model.userData = { weaponType: type, weaponModel: key, bladeLength: ["sword", "dagger"].includes(type) ? style.length + .055 : 0, bladeBend: (style.bend || 0) * style.width };
+    weaponModels.set(key, model);
+  }
+  return weaponModels.get(key).clone();
+}
+
+export function equipHero(group, weapon) {
+  const pivot = group.getObjectByName("weapon");
+  if (!pivot) return;
+  const type = weapon?.type || "unarmed";
+  const key = ["sword", "dagger"].includes(type) ? bladeStyle(weapon).key : type;
+  if (pivot.userData.weaponModel === key) return;
+  disposeGeometry(pivot);
+  const model = weaponModel(weapon);
+  Object.assign(pivot.userData, model.userData);
+  if (model.children.length) pivot.add(...model.children.slice());
+}
+
+export function releaseModelResources() {
+  shared.forEach((geometry) => geometry.dispose());
+  weaponModels.forEach((model) => model.traverse((part) => part.geometry?.dispose()));
 }
 function windowDetail(g, x, y, z, w = 0.25, h = 0.33) {
   block(g, "wood", 0x544c39, x, y, z, w + 0.07, h + 0.07, 0.055);
@@ -570,7 +703,15 @@ export function itemModel(tile) {
     ring(g, 0x8f7656, 0.4);
     return g;
   }
-  if (/sword|dagger|spear|lance|blade|slayer|axe|flail|hammer/.test(n)) {
+  if (/sword|dagger|blade|slayer/.test(n)) {
+    const model = weaponModel({ id, type: /dagger/.test(n) ? "dagger" : "sword" });
+    model.rotation.z = -.65;
+    model.scale.setScalar(.75);
+    model.position.y = .24;
+    g.add(model);
+    return g;
+  }
+  if (/spear|lance|axe|flail|hammer/.test(n)) {
     const blade = box(g, 0xc0cbc3, 0, 0.3, 0, 0.07, 0.61, 0.07);
     blade.rotation.z = -0.6;
     box(g, 0xba985d, -0.15, 0.1, 0, 0.25, 0.06, 0.09);
@@ -671,109 +812,5 @@ export function itemModel(tile) {
         : 0xc0a66d;
   orb(g, color, 0, 0.24, 0, 0.18, { emissive: color, emissiveIntensity: 0.4 });
   ring(g, color, 0.27);
-  return g;
-}
-export function monsterModel(monster) {
-  const g = new THREE.Group(),
-    n = monster.name.toLowerCase();
-  let c = 0x918876;
-  try {
-    if (monster.color) c = new THREE.Color(monster.color);
-  } catch {
-    /* Default */
-  }
-  if (/dragon|demon|hellfire/.test(n)) {
-    cone(g, c, 0, 0.43, 0, 0.34, 0.78, 6);
-    orb(g, c, 0, 0.96, -0.04, 0.25);
-    for (const x of [-1, 1]) {
-      const wing = cone(g, c, x * 0.42, 0.67, 0.15, 0.45, 0.16, 3);
-      wing.rotation.set(0, 0, x * 0.6);
-      cone(g, 0xe1c9a0, x * 0.15, 1.2, 0, 0.065, 0.29);
-      box(g, c, x * 0.23, 0.17, 0, 0.18, 0.34, 0.3);
-    }
-    const tail = cone(g, c, 0, 0.2, 0.6, 0.15, 0.9);
-    tail.rotation.x = 1.2;
-  } else if (/snake|worm|naga|centipede/.test(n)) {
-    for (let i = 0; i < 6; i++)
-      orb(
-        g,
-        c,
-        Math.sin(i) * 0.13,
-        0.15,
-        0.35 - i * 0.14,
-        0.14 + (i === 5 ? 0.03 : 0),
-      );
-  } else if (/eye|vortex|sphere/.test(n)) {
-    orb(g, c, 0, 0.58, 0, 0.33, { emissive: c, emissiveIntensity: 0.3 });
-    orb(g, 0xe5dec5, 0, 0.57, -0.27, 0.14);
-    orb(g, 0x191d1c, 0, 0.57, -0.39, 0.065);
-  } else if (/mold|fung|mound|cube/.test(n)) {
-    if (/cube/.test(n))
-      box(g, c, 0, 0.35, 0, 0.68, 0.7, 0.68, {
-        transparent: true,
-        opacity: 0.7,
-      });
-    else {
-      cylinder(g, 0xaeac88, 0, 0.18, 0, 0.09, 0.35);
-      cone(g, c, 0, 0.44, 0, 0.4, 0.32, 7);
-    }
-  } else if (
-    /bat|bug|ant|spider|le[mn]ming|rat|jackal|hound|lizard|rothe/.test(n)
-  ) {
-    const body = orb(g, c, 0, 0.25, 0, 0.25);
-    body.scale.z *= 1.3;
-    orb(g, c, 0, 0.35, -0.3, 0.17);
-    for (const x of [-0.2, 0.2])
-      for (const z of [-0.15, 0.2]) box(g, c, x, 0.1, z, 0.065, 0.23, 0.075);
-    if (/bat/.test(n))
-      for (const x of [-0.4, 0.4]) {
-        const wing = cone(g, c, x, 0.4, 0, 0.33, 0.07, 3);
-        wing.rotation.z = x;
-      }
-  } else {
-    const cloth = new THREE.Color(c).multiplyScalar(0.48);
-    box(g, cloth, 0, 0.5, 0, 0.37, 0.5, 0.27);
-    box(g, 0x625243, 0, 0.31, 0, 0.39, 0.065, 0.29);
-    box(g, 0xb9a26c, 0, 0.31, -0.155, 0.07, 0.07, 0.035, { metalness: 0.7 });
-    for (const x of [-0.19, 0.19])
-      orb(g, 0x7a867c, x, 0.68, 0, 0.115, { metalness: 0.45 });
-    orb(g, c, 0, 0.85, -0.19, 0.068);
-    for (const x of [-0.3, 0.3]) orb(g, c, x, 0.28, 0, 0.075);
-    if (/wizard|lich|magician|gnome/.test(n)) {
-      cone(g, cloth, 0, 1.11, 0, 0.24, 0.39, 7);
-      cylinder(g, 0x736147, 0.36, 0.5, 0, 0.028, 0.9);
-      orb(g, 0xb28ccf, 0.36, 0.97, 0, 0.072, {
-        emissive: 0x9870ba,
-        emissiveIntensity: 1.2,
-      });
-    } else if (!/ghost|wraith|poltergeist/.test(n)) {
-      const weapon = box(g, 0x9cabaa, 0.32, 0.46, -0.08, 0.045, 0.48, 0.045, {
-        metalness: 0.7,
-      });
-      weapon.rotation.x = -0.3;
-      box(g, 0xb9a16c, 0.32, 0.24, -0.04, 0.16, 0.035, 0.05);
-    }
-
-    orb(g, c, 0, 0.88, 0, 0.2);
-    for (const x of [-0.13, 0.13])
-      box(g, 0x394642, x, 0.16, 0, 0.12, 0.32, 0.16);
-    for (const x of [-0.3, 0.3]) box(g, c, x, 0.5, 0, 0.12, 0.45, 0.14);
-    if (/wraith|ghost|poltergeist/.test(n)) cone(g, c, 0, 0.35, 0, 0.36, 0.6);
-  }
-  for (const x of [-0.075, 0.075])
-    orb(
-      g,
-      0xe7a17c,
-      x,
-      /dragon|demon|hellfire/.test(n)
-        ? 1.01
-        : /bug|ant|lemming|rat|hound|jackal/.test(n)
-          ? 0.4
-          : 0.91,
-      -0.185,
-      0.024,
-      { emissive: 0xed7742, emissiveIntensity: 2 },
-    );
-  ring(g, 0xbd705b, 0.37);
   return g;
 }

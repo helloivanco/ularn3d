@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { mapClick } from "./map-helper.js";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("ularn3d.quality", "performance"));
@@ -26,13 +27,7 @@ async function arena(page, depth = 2) {
   }, depth);
 }
 
-async function mapClick(page, x, y) {
-  const box = await page.locator("#minimap").boundingBox();
-  await page.mouse.click(
-    box.x + ((x + 0.5) / 67) * box.width,
-    box.y + ((y + 0.5) / 17) * box.height,
-  );
-}
+
 
 for (const [action, key] of [["drink", "D"], ["wash", "f"]]) {
   test(`${action} can drain a fountain, removes water actions, and explains the dry state`, async ({ page }) => {

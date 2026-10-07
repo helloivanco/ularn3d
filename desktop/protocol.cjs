@@ -3,6 +3,24 @@ const { createHash } = require("node:crypto");
 
 const APP_ORIGIN = "ularn://game";
 const SCHEME = "ularn";
+function scoreOrigin(projectURL) {
+  try {
+    const url = new URL(projectURL);
+    return url.protocol === "https:" && !url.username && !url.password &&
+      url.pathname === "/" && !url.search && !url.hash ? url.origin : null;
+  } catch { return null; }
+}
+
+function isScoreboardRequest(value, method, projectURL) {
+  if (!["GET", "POST", "OPTIONS"].includes(method)) return false;
+  try {
+    const url = new URL(value);
+    return url.origin === scoreOrigin(projectURL) && !url.username && !url.password &&
+      !url.hash && url.pathname === "/rest/v1/ularn_scores";
+  } catch {
+    return false;
+  }
+}
 
 function isLocalURL(value) {
   try {
@@ -46,7 +64,7 @@ const types = {
   ".md": "text/plain; charset=utf-8",
 };
 
-function assetHeaders(file) {
+function assetHeaders(file, projectURL) {
   const legacyPage = file.endsWith(`${path.sep}larn_local.html`);
   // The optional vendored classic page initializes through an inline script.
   // The 3D page only needs its existing context-recovery button's handler.
@@ -58,7 +76,7 @@ function assetHeaders(file) {
       "default-src 'self'", `script-src 'self'${legacyPage ? " 'unsafe-inline'" : ""}`,
       `script-src-attr ${legacyPage ? "'unsafe-inline'" : `'unsafe-hashes' 'sha256-${reloadHash}'`}`,
       "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
-      "font-src 'self' data:", "media-src 'self' blob:", "connect-src 'self'",
+      "font-src 'self' data:", "media-src 'self' blob:", `connect-src 'self'${scoreOrigin(projectURL) ? ` ${scoreOrigin(projectURL)}` : ""}`,
       "worker-src 'self' blob:", "object-src 'none'", "base-uri 'none'",
       "frame-src 'none'", "frame-ancestors 'none'", "form-action 'none'",
     ].join("; "),
@@ -66,4 +84,4 @@ function assetHeaders(file) {
   };
 }
 
-module.exports = { APP_ORIGIN, SCHEME, isLocalURL, resolveAssetPath, assetHeaders };
+module.exports = { APP_ORIGIN, SCHEME, isLocalURL, isScoreboardRequest, resolveAssetPath, assetHeaders };

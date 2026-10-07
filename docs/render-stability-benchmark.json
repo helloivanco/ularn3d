@@ -1,0 +1,133 @@
+[
+  {
+    "url": "http://127.0.0.1:4173",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "averageFps": 59.992985435417054,
+    "drawCalls": {
+      "minimum": 89,
+      "maximum": 201,
+      "mean": 122.03384615384616,
+      "p95": 198,
+      "samples": 325
+    },
+    "fixture": "12288930db25c54d252bf2d42b1536a07b39e660367b358981511689fdc13ec9",
+    "frames": {
+      "mean": 16.64938271615976,
+      "p95": 18.5,
+      "samples": 324
+    },
+    "render": {
+      "mean": 1.4996923063351557,
+      "p95": 2.5,
+      "samples": 325
+    },
+    "graphics": {
+      "quality": "auto",
+      "drawCalls": 89,
+      "triangles": 79542,
+      "geometries": 68,
+      "textures": 16,
+      "contextLost": false,
+      "frameMs": 16.667222222354678,
+      "renderedFrames": 361,
+      "frameLimit": 60,
+      "effectiveQuality": "balanced",
+      "pixelRatio": 1,
+      "activeFrameP95": 18.5,
+      "renderP95": 2.399999976158142,
+      "inputLatencyP95": 16.299999952316284,
+      "updateP95": 0.800000011920929,
+      "terrainRebuilds": 54,
+      "staticChunks": 27,
+      "routePoints": 0,
+      "heroScreen": {
+        "x": 895.9999999999989,
+        "y": 435.9999999999999
+      },
+      "viewport": {
+        "left": 382,
+        "right": 1410,
+        "top": 84,
+        "bottom": 788
+      },
+      "worker": true,
+      "pending": 0,
+      "compressionMs": 7.5,
+      "captureMs": 0.6000000238418579,
+      "writeMs": 0.10000002384185791,
+      "completed": 2,
+      "idle": false,
+      "suspended": false,
+      "cameraElevation": 59.99896736625072,
+      "shadowUpdates": 111,
+      "shadowTexelSize": 0.0234375,
+      "torchReassignments": 8,
+      "antialiasing": "MSAA",
+      "monsterActors": 0,
+      "creatureTemplates": 1,
+      "monsterTextures": 0,
+      "monsterMaterials": 0,
+      "activeEffects": 0,
+      "effectCapacity": 6,
+      "effectPoints": 0,
+      "lastSpell": null,
+      "weaponModel": "dagger",
+      "attackPhase": "idle",
+      "attackSequence": 1,
+      "bladeTrailPoints": 0,
+      "impactVisible": false,
+      "weaponImpacts": 1,
+      "armRotation": [
+        0.15730057383757032,
+        0,
+        -0.08
+      ],
+      "weaponRotation": [
+        -0.3,
+        0,
+        0
+      ]
+    },
+    "audio": {
+      "enabled": true,
+      "musicVolume": 0.55,
+      "effectsVolume": 0.8,
+      "contextState": "running",
+      "status": "playing",
+      "error": "",
+      "track": "Stone and Shadow",
+      "playingRegion": "caves",
+      "region": "caves",
+      "effectVoices": 0,
+      "maxVoices": 24,
+      "musicSources": 2,
+      "cachedTracks": 2,
+      "threat": 0.85,
+      "effectsPlayed": 39,
+      "lastEffect": "step"
+    },
+    "combat": {
+      "averageFps": 60.01345839580255,
+      "frameP95": 18.400000035762787,
+      "inputLatencyP95": 15.900000035762787,
+      "drawCalls": 210,
+      "swings": 25,
+      "impacts": 25,
+      "weaponModel": "longsword",
+      "trailPoints": 0,
+      "errors": []
+    },
+    "persistence": {
+      "manualSaveMs": 54.5,
+      "background": {
+        "worker": true,
+        "pending": 0,
+        "compressionMs": 53.80000001192093,
+        "captureMs": 10.300000011920929,
+        "writeMs": 0.10000002384185791,
+        "completed": 7
+      }
+    },
+    "errors": []
+  }
+]

@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 const errors = new WeakMap();
 test.beforeEach(async ({ page }) => {
+  await page.route("**/rest/v1/ularn_scores**", route => route.request().method() === "POST"
+    ? route.fulfill({ status: 201 }) : route.fulfill({ json: [] }));
   const list = [];
   errors.set(page, list);
   page.on("pageerror", (error) => list.push(error.message));

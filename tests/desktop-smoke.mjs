@@ -1,5 +1,5 @@
 import { _electron as electron, expect } from "@playwright/test";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -9,6 +9,7 @@ const testDirectory = await mkdtemp(path.join(tmpdir(), "ularn-desktop-test-"));
 // would hide app.setPath's requirement that the target directory exists.
 const profile = path.join(testDirectory, "new-profile");
 const errors = [];
+const scoreConfig = JSON.parse(await readFile("dist/engine/score-config.json", "utf8"));
 let desktop;
 let testingNetworkBlock = false;
 async function launch() {
@@ -43,11 +44,23 @@ try {
   await page.locator("#hero-name").fill("Desktop verification");
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);
+  await expect.poll(() => page.evaluate(() => ularnAudio.metrics().playingRegion), { timeout: 10000 }).toBe("town");
+  assert.equal(await page.evaluate(() => ularnAudio.metrics().contextState), "running", "Music unlocks on Play through the offline desktop host");
   await page.keyboard.press(".");
   await page.keyboard.press("S");
   assert.equal(await page.evaluate(() => ularn.save()), true);
   await mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/desktop.png" });
+  await page.keyboard.press(".");
+  await expect.poll(() => page.evaluate(() => {
+    const metrics = ularnPersistence.metrics();
+    const saved = JSON.parse(LZString.decompressFromUTF16(localStorage.getItem("ularn3d.expedition.v1")));
+    return metrics.worker && metrics.completed > 0 && saved.state.player.MOVESMADE === player.MOVESMADE;
+  }), { timeout: 10000 }).toBe(true);
+  assert.equal(await page.evaluate(() => {
+    const saved = JSON.parse(LZString.decompressFromUTF16(localStorage.getItem("ularn3d.expedition.v1")));
+    return saved.state.player.MOVESMADE === player.MOVESMADE;
+  }), true, "The desktop worker saves the latest completed turn through the local protocol");
   const original = await page.evaluate(() => {
     ularn.key(".");
     // Make the close handler responsible for this last turn, as when the user
@@ -67,6 +80,31 @@ try {
     return { x, y, moves, hp, mana, inventory };
   });
   assert.deepEqual(restored, original, "The save survives fully closing and restarting Electron");
+  let scoreUploads = 0;
+  await resumedPage.route(`${scoreConfig.url}/rest/v1/ularn_scores**`, route => {
+    if (route.request().method() === "POST") {
+      scoreUploads++;
+      return route.fulfill({ status: 201 });
+    }
+    return route.fulfill({ json:
+    new URL(route.request().url()).searchParams.get("winner") === "eq.true" ? [{
+      game_id: "desktop-score", edition: "3d", ularn: true, winner: true, player_name: "Global desktop hero",
+      character: "Wizard", difficulty: 1, score: 100500, time_used: 20, moves: 1200, fate: "a winner", level_name: "H", created_at: "2026-10-07T00:00:00Z",
+    }] : [],
+    });
+  });
+  assert.equal(await resumedPage.evaluate(() => {
+    const score = new LocalScore(); score.gameID = "desktop-submission"; score.score = 100;
+    return cloudflareWriteHighScore(score);
+  }), true, "Desktop scores upload through the same durable service");
+  assert.equal(scoreUploads, 1);
+  assert.equal(await resumedPage.evaluate(() => ularnScoreService.status().pending), 0);
+  await resumedPage.locator("#pause").click();
+  await resumedPage.locator("#view-scores").click();
+  await expect(resumedPage.locator("#LARN")).toContainText("Global desktop hero");
+  await expect(resumedPage.locator("#engine-modal")).toBeVisible();
+  await resumedPage.keyboard.press("Escape");
+  await expect(resumedPage.locator("#engine-modal")).toBeHidden();
   testingNetworkBlock = true;
   assert.equal(await resumedPage.evaluate(async () => {
     try { await fetch("https://example.com/"); return false; } catch { return true; }
@@ -75,7 +113,7 @@ try {
   assert.equal(desktop.windows().length, 1, "Remote popups are blocked");
   testingNetworkBlock = false;
   assert.deepEqual(errors, []);
-  console.log("Desktop smoke passed: offline game, sandbox, movement, save/relaunch, network and popup isolation.");
+  console.log("Desktop smoke passed: offline game, sandbox, movement, save/relaunch, global scoreboard, network and popup isolation.");
 } finally {
   if (desktop) await desktop.close();
   await rm(testDirectory, { recursive: true, force: true });

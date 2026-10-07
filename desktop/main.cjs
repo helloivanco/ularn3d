@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, protocol, session } = require("electron");
 const path = require("node:path");
 const { mkdirSync } = require("node:fs");
 const { readFile } = require("node:fs/promises");
-const { APP_ORIGIN, SCHEME, isLocalURL, resolveAssetPath, assetHeaders } = require("./protocol.cjs");
+const { APP_ORIGIN, SCHEME, isLocalURL, isScoreboardRequest, resolveAssetPath, assetHeaders } = require("./protocol.cjs");
 
 app.setName("Ularn");
 // Portable and installed editions keep the same saves across upgrades; never
@@ -83,16 +83,17 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow.focus();
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     Menu.setApplicationMenu(process.platform === "darwin" ? Menu.buildFromTemplate([
       { role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" },
     ]) : null);
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
+    const root = path.join(app.getAppPath(), "dist");
+    const scoreConfig = JSON.parse(await readFile(path.join(root, "engine", "score-config.json"), "utf8"));
     session.defaultSession.webRequest.onBeforeRequest({
       urls: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"],
-    }, (_details, callback) => callback({ cancel: true }));
-    const root = path.join(app.getAppPath(), "dist");
+    }, (details, callback) => callback({ cancel: !isScoreboardRequest(details.url, details.method, scoreConfig.url) }));
     protocol.handle(SCHEME, async (request) => {
       if (request.method !== "GET" && request.method !== "HEAD")
         return new Response("Method not allowed", { status: 405 });
@@ -100,7 +101,7 @@ if (!app.requestSingleInstanceLock()) {
       if (!file) return new Response("Forbidden", { status: 403 });
       try {
         const body = await readFile(file);
-        return new Response(request.method === "HEAD" ? null : body, { headers: assetHeaders(file) });
+        return new Response(request.method === "HEAD" ? null : body, { headers: assetHeaders(file, scoreConfig.url) });
       } catch {
         return new Response("Not found", { status: 404 });
       }

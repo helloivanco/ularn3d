@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { mapClick } from "./map-helper.js";
 const faults = new WeakMap();
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -21,13 +22,7 @@ async function start(page) {
 async function snap(page) {
   return page.evaluate(() => ularn.snapshot());
 }
-async function mapClick(page, x, y) {
-  const b = await page.locator("#minimap").boundingBox();
-  await page.mouse.click(
-    b.x + ((x + 0.5) / 67) * b.width,
-    b.y + ((y + 0.5) / 17) * b.height,
-  );
-}
+
 
 test("automatic travel stops immediately when a step causes damage", async ({
   page,
@@ -274,28 +269,7 @@ test("clicking a building roof selects that building rather than the floor behin
   });
   await page.locator("#camera-reset").click();
   const s = await snap(page);
-  // Project the front roof into the viewport using the documented reset camera.
-  const offset = [2.8, 15.5, 8.5],
-    [ox, oy, oz] = offset,
-    length = Math.hypot(...offset),
-    horizontal = Math.hypot(ox, oz);
-  const relative = [tile.x - s.x - ox, 1.6 - oy, tile.y + 0.5 - s.y - oz];
-  const dot = (a, b) => a.reduce((v, n, i) => v + n * b[i], 0);
-  const depth = -dot(
-    relative,
-    offset.map((n) => n / length),
-  );
-  const right = [oz / horizontal, 0, -ox / horizontal];
-  const up = [
-    (-ox * oy) / (horizontal * length),
-    horizontal / length,
-    (-oz * oy) / (horizontal * length),
-  ];
-  const scale = 1000 / (2 * Math.tan((37 * Math.PI) / 360));
-  const point = {
-    x: 720 + (dot(relative, right) / depth) * scale,
-    y: 500 - (dot(relative, up) / depth) * scale,
-  };
+  const point = await page.evaluate(({x,y}) => ularnGraphics.projectTile(x,y+.5,1.6),tile);
   await page.mouse.move(point.x, point.y);
   await expect(page.locator("#tile-label")).toContainText(/home/i);
   await page.mouse.click(point.x, point.y);

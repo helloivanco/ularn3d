@@ -1,0 +1,102 @@
+[
+  {
+    "url": "http://127.0.0.1:4173",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "averageFps": 60.04275490287201,
+    "drawCalls": {
+      "minimum": 84,
+      "maximum": 258,
+      "mean": 119.15479876160991,
+      "p95": 257,
+      "samples": 323
+    },
+    "fixture": "12288930db25c54d252bf2d42b1536a07b39e660367b358981511689fdc13ec9",
+    "frames": {
+      "mean": 16.663975155316525,
+      "p95": 17.69999998807907,
+      "samples": 322
+    },
+    "render": {
+      "mean": 1.497213623656577,
+      "p95": 2.5,
+      "samples": 323
+    },
+    "graphics": {
+      "quality": "auto",
+      "drawCalls": 84,
+      "triangles": 78030,
+      "geometries": 105,
+      "textures": 16,
+      "contextLost": false,
+      "frameMs": 16.66777777771155,
+      "renderedFrames": 360,
+      "frameLimit": 60,
+      "effectiveQuality": "balanced",
+      "pixelRatio": 1,
+      "activeFrameP95": 17.69999998807907,
+      "renderP95": 2.300000011920929,
+      "inputLatencyP95": 15.5,
+      "updateP95": 0.6000000238418579,
+      "terrainRebuilds": 54,
+      "staticChunks": 27,
+      "routePoints": 0,
+      "heroScreen": {
+        "x": 896,
+        "y": 436.00000000000006
+      },
+      "viewport": {
+        "left": 382,
+        "right": 1410,
+        "top": 84,
+        "bottom": 788
+      },
+      "worker": true,
+      "pending": 0,
+      "compressionMs": 5.800000011920929,
+      "captureMs": 0.800000011920929,
+      "writeMs": 0,
+      "completed": 2,
+      "idle": false,
+      "suspended": false,
+      "cameraElevation": 59.9989673662507,
+      "monsterActors": 0,
+      "creatureTemplates": 0,
+      "monsterTextures": 0,
+      "monsterMaterials": 0,
+      "activeEffects": 0,
+      "effectCapacity": 6,
+      "effectPoints": 0,
+      "lastSpell": null
+    },
+    "audio": {
+      "enabled": true,
+      "musicVolume": 0.55,
+      "effectsVolume": 0.8,
+      "contextState": "running",
+      "status": "playing",
+      "error": "",
+      "track": "Stone and Shadow",
+      "playingRegion": "caves",
+      "region": "caves",
+      "effectVoices": 0,
+      "maxVoices": 24,
+      "musicSources": 2,
+      "cachedTracks": 2,
+      "threat": 0,
+      "effectsPlayed": 38,
+      "lastEffect": "step"
+    },
+    "persistence": {
+      "manualSaveMs": 53,
+      "background": {
+        "worker": true,
+        "pending": 0,
+        "compressionMs": 50.80000001192093,
+        "captureMs": 10.199999988079071,
+        "writeMs": 0.10000002384185791,
+        "completed": 3
+      }
+    },
+    "errors": []
+  }
+]
