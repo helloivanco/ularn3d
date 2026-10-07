@@ -39,10 +39,14 @@ import {
   attackStyle,
   CAST_MS,
   castPose,
+  dampStep,
   LEG_Y,
+  pointOnRoute,
+  pushOutOfWalls,
   STEP_MS,
   stepEase,
   stepPose,
+  stepRoute,
   SWING_MS,
 } from "./hero-motion.js";
 
@@ -441,6 +445,12 @@ export class World {
     this.followStart = 0;
     this.followMs = 0;
     this.followHeld = true;
+    this.followRoute = null;
+    this.stepHome = null;
+    this.stepDest = null;
+    this.solidTiles = new Set();
+    this.heroBounds = new THREE.Box3();
+    this.boundsCorner = new THREE.Vector3();
     this.yawFrom = 0;
     this.yawTo = 0;
     this.yawEase = false;
@@ -825,6 +835,164 @@ export class World {
     if (!weapon) return;
     weapon.rotation.set(weapon.userData.restRotationX || 0, 0, gripZ);
   }
+  skipsHeroBody(obj) {
+    let node = obj;
+    while (node) {
+      if (node.name === "weapon" || node.name === "contact-disc") return true;
+      node = node.parent;
+    }
+    return false;
+  }
+  heroBodyBox() {
+    const box = this.heroBounds;
+    box.makeEmpty();
+    const corner = this.boundsCorner;
+    this.player.updateMatrixWorld(true);
+    this.player.traverse((obj) => {
+      if (!obj.isMesh || this.skipsHeroBody(obj)) return;
+      const geom = obj.geometry;
+      if (!geom.boundingBox) geom.computeBoundingBox();
+      const bb = geom.boundingBox;
+      for (const x of [bb.min.x, bb.max.x]) {
+        for (const y of [bb.min.y, bb.max.y]) {
+          for (const z of [bb.min.z, bb.max.z]) {
+            corner.set(x, y, z).applyMatrix4(obj.matrixWorld);
+            box.expandByPoint(corner);
+          }
+        }
+      }
+    });
+    return box;
+  }
+  ensureSolid() {
+    const set = this.solidTiles;
+    set.clear();
+    for (const tile of this.wallCells) set.add(`${tile.x},${tile.y}`);
+    const tiles = this.state?.tiles;
+    if (tiles) {
+      for (const tile of tiles) {
+        if (tile.wall || tile.closed) set.add(`${tile.x},${tile.y}`);
+      }
+    }
+  }
+  isSolid(ix, iz) {
+    if (this.stepHome && ix === this.stepHome.x && iz === this.stepHome.z) return false;
+    if (this.stepDest && ix === this.stepDest.x && iz === this.stepDest.z) return false;
+    return this.solidTiles.has(`${ix},${iz}`);
+  }
+  finishStepTiles() {
+    if (this.stepDest) this.stepHome = { x: this.stepDest.x, z: this.stepDest.z };
+    this.stepDest = null;
+    this.followRoute = null;
+  }
+  nearSolid() {
+    const x = Math.round(this.player.position.x);
+    const z = Math.round(this.player.position.z);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        if (this.isSolid(x + dx, z + dz)) return true;
+      }
+    }
+    return false;
+  }
+  bodyHitsRock() {
+    const box = this.heroBodyBox();
+    if (box.isEmpty()) return false;
+    const minX = Math.round(box.min.x) - 1;
+    const maxX = Math.round(box.max.x) + 1;
+    const minZ = Math.round(box.min.z) - 1;
+    const maxZ = Math.round(box.max.z) + 1;
+    for (let ix = minX; ix <= maxX; ix++) {
+      for (let iz = minZ; iz <= maxZ; iz++) {
+        if (!this.isSolid(ix, iz)) continue;
+        if (box.max.x > ix - 0.5 + 0.001 && box.min.x < ix + 0.5 - 0.001 &&
+          box.max.z > iz - 0.5 + 0.001 && box.min.z < iz + 0.5 - 0.001) return true;
+      }
+    }
+    return false;
+  }
+  applyStepPose(pose) {
+    const body = this.heroBody;
+    body.position.y = pose.bodyY;
+    body.position.z = 0;
+    body.rotation.x = pose.lean;
+    body.rotation.y = 0;
+    body.rotation.z = pose.roll;
+    this.setLeg(this.heroLeftLeg, pose.leftLeg, pose.leftLift);
+    this.setLeg(this.heroRightLeg, pose.rightLeg, pose.rightLift);
+    this.setArm(this.heroLeftArm, pose.leftArm, 0, 0);
+    this.setArm(this.heroRightArm, pose.rightArm, 0, 0);
+    this.setForearm(this.heroLeftForearm, pose.forearmX);
+    this.setForearm(this.heroRightForearm, pose.forearmX);
+    if (this.heroCape) this.heroCape.rotation.x = pose.capeX;
+    this.setWeaponGrip(0);
+  }
+  fitStride(pose) {
+    if (!this.nearSolid()) return pose;
+    this.applyStepPose(pose);
+    if (!this.bodyHitsRock()) return pose;
+    const planted = dampStep(pose, 0);
+    this.applyStepPose(planted);
+    if (this.bodyHitsRock()) return planted;
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 6; i++) {
+      const mid = (lo + hi) / 2;
+      const scaled = dampStep(pose, mid);
+      this.applyStepPose(scaled);
+      if (this.bodyHitsRock()) hi = mid;
+      else lo = mid;
+    }
+    return dampStep(pose, lo);
+  }
+  keepBodyOutOfRock() {
+    if (!this.player || !this.solidTiles.size) return;
+    if (!this.nearSolid()) return;
+    for (let pass = 0; pass < 3; pass++) {
+      const box = this.heroBodyBox();
+      if (box.isEmpty()) return;
+      let dx = 0;
+      let dz = 0;
+      const minX = Math.round(box.min.x) - 1;
+      const maxX = Math.round(box.max.x) + 1;
+      const minZ = Math.round(box.min.z) - 1;
+      const maxZ = Math.round(box.max.z) + 1;
+      for (let ix = minX; ix <= maxX; ix++) {
+        for (let iz = minZ; iz <= maxZ; iz++) {
+          if (!this.isSolid(ix, iz)) continue;
+          const overlapX = Math.min(box.max.x, ix + 0.5) - Math.max(box.min.x, ix - 0.5);
+          const overlapZ = Math.min(box.max.z, iz + 0.5) - Math.max(box.min.z, iz - 0.5);
+          if (overlapX <= 0.001 || overlapZ <= 0.001) continue;
+          if (overlapX < overlapZ) {
+            const dir = (box.min.x + box.max.x) * 0.5 < ix ? -1 : 1;
+            dx += dir * (overlapX + 0.001);
+          } else {
+            const dir = (box.min.z + box.max.z) * 0.5 < iz ? -1 : 1;
+            dz += dir * (overlapZ + 0.001);
+          }
+        }
+      }
+      if (!dx && !dz) return;
+      this.player.position.x += dx;
+      this.player.position.z += dz;
+    }
+  }
+  faceStep(eased) {
+    const route = this.followRoute;
+    const bent = route && route.length > 2;
+    if (!bent) {
+      if (this.yawEase)
+        this.player.rotation.y = this.yawFrom + (this.yawTo - this.yawFrom) * eased;
+      return;
+    }
+    const here = pointOnRoute(route, eased);
+    const ahead = pointOnRoute(route, Math.min(1, eased + 0.08));
+    const fx = ahead.x - here.x;
+    const fz = ahead.z - here.z;
+    if (fx * fx + fz * fz < 1e-8) return;
+    this.player.rotation.y = Math.atan2(fx, fz) + Math.PI;
+  }
   poseHero(now) {
     const body = this.heroBody;
     if (!body || this.reduced) return false;
@@ -833,20 +1001,9 @@ export class World {
     const stepping = this.followLive();
     const swinging = swingT >= 0 && swingT < 1;
     const casting = castT >= 0 && castT < 1;
-    const step = stepPose(stepping ? Math.min(1, (now - this.followStart) / this.followMs) : 1, !!this.stepLeadRight);
-    body.position.y = step.bodyY;
-    body.position.z = 0;
-    body.rotation.x = step.lean;
-    body.rotation.y = 0;
-    body.rotation.z = step.roll;
-    this.setLeg(this.heroLeftLeg, step.leftLeg, step.leftLift);
-    this.setLeg(this.heroRightLeg, step.rightLeg, step.rightLift);
-    this.setArm(this.heroLeftArm, step.leftArm, 0, 0);
-    this.setArm(this.heroRightArm, step.rightArm, 0, 0);
-    this.setForearm(this.heroLeftForearm, step.forearmX);
-    this.setForearm(this.heroRightForearm, step.forearmX);
-    if (this.heroCape) this.heroCape.rotation.x = step.capeX;
-    this.setWeaponGrip(0);
+    const rawStep = stepPose(stepping ? Math.min(1, (now - this.followStart) / this.followMs) : 1, !!this.stepLeadRight);
+    const step = stepping ? this.fitStride(rawStep) : rawStep;
+    this.applyStepPose(step);
     if (casting && !swinging) {
       const cast = castPose(castT);
       this.setArm(this.heroRightArm, cast.arm.x, cast.arm.y, cast.arm.z);
@@ -1622,6 +1779,8 @@ export class World {
     const target = this.playerTarget.set(state.x, 0, state.y);
     if (!this.lastPlayer) {
       this.player.position.copy(target);
+      this.stepHome = { x: state.x, z: state.y };
+      this.stepDest = null;
       this.applyHeldCamera(target);
       this.yawEase = false;
     } else if (this.lastPlayer.x !== state.x || this.lastPlayer.y !== state.y) {
@@ -1689,6 +1848,7 @@ export class World {
     this.disablePointLights();
     this.syncCooperationAura(state);
     this.updateWalls();
+    this.ensureSolid();
   }
   syncCooperationAura(state) {
     if (!this.cooperationAura) return;
@@ -1851,6 +2011,7 @@ export class World {
         .add(this.heldCameraOffset);
       if (this.playerTarget) this.player.position.copy(this.playerTarget);
       this.followHeld = true;
+      this.finishStepTiles();
       this.yawEase = false;
       this.controls.update();
       writeCameraPrefs(this.heldCameraOffset);
@@ -1869,7 +2030,19 @@ export class World {
     this.followHeld = this.followMs === 0;
     this.hasMotion = this.followMs > 0;
     if (this.followMs) this.stepLeadRight = !this.stepLeadRight;
-    if (!this.followMs) this.snapFollow();
+    this.stepHome = { x: Math.round(this.followFrom.x), z: Math.round(this.followFrom.z) };
+    this.stepDest = { x: Math.round(target.x), z: Math.round(target.z) };
+    this.ensureSolid();
+    if (!this.followMs) {
+      this.snapFollow();
+      this.finishStepTiles();
+      return;
+    }
+    this.followRoute = stepRoute(
+      { x: this.followFrom.x, z: this.followFrom.z },
+      { x: target.x, z: target.z },
+      (x, z) => this.isSolid(x, z),
+    );
   }
   snapFollow() {
     if (!this.playerTarget) return;
@@ -1941,14 +2114,21 @@ export class World {
         this.snapFollow();
         if (this.yawEase) this.player.rotation.y = this.yawTo;
         this.yawEase = false;
+        this.finishStepTiles();
       } else {
         this.scratchPosition.copy(this.followCam).lerp(this.playerTarget, eased);
         this.scratchOffset.copy(this.scratchPosition).sub(this.controls.target);
         this.controls.target.add(this.scratchOffset);
         this.camera.position.add(this.scratchOffset);
-        this.player.position.copy(this.followFrom).lerp(this.playerTarget, eased);
-        if (this.yawEase)
-          this.player.rotation.y = this.yawFrom + (this.yawTo - this.yawFrom) * eased;
+        const along = this.followRoute
+          ? pointOnRoute(this.followRoute, eased)
+          : {
+              x: this.followFrom.x + (this.playerTarget.x - this.followFrom.x) * eased,
+              z: this.followFrom.z + (this.playerTarget.z - this.followFrom.z) * eased,
+            };
+        const clear = pushOutOfWalls(along.x, along.z, (x, z) => this.isSolid(x, z));
+        this.player.position.set(clear.x, 0, clear.z);
+        this.faceStep(eased);
       }
     }
     if (this.playerTarget) {
@@ -1956,6 +2136,7 @@ export class World {
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, 1.4, 0.2));
       this.heroLimbLive = this.poseHero(now);
+      this.keepBodyOutOfRock();
     }
     if (!this.reduced) {
       this.dust.rotation.y = Math.sin(this.tick * 0.055) * 0.08;

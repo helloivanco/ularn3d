@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.61 — Quicker steps
+
+- You stop at a wall. The stride stays on open floor and does not draw you inside the rock
+- A step is quicker than before. A turn is still one move
+- The dagger is a thin edge. A dwarf still carries a spear, Rambo a lance, and Wizard, Elf, Ogre, and Klingon stay unarmed
+
 ## 1.3.60 — Expedition audio
 
 - Town and the caves play quiet original music after you turn sound on. The volcano uses the cave music, lower and dryer

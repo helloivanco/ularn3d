@@ -164,9 +164,13 @@ test("wielded weapons rebuild into distinct larger attack grips", async () => {
   const guard = grip.getObjectByName("dagger-guard");
   assert.ok(blade, "dagger has a named blade");
   assert.ok(guard, "dagger has a crossguard");
-  assert.ok(blade.scale.y < 0.4, `dagger blade is short, got ${blade.scale.y}`);
-  assert.ok(Math.min(blade.scale.x, blade.scale.z) > 0.12, "dagger is not a needle from the side");
-  assert.ok(Math.max(guard.scale.x, guard.scale.z) > blade.scale.y, "crossguard reads wider than the blade is long");
+  assert.ok(grip.getObjectByName("dagger-tip"), "dagger comes to a point");
+  assert.ok(blade.scale.y > 0.28 && blade.scale.y < 0.55, `dagger stays dagger-length, got ${blade.scale.y}`);
+  const edge = Math.min(blade.scale.x, blade.scale.z);
+  const flat = Math.max(blade.scale.x, blade.scale.z);
+  assert.ok(edge <= 0.03, `dagger edge is thin from above, got ${edge}`);
+  assert.ok(flat >= 0.04 && flat / edge >= 2, "dagger has a flat, not a brick");
+  assert.ok(blade.scale.x <= edge + 1e-6, "the overhead axis is the sharp edge");
   const daggerSize = sizeOf({ id: 31, type: "dagger" });
   const swordSize = sizeOf({ id: 32, type: "sword" });
   const spearSize = sizeOf({ id: 30, type: "spear" });

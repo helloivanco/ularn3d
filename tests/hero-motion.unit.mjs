@@ -4,8 +4,14 @@ import {
   attackPose,
   attackStyle,
   CAPE_REST,
+  dampStep,
   FOREARM_REST,
+  HERO_STEP_RADIUS,
+  pointEntersWall,
+  pointOnRoute,
+  STEP_MS,
   stepPose,
+  stepRoute,
 } from "../src/hero-motion.js";
 
 const planted = (value) => assert.ok(Math.abs(value) < 1e-6, String(value));
@@ -29,6 +35,53 @@ test("a step plants at both ends and strides in the middle", () => {
   const other = stepPose(0.5, false);
   assert.ok(other.leftLeg < -0.8);
   assert.ok(other.rightLeg > 0.6);
+});
+
+test("a step is clearly faster than a 200ms follow and still plants", () => {
+  assert.ok(STEP_MS < 200, `step is ${STEP_MS}ms`);
+  assert.ok(STEP_MS >= 80, `step is ${STEP_MS}ms`);
+  const plantedPose = dampStep(stepPose(0.5, true), 0);
+  planted(plantedPose.bodyY);
+  planted(plantedPose.leftLeg);
+  planted(plantedPose.rightLeg);
+  assert.equal(plantedPose.forearmX, FOREARM_REST);
+  assert.equal(plantedPose.capeX, CAPE_REST);
+});
+
+const samplesStayOnFloor = (route, solid) => {
+  for (let i = 0; i <= 20; i++) {
+    const point = pointOnRoute(route, i / 20);
+    assert.equal(
+      pointEntersWall(point.x, point.z, solid, HERO_STEP_RADIUS),
+      false,
+      `t=${i / 20} at ${point.x},${point.z}`,
+    );
+  }
+};
+
+test("a clear step stays straight and a diagonal goes around rock", () => {
+  const open = () => false;
+  const straight = stepRoute({ x: 2, z: 4 }, { x: 3, z: 4 }, open);
+  assert.equal(straight.length, 2);
+  assert.deepEqual(pointOnRoute(straight, 0.5), { x: 2.5, z: 4 });
+
+  const shoulder = (x, z) => x === 6 && z === 5;
+  const around = stepRoute({ x: 5, z: 5 }, { x: 6, z: 6 }, shoulder);
+  assert.ok(around.some((point) => point.x === 5 && point.z === 6));
+  samplesStayOnFloor(around, shoulder);
+
+  const both = (x, z) => (x === 6 && z === 5) || (x === 5 && z === 6);
+  const held = stepRoute({ x: 5, z: 5 }, { x: 6, z: 6 }, both);
+  samplesStayOnFloor(held, both);
+  for (let i = 0; i <= 20; i++) {
+    const point = pointOnRoute(held, i / 20);
+    assert.ok(Math.hypot(point.x - 5, point.z - 5) < 0.05, "a walled corner does not draw the body through rock");
+  }
+
+  const beside = (x, z) => x === 1 && z === 0;
+  const leaving = stepRoute({ x: 0.1, z: 0 }, { x: 1, z: 1 }, beside);
+  samplesStayOnFloor(leaving, beside);
+  assert.ok(leaving.some((point) => point.z === 1 && point.x === 0));
 });
 
 test("a slash rises overhead and an empty hand only jabs", () => {
