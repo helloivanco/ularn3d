@@ -298,145 +298,6 @@ a:hover {
   margin-top: 1.5rem;
 }
 
-/* Decorative HUD panels — same .panel recipe as the game */
-.hero-panel {
-  position: absolute;
-  z-index: 3;
-  width: min(244px, 28vw);
-  padding: 16px 18px;
-  font-size: 11px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.hero-panel--stats {
-  top: 118px;
-  left: var(--pad);
-}
-
-.hero-panel--map {
-  top: 118px;
-  right: var(--pad);
-}
-
-.hero-panel--quest {
-  top: 310px;
-  right: var(--pad);
-  width: min(230px, 26vw);
-}
-
-.hero-panel-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--gold);
-  font-weight: 600;
-}
-
-.hero-meters {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.hero-meters div {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  gap: 8px;
-  align-items: center;
-  font-size: 9px;
-  letter-spacing: 0.6px;
-}
-
-.hero-meters i {
-  display: block;
-  height: 6px;
-  background: #0006;
-  position: relative;
-  overflow: hidden;
-  border-radius: 1px;
-}
-
-.hero-meters i::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: var(--fill, 100%);
-  background: #7faa93;
-}
-
-.hero-meters div:nth-child(2) i::after {
-  background: #78a8b9;
-}
-
-.hero-meters strong,
-.hero-attrs {
-  color: #e0d4b3;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-attrs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  font: 11px ui-monospace, SFMono-Regular, Consolas, monospace;
-  color: #9aada6;
-}
-
-.hero-minimap {
-  height: 88px;
-  margin-bottom: 8px;
-  background:
-    linear-gradient(#1a2a2e 1px, transparent 1px) 0 0 / 11px 11px,
-    linear-gradient(90deg, #1a2a2e 1px, transparent 1px) 0 0 / 11px 11px,
-    #0d181b;
-  border: 1px solid #2a3c40;
-  border-radius: 2px;
-  position: relative;
-}
-
-.hero-minimap::before {
-  content: "@";
-  position: absolute;
-  left: 42%;
-  top: 48%;
-  color: var(--gold);
-  font-weight: 700;
-  font-family: ui-monospace, monospace;
-}
-
-.hero-map-legend {
-  display: flex;
-  gap: 10px;
-  font-size: 8px;
-  letter-spacing: 0.5px;
-  color: #a3b6a8;
-}
-
-.hero-quest-title {
-  margin: 0 0 8px;
-  color: #dfddce;
-  font: normal 16px / 1.2 Georgia, serif;
-}
-
-.hero-panel--quest p {
-  margin: 0 0 8px;
-  line-height: 1.55;
-  font-size: 11px;
-  color: #a9b7b1;
-}
-
-.hero-quest-time {
-  color: var(--gold) !important;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  font-size: 10px !important;
-}
-
 /* Sections below hero */
 .section {
   padding: clamp(48px, 7vw, 72px) 0;
@@ -868,9 +729,8 @@ kbd {
 }
 
 .reveal {
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.55s ease, transform 0.55s ease;
+  opacity: 1;
+  transform: none;
 }
 
 .reveal.is-visible {
@@ -949,4 +809,40 @@ kbd {
 
 html[data-runtime="desktop"] .web-only {
   display: none !important;
+}
+
+/* The world carries the atmosphere; the copy provides one clear way in. */
+.page-home .site-header--hero { height: 80px; backdrop-filter: none; background: linear-gradient(#0b171ed9, #0b171e00); border-bottom: 0; }
+.page-home .site-header--hero.is-solid { background: #0c191df5; }
+.page-home .site-header--hero .nav-cta--secondary { display: none; }
+.page-home .home-hero-world { pointer-events: none; }
+.page-home .home-hero-veil { background: linear-gradient(90deg, #071216ef 0%, #071216c2 28%, #07121622 64%), linear-gradient(0deg, #0c1417, transparent 26%); }
+.page-home .home-hero-copy { top: 50%; bottom: auto; transform: translateY(-40%); width: min(470px, calc(100% - 2 * var(--pad))); }
+.page-home .home-brand { font-size: clamp(48px, 5vw, 76px); margin-bottom: 28px; }
+.page-home .home-headline { font-size: clamp(28px, 3vw, 42px); line-height: 1.12; margin-bottom: 18px; }
+.page-home .home-hero .lede { max-width: 34ch; font-size: 15px; line-height: 1.65; margin-bottom: 18px; }
+.home-facts { font-size: 11px; color: #c0cbc3; margin: 0 0 24px; }
+.home-facts span { padding: 0 7px; color: var(--gold); }
+.page-home .home-hero-copy .button { min-height: 52px; }
+.page-home .home-hero-copy .button.secondary { background: #0e1c2280; border-color: #a2b8ae40; }
+.page-home .gallery img { aspect-ratio: 16 / 9; }
+.page-home .lineage { max-width: 68ch; }
+@media (max-width: 700px) {
+  .page-home .site-header--hero { height: 72px; }
+  .page-home .home-hero-veil { background: linear-gradient(0deg, #0c1417 0%, #09151bec 24%, #09151b40 65%, #09151b80); }
+  .page-home .home-hero-copy { top: auto; bottom: 32px; transform: none; }
+  .page-home .home-brand { font-size: 48px; margin-bottom: 18px; }
+  .page-home .home-headline { font-size: 30px; margin-bottom: 14px; }
+  .page-home .home-hero .lede { font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+  .home-facts { font-size: 10px; margin-bottom: 18px; }
+  .home-facts span { padding: 0 4px; }
+  .page-home .home-hero-copy .cta-row { gap: 8px; }
+  .page-home .home-hero-copy .button { min-height: 48px; }
+}
+@media (max-height: 650px) and (min-width: 701px) {
+  .page-home .home-hero-copy { top: auto; bottom: 24px; transform: none; }
+  .page-home .home-brand { font-size: 48px; margin-bottom: 14px; }
+  .page-home .home-headline { font-size: 28px; margin-bottom: 12px; }
+  .page-home .home-hero .lede { margin-bottom: 12px; }
+  .home-facts { margin-bottom: 14px; }
 }

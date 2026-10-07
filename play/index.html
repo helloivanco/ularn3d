@@ -74,6 +74,7 @@
     <main id="app">
       <div id="world" aria-label="Interactive 3D world"></div>
       <div class="vignette"></div>
+      <div class="entry-veil" aria-hidden="true"></div>
       <header class="topbar">
         <div id="location">
           <span class="location-dot" aria-hidden="true"></span
@@ -119,51 +120,39 @@
           </button>
         </nav>
       </header>
-      <section id="welcome" aria-labelledby="title">
+      <section id="welcome" class="entry-shell" aria-labelledby="title">
         <h1 id="title">
           <a class="brand" href="/" aria-label="Ularn 3D home"
             ><img src="/favicon.svg" width="64" height="64" alt=""
           /></a>
           <span class="title-copy"><span class="title-name">Ularn 3D</span><em>The caves below.</em></span>
         </h1>
-        <p class="intro">
-          A free, turn-based dungeon crawler. Eight classes. Twenty floors.
-          Play in your browser, or take the Windows game offline.
-        </p>
+        <p class="intro">Choose your calling. The town is safe.<br />The caves are waiting.</p>
+        <div id="return-expedition" class="return-expedition" hidden>
+          <button type="button" id="continue" class="button primary" hidden>
+            Continue expedition <span data-icon="east"></span>
+          </button>
+          <p>Your saved adventure is waiting.</p>
+        </div>
         <form id="start-form">
-          <div class="form-row">
-            <label
-              >YOUR NAME<input
-                id="hero-name"
-                class="field"
-                name="name"
-                maxlength="24"
-                value="Adventurer"
-                autocomplete="off"
-                required /></label
-            ><label class="difficulty-label"
-              >DIFFICULTY<select id="difficulty" class="field">
-                <option value="0">0 · Classic</option>
-                <option value="1">1 · Dangerous</option>
-                <option value="3">3 · Merciless</option>
-                <option value="10">10 · Legendary</option>
-              </select></label
-            >
-          </div>
           <label class="field-label" id="class-label"
             >CHOOSE YOUR CALLING</label
           >
           <div id="classes" role="group" aria-labelledby="class-label"></div>
-          <p id="class-description"></p>
-          <button type="button" id="multiplayer" class="button secondary">
-            Multiplayer
-          </button>
-          <button type="submit" class="button primary" id="begin">
-            Play in browser <span data-icon="northeast"></span>
-          </button>
-          <button type="button" id="continue" class="button secondary" hidden>
-            Continue expedition <span data-icon="east"></span>
-          </button>
+          <p id="class-description" aria-live="polite" aria-atomic="true"></p>
+          <div class="form-row">
+            <label>YOUR NAME<input id="hero-name" class="field" name="name" maxlength="24" value="Adventurer" autocomplete="off" required /></label>
+            <label class="difficulty-label">DIFFICULTY<select id="difficulty" class="field">
+              <option value="0">0 · Classic</option><option value="1">1 · Dangerous</option>
+              <option value="3">3 · Merciless</option><option value="10">10 · Legendary</option>
+            </select></label>
+          </div>
+          <div class="entry-actions">
+            <button type="submit" class="button primary" id="begin">
+              Begin expedition <span data-icon="east"></span>
+            </button>
+            <button type="button" id="multiplayer" class="button secondary">Multiplayer</button>
+          </div>
           <p id="save-notice" class="fine-print" hidden>
             A new expedition replaces your saved expedition.
           </p>

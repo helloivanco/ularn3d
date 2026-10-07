@@ -18,19 +18,37 @@ if (!mount || !hero) {
   try {
     const world = new World(mount, null, null);
     world.setQuality("balanced", false);
+    // Background atmosphere must not capture phone scrolling or mouse wheels.
+    world.controls.enabled = false;
     if (reduced) world.controls.autoRotate = false;
     if (loading) loading.hidden = true;
 
-    // Keep the town preview live only while the hero is on screen.
+    let onScreen = true;
+    const syncPreview = () => {
+      const paused = !onScreen || document.hidden;
+      world.setPaused(paused);
+      if (paused) world.stopFrames();
+      else if (reduced) {
+        world.stopFrames();
+        world.animate();
+        world.stopFrames();
+      } else world.invalidate();
+    };
+    document.addEventListener("visibilitychange", syncPreview);
+    window.addEventListener("resize", syncPreview);
+    window.addEventListener("ularn:graphics-restored", syncPreview);
+    // Stop GPU work completely when the scene scrolls out of view.
     if ("IntersectionObserver" in window) {
       const observer = new IntersectionObserver(
         ([entry]) => {
-          world.paused = !entry.isIntersecting;
+          onScreen = entry.isIntersecting;
+          syncPreview();
         },
         { threshold: 0.08 }
       );
       observer.observe(hero);
     }
+    syncPreview();
 
     document.documentElement.classList.add("has-live-hero");
   } catch (error) {

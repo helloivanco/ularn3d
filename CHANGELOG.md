@@ -15,6 +15,8 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 - Door, pickup, coin, reading and stair sounds are softer during exploration
 - Stone, grass, wood and roof textures use consistent detail at every resolution; walls have baked depth and characters have softer ground contact
 - Auto uses available headroom for sharper graphics while keeping shadows and post-processing reserved for Cinematic; sustained slow frames reduce resolution
+- A simpler landing page leads with the world and quest; the play screen shows actual class portraits and makes saved expeditions easier to continue
+- The landing preview allows phone scrolling and stops rendering off-screen; page content remains readable without JavaScript
 - Starting equipment, character attributes, combat rules and visibility remain unchanged
 
 ## 1.3.63 — Reconciled graphics, controls and expedition records

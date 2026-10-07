@@ -1,5 +1,6 @@
 import "./style.css";
 import "./hud.css";
+import "./entry.css";
 import { GameAudio } from "./audio.js";
 import { audioSettings } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
@@ -298,12 +299,12 @@ function updateInventoryAndEffects() {
   $("auto-loot").setAttribute("aria-pressed", String(state.autoLoot));
   $("auto-loot").querySelector(".button-label").textContent = `Auto-loot ${state.autoLoot ? "on" : "off"}`;
 }
-for (const [name, icon, description] of classes) {
+for (const [name, , description] of classes) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "class-choice";
   button.setAttribute("aria-pressed", String(name === character));
-  button.innerHTML = `<span class="class-emblem" aria-hidden="true">${iconMarkup(icon)}</span>${name}`;
+  button.innerHTML = `<img class="class-portrait" src="/art/classes/${name.toLowerCase()}.webp" alt="" width="160" height="192" />${name}`;
   button.addEventListener("click", () => {
     character = name;
     document
@@ -314,8 +315,15 @@ for (const [name, icon, description] of classes) {
   $("classes").appendChild(button);
 }
 $("class-description").textContent = classes[0][2];
-$("continue").hidden = !engine.hasSave();
-$("save-notice").hidden = !engine.hasSave();
+const hasExpedition = engine.hasSave();
+$("continue").hidden = !hasExpedition;
+$("return-expedition").hidden = !hasExpedition;
+$("welcome").classList.toggle("has-save", hasExpedition);
+$("save-notice").hidden = !hasExpedition;
+if (hasExpedition) {
+  $("class-label").textContent = "NEW EXPEDITION · CHOOSE YOUR CALLING";
+  $("begin").firstChild.textContent = "Start new expedition ";
+}
 const showMonsterCard = (card, info, event) => {
   const art = card.querySelector(".monster-card-art");
   const name = card.querySelector(".monster-card-name");
