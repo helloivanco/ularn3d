@@ -5,6 +5,9 @@ test("footfalls follow the plant; blocked moves, teleports and paused steps stay
     localStorage.setItem("ularn3d.quality", "balanced");
     localStorage.setItem("ularn3d.audio.v1", JSON.stringify({ enabled: false }));
   });
+  // Capture RAF before the renderer starts. Installing the clock after loading
+  // can leave its first frame on the real scheduler, outside runFor's control.
+  await page.clock.install();
   await page.goto("/play/"); await expect(page.locator("#loading")).toBeHidden();
   await page.locator("#begin").click();
   await page.evaluate(() => {
@@ -15,7 +18,7 @@ test("footfalls follow the plant; blocked moves, teleports and paused steps stay
     paint(); window.walkContacts = [];
     window.addEventListener("ularn:footstep", event => walkContacts.push({ ...event.detail, time: performance.now() }));
   });
-  await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
   await page.keyboard.press("ArrowRight");
   await page.clock.runFor(64);
   const mid = await page.evaluate(() => ({ pose: ularnGraphics.heroMotion(), count: walkContacts.length }));
