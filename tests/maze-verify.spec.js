@@ -236,7 +236,7 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
       rows.push(analyze(7, "d7r" + i));
     }
 
-    /* Rock-enclosed stairs regression: force a bad pocket then ensure harden clears it. */
+    /* Rock-enclosed stairs regression: run the current region repair before filling missing stairs. */
     LEVELS[4] = null;
     newcavelevel(4);
     /* Carve a sealed 3×3 pocket and plant down stairs inside it. */
@@ -254,6 +254,7 @@ test("stairs stay on the walkable maze; canned doors are not rewritten", async (
     if (oldDown) setItem(oldDown.x, oldDown.y, OEMPTY);
     setItem(3, 3, OSTAIRSDOWN);
     const before = largest().has("3,3");
+    repairPlayableRegions(4);
     ensureLevelStairs(4);
     const afterMain = largest();
     const afterDown = findItemXY(OSTAIRSDOWN);
