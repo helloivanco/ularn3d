@@ -276,11 +276,13 @@ export function fillWieldedWeapon(grip, weapon = null) {
   if (type === "dagger" || id === 31) {
     // Dagger-length, but a flat edge. Local X stays horizontal under the
     // overhead camera, so that axis is the sharp side, not a brick.
-    const blade = box(grip, 0xc5ced2, 0, 0.2, 0, 0.022, 0.34, 0.056, metal);
+    // Bright edge so the thin blade still reads under dungeon ambient light.
+    const steel = { metalness: 0.4, roughness: 0.3, emissive: 0xc5d0d4, emissiveIntensity: 0.7 };
+    const blade = box(grip, 0xeef3f5, 0, 0.2, 0, 0.022, 0.34, 0.056, steel);
     blade.name = "dagger-blade";
-    const tip = box(grip, 0xe4eaec, 0, 0.4, 0, 0.014, 0.08, 0.028, metal);
+    const tip = box(grip, 0xf7fbfc, 0, 0.4, 0, 0.014, 0.08, 0.028, steel);
     tip.name = "dagger-tip";
-    box(grip, 0xf2f6f7, 0, 0.46, 0, 0.008, 0.045, 0.014, metal);
+    box(grip, 0xffffff, 0, 0.46, 0, 0.008, 0.045, 0.014, steel);
     const guard = box(grip, 0xddba70, 0, 0.02, 0, 0.11, 0.018, 0.032, metal);
     guard.name = "dagger-guard";
     box(grip, 0x463e32, 0, -0.07, 0, 0.028, 0.13, 0.032, haft);
