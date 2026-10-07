@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.62 — A lemming is easy to hit
+
+- A level-1 adventurer with the starting dagger usually kills a lemming in one swing
+- That hit still finishes it. Other creatures are unchanged
+
 ## 1.3.61 — Quicker steps
 
 - You stop at a wall. The stride stays on open floor and does not draw you inside the rock

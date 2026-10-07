@@ -110,7 +110,8 @@ const LARN_monsterlist = [
 const ULARN_monsterlist = [
   /*          CHAR         NAME                    LV    AC  DAM ATT  INT  GOLD     HP      EXP ARG */
   new Monster(` `, ` `,                             0,    0,   0,  0,   3,    0,     0,       0,  0),
-  new Monster(`l`, `lemming`,                       1,    0,   0,  0,   3,    0,     0,       1,  1),
+  /* Armor class is to-hit. Zero made a new dagger miss; this falls on a normal swing. */
+  new Monster(`l`, `lemming`,                       1,   18,   0,  0,   3,    0,     0,       1,  1),
   new Monster(`G`, `gnome`,                         1,   10,   1,  0,   8,   30,     2,       2,  2),
   new Monster(`H`, `hobgoblin`,                     1,   13,   2,  0,   5,   25,     3,       2,  3),
   new Monster(`J`, `jackal`,                        1,    7,   1,  0,   4,    0,     1,       1,  4),

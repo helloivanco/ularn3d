@@ -6,7 +6,7 @@ import { test, expect } from "@playwright/test";
 
 const SEED = 2;
 const TURNS = 500;
-const GOLDEN = "3a3d396ee8c6a463";
+const GOLDEN = "33508677da7ad518";
 
 test("browser replay matches the headless solo checksum", async ({ page }) => {
   await page.goto("/play/");

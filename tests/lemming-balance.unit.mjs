@@ -1,5 +1,5 @@
 /**
- * Lemmings stay the classic weak monster, and a floor cannot ring the hero with them.
+ * A floor keeps one lemming, and a new adventurer's dagger kills it on a normal swing.
  * Run via: node --test tests/lemming-balance.unit.mjs
  */
 import test from "node:test";
@@ -59,6 +59,7 @@ const boot = () => {
       return text;
     },
     amiga_mode: false,
+    updateLog() {},
   };
   context.globalThis = context;
   context.window = context;
@@ -77,6 +78,9 @@ const boot = () => {
     "public/engine/state.js",
     "public/engine/global.js",
     "public/engine/create.js",
+    "public/engine/player.js",
+    "public/engine/inventory.js",
+    "public/engine/spells.js",
   ]) {
     vm.runInContext(read(file), context, { filename: file });
   }
@@ -119,26 +123,134 @@ const countLemmings = `(() => {
   return { count: cells.length, close, others, cells };
 })()`;
 
-test("lemming fight stats stay the classic weak lemming", () => {
+test("lemming fight stats stay a one-hit creature and only the lemming is easier to hit", () => {
   const ctx = boot();
   const stats = vm.runInContext(
     `
+    const row = (id) => {
+      const monster = monsterlist[id];
+      return { armorclass: monster.armorclass, hitpoints: monster.hitpoints, damage: monster.damage, attack: monster.attack };
+    };
     const lem = monsterlist[LEMMING];
     ({
       name: lem.desc,
-      hitpoints: lem.hitpoints,
-      armorclass: lem.armorclass,
-      damage: lem.damage,
-      attack: lem.attack,
+      ...row(LEMMING),
+      gnome: row(GNOME),
+      hobgoblin: row(HOBGOBLIN),
+      jackal: row(JACKAL),
+      kobold: row(KOBOLD),
     });
     `,
     ctx,
   );
   assert.equal(stats.name, "lemming");
   assert.equal(stats.hitpoints, 0);
-  assert.equal(stats.armorclass, 0);
   assert.equal(stats.damage, 0);
   assert.equal(stats.attack, 0);
+  assert.equal(stats.armorclass, 18);
+  const sameRow = (row, armorclass, hitpoints, damage) => {
+    assert.equal(row.armorclass, armorclass);
+    assert.equal(row.hitpoints, hitpoints);
+    assert.equal(row.damage, damage);
+    assert.equal(row.attack, 0);
+  };
+  sameRow(stats.gnome, 10, 2, 1);
+  sameRow(stats.hobgoblin, 13, 3, 2);
+  sameRow(stats.jackal, 7, 1, 1);
+  sameRow(stats.kobold, 15, 1, 1);
+});
+
+test("a starting adventurer's typical dagger swing kills a lemming", () => {
+  const ctx = boot();
+  const result = vm.runInContext(
+    `
+    player = new Player();
+    player.setCharacterClass("Adventurer");
+    recalc();
+    generateFreshLevel(1);
+    for (let y = 0; y < MAXY; y++) {
+      for (let x = 0; x < MAXX; x++) setMonster(x, y, null);
+    }
+    player.x = 20;
+    player.y = 10;
+    player.LEVEL = 1;
+    player.EXPERIENCE = 0;
+    player.HALFDAM = 0;
+    player.TIMESTOP = 0;
+    player.BLINDCOUNT = 0;
+    player.HOLDMONST = 0;
+    const dagger = player.inventory.find((item) => item && item.matches(ODAGGER));
+    player.WIELD = dagger;
+    recalc();
+    const hitSkill = monsterlist[LEMMING].armorclass + player.LEVEL + player.DEXTERITY + player.WCLASS / 4 - 12;
+    const formerHitSkill = hitSkill - monsterlist[LEMMING].armorclass;
+    let hits = 0;
+    const samples = {};
+    for (let swing = 1; swing <= 20; swing++) {
+      for (let pity = 1; pity <= 71; pity++) {
+        player.LEVEL = 1;
+        player.EXPERIENCE = 0;
+        player.HALFDAM = 0;
+        player.TIMESTOP = 0;
+        let calls = 0;
+        rnd = (n) => {
+          calls += 1;
+          if (calls === 1) return swing;
+          if (calls === 2 && n === 71) return pity;
+          if (n === 100) return 100;
+          return 1;
+        };
+        setMonster(21, 10, null);
+        const mob = setMonster(21, 10, LEMMING);
+        const before = mob.hitpoints;
+        hitmonster(21, 10);
+        const gone = monsterAt(21, 10) == null;
+        if (gone) hits += 1;
+        if (pity === 71) samples[swing] = { before, after: mob.hitpoints, gone };
+      }
+    }
+    ({
+      hits,
+      trials: 20 * 71,
+      hitSkill,
+      formerHitSkill,
+      level: player.LEVEL,
+      dexterity: player.DEXTERITY,
+      strength: player.STRENGTH,
+      weaponClass: player.WCLASS,
+      dagger: !!(dagger && dagger.matches(ODAGGER) && dagger.arg === 0),
+      full: fullhit(1),
+      samples,
+      hitpoints: monsterlist[LEMMING].hitpoints,
+      armorclass: monsterlist[LEMMING].armorclass,
+    });
+    `,
+    ctx,
+  );
+
+  assert.equal(result.dagger, true);
+  assert.equal(result.level, 1);
+  assert.equal(result.dexterity, 12);
+  assert.equal(result.strength, 12);
+  assert.equal(result.weaponClass, 3);
+  assert.equal(result.full, 1);
+  assert.equal(result.hitpoints, 0);
+  assert.equal(result.armorclass, 18);
+  // Armor class 0 used to-hit 1.75: only a d20 of 1, plus the 4-in-71 pity, 147/1420.
+  assert.equal(result.formerHitSkill, 1.75);
+  assert.equal(result.hitSkill, 19.75);
+  assert.equal(result.trials, 1420);
+  assert.equal(result.hits, 1353);
+  const median = result.samples[10];
+  const upperMedian = result.samples[11];
+  for (const swing of [median, upperMedian]) {
+    assert.equal(swing.before, 0);
+    assert.equal(swing.after, -2);
+    assert.equal(swing.gone, true);
+  }
+  assert.equal(result.samples[20].before, 0);
+  assert.equal(result.samples[20].after, 0);
+  assert.equal(result.samples[20].gone, false);
 });
 
 test("the deep-floor lemming injection stays a two-percent roll", () => {
