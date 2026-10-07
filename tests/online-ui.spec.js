@@ -107,7 +107,6 @@ test("two adventurers show the turn strip", async ({ page }) => {
       seed: 2,
     });
     document.getElementById("welcome").hidden = true;
-    document.getElementById("scene-caption").hidden = true;
     document.getElementById("hud").hidden = false;
     document.getElementById("pause").hidden = false;
     document.body.classList.add("playing");

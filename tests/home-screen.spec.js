@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const desktops = [
+  { width: 1024, height: 988 },
   { width: 1280, height: 800 },
   { width: 1440, height: 900 },
 ];
@@ -107,7 +108,8 @@ for (const viewport of desktops) {
         downloadBottom: download.bottom,
         innerHeight: window.innerHeight,
         welcomeTop: welcome.getBoundingClientRect().top,
-        titleTop: document.querySelector("#title").getBoundingClientRect().top,
+        welcomeCenter: (welcome.getBoundingClientRect().top+welcome.getBoundingClientRect().bottom)/2,
+        layoutCenter: (()=>{const box=document.querySelector(".entry-layout").getBoundingClientRect();return(box.top+box.bottom)/2;})(),
       };
     });
 
@@ -117,7 +119,9 @@ for (const viewport of desktops) {
     expect(fit.downloadTop).toBeGreaterThan(0);
     expect(fit.downloadBottom).toBeLessThanOrEqual(fit.innerHeight);
     expect(fit.welcomeTop).toBeGreaterThanOrEqual(60);
-    expect(fit.titleTop).toBeLessThan(90);
+    expect(fit.welcomeCenter).toBeCloseTo(fit.layoutCenter,0);
+    await expect(page.locator("#scene-caption")).toHaveCount(0);
+    await expect(page.locator("#welcome .intro")).toHaveCount(0);
     const actions=await page.evaluate(()=>({
       resume:document.getElementById("continue").getBoundingClientRect().top,
       classes:document.getElementById("classes").getBoundingClientRect().top,
@@ -227,4 +231,15 @@ test("narrow phone start screen keeps controls from colliding", async ({ page })
     return found;
   });
   expect(issues).toEqual([]);
+});
+
+test("short windows scroll the centered panel and keep the primary action reachable",async({page})=>{
+  await openStart(page,{width:844,height:390});
+  const limits=await page.locator("#welcome").evaluate(element=>({
+    top:element.getBoundingClientRect().top,bottom:element.getBoundingClientRect().bottom,height:innerHeight,
+    scrolls:element.scrollHeight>element.clientHeight,
+  }));
+  expect(limits.top).toBeGreaterThanOrEqual(50);expect(limits.bottom).toBeLessThanOrEqual(limits.height);
+  expect(limits.scrolls).toBe(true);
+  await page.locator("#begin").scrollIntoViewIfNeeded();await expect(page.locator("#begin")).toBeInViewport();
 });
