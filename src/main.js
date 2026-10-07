@@ -419,7 +419,6 @@ async function start(resume) {
       resume,
     });
     $("welcome").hidden = true;
-    $("scene-caption").hidden = true;
     $("hud").hidden = false;
     $("pause").hidden = false;
     document.body.classList.add("playing");

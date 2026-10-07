@@ -137,7 +137,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/changelog/");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
   await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
-  await expect(page.locator(".changelog-list > li")).toHaveCount(56);
+  await expect(page.locator(".changelog-list > li")).toHaveCount(57);
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d/releases",

@@ -6,21 +6,30 @@
   background: linear-gradient(90deg, #08161cf5, #08161ccc 30%, #08161c00 66%);
 }
 .playing .entry-veil { display: none; }
+.entry-layout {
+  position: absolute;
+  inset: 80px 0 32px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(24px, 6vw, 100px);
+  pointer-events: none;
+}
+.playing .entry-layout { display: none; }
 #welcome.entry-shell {
-  top: 76px;
-  left: clamp(24px, 6vw, 100px);
+  position: static;
   width: min(432px, calc(100vw - 48px));
-  max-height: calc(100dvh - 100px);
+  max-height: 100%;
   padding: 0 4px 16px;
+  pointer-events: auto;
 }
 #welcome.entry-shell h1 { font-size: 48px; margin: 0 0 16px; }
-#welcome.entry-shell .intro { font-size: 14px; line-height: 1.55; margin: 0 0 22px; color: #c2cdc5; }
 #welcome.entry-shell #class-label { margin: 0 0 10px; }
 #welcome.entry-shell #classes { gap: 8px; }
 #welcome.entry-shell .class-choice { padding: 10px 3px; min-height: 72px; background: #101e2580; border-color: #9bb6ac35; }
 #welcome.entry-shell .class-choice[aria-pressed="true"] { background: #c8ad7724; border-color: #d7bc83; }
 #welcome.entry-shell .class-portrait { display: block; width: 40px; height: 44px; object-fit: contain; margin: -5px auto 4px; }
-#welcome.entry-shell #class-description { min-height: 34px; margin: 12px 0 16px; font-size: 12px; line-height: 1.45; color: #c5cfc5; }
+#welcome.entry-shell #class-description { min-height: 18px; margin: 12px 0 18px; font-size: 12px; line-height: 1.45; color: #c5cfc5; }
 #welcome.entry-shell .form-row { gap: 12px; margin-bottom: 18px; }
 #welcome.entry-shell .field { margin-top: 7px; padding: 10px 12px; min-height: 42px; background: #101e25ad; }
 .entry-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
@@ -31,37 +40,33 @@
 #welcome.entry-shell #save-notice { font-size: 10px; line-height: 1.4; margin: 10px 0 0; }
 .return-expedition { margin-bottom: 22px; }
 #welcome.entry-shell #continue { margin: 0; min-height: 48px; padding: 12px 16px; }
-.return-expedition p { margin: 6px 0 0; font-size: 11px; color: #b4c4bb; }
 #welcome.entry-shell.has-save #begin { background: #101e2570; border-color: #9bb6ac45; color: #e5e7df; }
 #welcome.entry-shell .play-options { margin-top: 18px; border-top: 1px solid #9bb6ac26; padding-top: 14px; }
 #welcome.entry-shell .windows-download { min-height: 42px; padding: 6px 0; background: none; border: 0; color: #c1cdc3; }
 #welcome.entry-shell .windows-download small { font-size: 9px; color: #91a99d; margin-top: 3px; }
 #welcome.entry-shell .windows-download:hover { color: #ecd5a0; }
 #welcome.entry-shell .site-links { margin-top: 8px; }
-body:not(.playing) .scene-caption { right: 6%; bottom: 9%; }
-body:not(.playing) .scene-caption h2 { font-size: clamp(28px, 3vw, 42px); color: #e8e2cd; }
 @media (max-height: 820px) and (min-width: 701px) {
-  #welcome.entry-shell { top: 64px; max-height: calc(100dvh - 80px); }
+  .entry-layout { inset: 64px 0 24px; }
   #welcome.entry-shell h1 { font-size: 40px; margin-bottom: 10px; }
-  #welcome.entry-shell .intro { margin-bottom: 16px; font-size: 13px; }
   #welcome.entry-shell .class-choice { min-height: 64px; padding: 7px 2px; }
-  #welcome.entry-shell #class-description { margin: 10px 0 12px; min-height: 30px; }
+  #welcome.entry-shell #class-description { margin: 10px 0 16px; }
   #welcome.entry-shell .form-row { margin-bottom: 14px; }
   .return-expedition { margin-bottom: 16px; }
   #welcome.entry-shell .play-options { margin-top: 14px; padding-top: 10px; }
 }
 @media (max-width: 700px) {
   .entry-veil { background: linear-gradient(180deg, #08161ce8, #08161cbb 62%, #08161c66); }
-  #welcome.entry-shell { top: 76px; left: 24px; width: calc(100vw - 48px); max-height: calc(100dvh - 88px); padding: 0 0 18px; }
+  .entry-layout { inset: 72px 0 16px; padding: 0 24px; }
+  #welcome.entry-shell { width: calc(100vw - 48px); padding: 0 0 18px; }
   #welcome.entry-shell h1 { font-size: 38px; margin-bottom: 14px; }
-  #welcome.entry-shell .intro { font-size: 13px; margin-bottom: 20px; }
   #welcome.entry-shell .class-choice { font-size: 10px; padding: 9px 2px; }
   #welcome.entry-shell .form-row { gap: 10px; }
   #welcome.entry-shell .field { font-size: 13px; }
   #welcome.entry-shell .entry-actions { gap: 8px; }
   #welcome.entry-shell .entry-actions .button { padding: 12px; font-size: 11px; }
-  #welcome.entry-shell #class-description { font-size: 11px; }
+  #welcome.entry-shell #class-description { font-size: 11px; min-height: 32px; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  #welcome.entry-shell { top: 60px; max-height: calc(100dvh - 72px); }
+  .entry-layout { inset: 56px 0 12px; }
 }

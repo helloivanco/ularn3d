@@ -318,28 +318,6 @@ button.primary:not(.button) {
   color: #ffa896;
   font-size: 12px;
 }
-.scene-caption {
-  position: absolute;
-  right: 7%;
-  bottom: 13%;
-  text-align: right;
-  pointer-events: none;
-}
-.scene-caption > span {
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: #a9bdb6;
-}
-.scene-caption h2 {
-  font: normal 32px/1.15 Georgia;
-  color: #dfddce;
-  margin: 17px 0;
-}
-.scene-caption p {
-  font-size: 10px;
-  color: #8ca7a1;
-  letter-spacing: 1px;
-}
 .hero-panel {
   position: absolute;
   top: 122px;
@@ -1055,9 +1033,6 @@ kbd {
   #class-label {
     margin-top: 16px;
   }
-  .scene-caption {
-    bottom: 10%;
-  }
   .hero-panel,
   .map-panel {
     top: 100px;
@@ -1091,9 +1066,6 @@ kbd {
   #welcome {
     left: 5%;
     width: 390px;
-  }
-  .scene-caption {
-    right: 4%;
   }
   .hero-panel {
     left: 16px;
@@ -1157,9 +1129,6 @@ kbd {
     font-size: 12px;
     max-width: 340px;
     margin-bottom: 18px;
-  }
-  .scene-caption {
-    display: none;
   }
   .eyebrow {
     font-size: 8px;
@@ -1535,9 +1504,6 @@ kbd {
   .intro {
     font-size: 12px;
     margin-bottom: 16px;
-  }
-  .scene-caption {
-    display: none;
   }
   .hero-panel {
     left: 12px;

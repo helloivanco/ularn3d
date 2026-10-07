@@ -418,11 +418,9 @@ export const mountOnlineUi = () => {
         started = true;
         for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
         const welcome = document.getElementById("welcome");
-        const caption = document.getElementById("scene-caption");
         const hud = document.getElementById("hud");
         const pause = document.getElementById("pause");
         if (welcome) welcome.hidden = true;
-        if (caption) caption.hidden = true;
         if (hud) hud.hidden = false;
         if (pause) pause.hidden = false;
         document.body.classList.add("playing");
