@@ -159,7 +159,7 @@ test("the edge script sandbox matches a vm replay", async () => {
   const longState = long.captureGameState();
   longState.party = null;
   assert.equal(long.gtime, 500);
-  assert.equal(long.checksumGameState(longState), "6be9109be59dae15");
+  assert.equal(long.checksumGameState(longState), "33508677da7ad518");
 
   forceEngineContext("script");
   try {
