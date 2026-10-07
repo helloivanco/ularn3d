@@ -3,6 +3,26 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const mergedMaterials = new Map();
 
+/** Static wall depth, including unlit caves, with the existing vertices/pass. */
+export function bakeWallRelief(geometry) {
+  const position=geometry.getAttribute("position"), normal=geometry.getAttribute("normal");
+  const colors=new Float32Array(position.count*3);
+  for(let i=0;i<position.count;i++) {
+    const y=normal.getY(i), shade=y>.5?1:y<-.5?.64:.72+(position.getY(i)+.5)*.22;
+    colors.set([shade,shade,shade],i*3);
+  }
+  geometry.setAttribute("color",new THREE.BufferAttribute(colors,3));
+  return geometry;
+}
+
+/** Fade the existing fan to transparent at its edge; no texture or triangles. */
+export function featherContact(geometry) {
+  const position=geometry.getAttribute("position"), colors=new Float32Array(position.count*4);
+  for(let i=0;i<position.count;i++) colors.set([1,1,1,i===0?1:0],i*4);
+  geometry.setAttribute("color",new THREE.BufferAttribute(colors,4));
+  return geometry;
+}
+
 // Bake tint into vertices so differently colored parts share one draw call.
 // Texture, transparency and emission remain separate material families.
 export function compact(group, shared = false) {

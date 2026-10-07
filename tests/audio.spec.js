@@ -152,3 +152,38 @@ test("an ending cue survives a full combat pool and music stays stopped", async 
   expect(result.full).toBe(24); expect(result.voices).toBe(4); expect(result.last).toBe("victory"); expect(result.music).toBe(0);
   await page.evaluate(() => endingAudio.dispose());
 });
+
+test("footsteps are short, quiet, varied and rate limited without using gameplay randomness", async ({ page }) => {
+  await page.goto("/play/");
+  const result = await page.evaluate(async () => {
+    const { GameAudio } = await import("/src/audio.js");
+    const rendered = [];
+    for (const surface of ["grass", "stone", "ash"]) {
+      const context = new OfflineAudioContext(2, 24000, 48000);
+      const audio = new GameAudio({ context, music: 0 });
+      audio.renderFX("step", { surface, foot: "left" });
+      audio.renderFX("step", { surface, foot: "right" });
+      const accepted = audio.metrics().effectsPlayed;
+      const buffer = await context.startRendering(), data = buffer.getChannelData(0);
+      let sum = 0, peak = 0, tail = 0;
+      for (let i = 0; i < data.length; i++) {
+        sum += data[i] ** 2; peak = Math.max(peak, Math.abs(data[i]));
+        if (i > 48000 * .15) tail = Math.max(tail, Math.abs(data[i]));
+      }
+      rendered.push({ surface, rms: Math.sqrt(sum / data.length), peak, tail, accepted });
+    }
+    const audio = new GameAudio({ context: new OfflineAudioContext(2, 24000, 48000) });
+    audio.menu = true; audio.renderFX("step"); audio.menu = false;
+    audio.ended = true; audio.renderFX("step");
+    return { rendered, suppressed: audio.metrics().effectsPlayed };
+  });
+  expect(result.suppressed).toBe(0);
+  expect(new Set(result.rendered.map(entry => entry.rms.toFixed(7))).size).toBe(3);
+  for (const footstep of result.rendered) {
+    expect(footstep.accepted).toBe(1);
+    expect(footstep.rms).toBeGreaterThan(.0001);
+    expect(footstep.rms).toBeLessThan(.004);
+    expect(footstep.peak).toBeLessThan(.03);
+    expect(footstep.tail).toBeLessThan(.0001);
+  }
+});

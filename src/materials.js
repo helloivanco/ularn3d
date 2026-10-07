@@ -12,12 +12,14 @@ export const noise = (x, y = 0) => {
 // Deterministic, locally generated surface maps: no network assets or loading races.
 // 128² textures keep the look while cutting GPU memory and upload cost ~4× vs 256.
 export function texture(kind, resolution = 128) {
-  const TEX=resolution, mapKey=resolution===128 ? kind : `${kind}@${resolution}`;
+  const mapKey=resolution===128 ? kind : `${kind}@${resolution}`;
   if (maps.has(mapKey)) return maps.get(mapKey);
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = TEX;
+  canvas.width = canvas.height = resolution;
   const c = canvas.getContext("2d");
-  c.scale(2, 2);
+  // Use one logical pattern at every resolution. Previously the color map
+  // cropped a different set of courses than the 512px normal/roughness maps.
+  c.scale(resolution / TEX, resolution / TEX);
   c.fillStyle = kind === "grass" ? "#7c886d" : "#8a8980";
   c.fillRect(0, 0, TEX, TEX);
   if (kind === "grass") {

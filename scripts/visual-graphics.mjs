@@ -72,7 +72,7 @@ try {
         const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
         label.position.set(x, .04, z + 1.6); label.scale.set(3.1, .62, 1); scene.add(label);
       });
-      document.getElementById("title").textContent = kind === "creatures" ? "ULARN · 65 species in 3D" : "ULARN · Eight class models";
+      document.getElementById("title").textContent = kind === "creatures" ? `ULARN · ${CREATURES.length} species in 3D` : "ULARN · Eight class models";
       renderer.render(scene, camera);
     }, kind);
     await page.screenshot({ path: `docs/screenshots/${kind}-gallery.png` });

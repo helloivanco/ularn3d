@@ -39,8 +39,8 @@ test("held movement executes immediately, never catches up overdue turns, and ca
   held.release("ArrowLeft"); advance(10000); expect(sent).toHaveLength(4);
 });
 
-test("all 65 species have distinct bounded models and reuse immutable geometry", () => {
-  expect(CREATURES).toHaveLength(65); expect(new Set(CREATURES.map((entry) => entry.model)).size).toBe(65);
+test("all 66 species have distinct bounded models and reuse immutable geometry", () => {
+  expect(CREATURES).toHaveLength(66); expect(new Set(CREATURES.map((entry) => entry.model)).size).toBe(66);
   for (const entry of CREATURES) {
     const first = creature({ id: entry.id }), second = creature({ id: entry.id });
     const size = new THREE.Box3().setFromObject(first).getSize(new THREE.Vector3());

@@ -1,5 +1,6 @@
 /** One stride across a tile. Clearly faster than a 200ms follow. The turn is still one action. */
-export const STEP_MS = 120;
+export const STEP_MS = 140;
+export const STEP_CONTACT = 0.88;
 /**
  * How close the hero's center may come to a wall cell.
  * Tile centers sit 0.5 from a neighboring wall, so a straight step stays clear
@@ -25,7 +26,7 @@ const smooth = (t) => {
 /** Smoother plant at the start and end of a tile crossing. */
 export const stepEase = (t) => {
   const x = clamp01(t);
-  return x * x * x * (x * (x * 6 - 15) + 10);
+  return x * x * (3 - 2 * x);
 };
 
 const cellHits = (x, z, radius, ix, iz) => {
@@ -192,6 +193,10 @@ export const dampStep = (pose, scale) => {
     rightLeg: pose.rightLeg * s,
     leftLift: pose.leftLift * s,
     rightLift: pose.rightLift * s,
+    leftKnee: (pose.leftKnee || 0) * s,
+    rightKnee: (pose.rightKnee || 0) * s,
+    leftFoot: (pose.leftFoot || 0) * s,
+    rightFoot: (pose.rightFoot || 0) * s,
     leftArm: pose.leftArm * s,
     rightArm: pose.rightArm * s,
     forearmX: FOREARM_REST + (pose.forearmX - FOREARM_REST) * s,
@@ -368,25 +373,39 @@ export const weaponRestX = (type) => {
  * One step. t = 0 and t = 1 are the plant. The middle is the stride.
  * leadRight alternates so consecutive turns switch feet.
  */
-export const stepPose = (t, leadRight) => {
+export const stepPose = (t, leadRight, armed = false) => {
   const time = clamp01(t);
   const u = time <= 0 || time >= 1 ? 0 : Math.sin(Math.PI * time);
-  const lead = -1.05 * u;
-  const trail = 0.82 * u;
-  const arm = 0.68 * u;
+  const lead = -.38 * u;
+  const trail = .25 * u;
+  const bend = .48 * u * u;
+  const leftLeg = leadRight ? trail : lead, rightLeg = leadRight ? lead : trail;
+  const leftKnee = leadRight ? .06 * u : bend, rightKnee = leadRight ? bend : .06 * u;
   return {
-    bodyY: 0.14 * u,
-    lean: 0.14 * u,
-    roll: (leadRight ? -1 : 1) * 0.07 * u,
-    leftLeg: leadRight ? trail : lead,
-    rightLeg: leadRight ? lead : trail,
-    leftLift: leadRight ? 0 : 0.09 * u,
-    rightLift: leadRight ? 0.09 * u : 0,
-    leftArm: leadRight ? -arm : arm,
-    rightArm: leadRight ? arm : -arm,
-    forearmX: FOREARM_REST - 0.12 * u,
-    capeX: CAPE_REST - 0.28 * u,
+    bodyY: .019 * u * u,
+    lean: .022 * u,
+    roll: (leadRight ? -1 : 1) * .012 * u,
+    leftLeg, rightLeg, leftKnee, rightKnee,
+    leftFoot: -(leftLeg + leftKnee) * .85,
+    rightFoot: -(rightLeg + rightKnee) * .85,
+    leftLift: leadRight ? 0 : .027 * u,
+    rightLift: leadRight ? .027 * u : 0,
+    leftArm: (leadRight ? -1 : 1) * .15 * u,
+    rightArm: (leadRight ? 1 : -1) * (armed ? .065 : .13) * u,
+    forearmX: FOREARM_REST - .018 * u,
+    capeX: CAPE_REST - .045 * u,
   };
+};
+
+/** Continue from the displayed stride when an early input changes the target. */
+export const blendStep = (from, to, t) => {
+  if (!from) return to;
+  const amount = smooth(clamp01(t / .22));
+  if (amount<=0) return from;
+  if (amount>=1) return to;
+  const pose = {};
+  for (const key of Object.keys(to)) pose[key] = lerp(from[key] ?? to[key], to[key], amount);
+  return pose;
 };
 
 /** Arm lift for a cast. Returns to the hang when t is 1. */

@@ -27,6 +27,8 @@ for (const viewport of desktops) {
       "A new expedition replaces your saved expedition.",
     );
     await expect(page.locator("#class-description")).not.toBeEmpty();
+    await expect(page.locator(".class-portrait")).toHaveCount(8);
+    await expect.poll(()=>page.locator(".class-portrait").evaluateAll(images=>images.every(image=>image.complete&&image.naturalWidth>0))).toBe(true);
     await expect(page.locator("#download-windows")).toContainText("Download for Windows");
     await expect(page.locator("#welcome")).not.toContainText(/classic reawakened/i);
     await expect(page.locator("#location-name")).toHaveText("");
@@ -114,8 +116,16 @@ for (const viewport of desktops) {
     expect(fit.pageScrolls).toBe(false);
     expect(fit.downloadTop).toBeGreaterThan(0);
     expect(fit.downloadBottom).toBeLessThanOrEqual(fit.innerHeight);
-    expect(fit.welcomeTop).toBeLessThan(24);
-    expect(fit.titleTop).toBeLessThan(40);
+    expect(fit.welcomeTop).toBeGreaterThanOrEqual(60);
+    expect(fit.titleTop).toBeLessThan(90);
+    const actions=await page.evaluate(()=>({
+      resume:document.getElementById("continue").getBoundingClientRect().top,
+      classes:document.getElementById("classes").getBoundingClientRect().top,
+      begin:document.getElementById("begin").getBoundingClientRect(),
+      multiplayer:document.getElementById("multiplayer").getBoundingClientRect(),
+    }));
+    expect(actions.resume).toBeLessThan(actions.classes);
+    expect(Math.abs(actions.begin.top-actions.multiplayer.top)).toBeLessThan(1);
   });
 }
 
@@ -141,6 +151,45 @@ test("spectator line stays off the title and out of the empty center", async ({ 
   expect(placed.inNav).toBe(true);
   expect(placed.overlapsTitle).toBe(false);
   expect(Math.abs(placed.center - placed.width / 2)).toBeGreaterThan(80);
+});
+
+test("landing content stays readable and its background pauses off-screen", async ({page})=>{
+  await page.goto("/");await expect(page.locator("#home-loading")).toBeHidden();
+  await expect(page.locator(".home-hero .hero-panel")).toHaveCount(0);
+  await expect(page.locator("#home-brand")).toBeVisible();
+  await expect(page.locator("#see-title")).toHaveCSS("opacity","1");
+  await page.evaluate(()=>scrollTo(0,innerHeight+120));
+  await expect(page.locator("#see-title")).toBeVisible();
+  await page.waitForTimeout(250);
+  const frames=await page.evaluate(()=>ularnGraphics.metrics().renderedFrames);
+  await page.waitForTimeout(350);
+  expect(await page.evaluate(()=>ularnGraphics.metrics().renderedFrames)).toBe(frames);
+  await page.setViewportSize({width:1200,height:800});await page.waitForTimeout(250);
+  const resized=await page.evaluate(()=>ularnGraphics.metrics().renderedFrames);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(()=>ularnGraphics.metrics().renderedFrames)).toBe(resized);
+  await page.evaluate(()=>scrollTo(0,0));
+  await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(frames);
+});
+
+test("reduced-motion landing renders a still scene and updates once after resize",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});await page.goto("/");
+  await expect(page.locator("#home-loading")).toBeHidden();await page.waitForTimeout(250);
+  const frames=await page.evaluate(()=>ularnGraphics.metrics().renderedFrames);
+  await page.waitForTimeout(300);expect(await page.evaluate(()=>ularnGraphics.metrics().renderedFrames)).toBe(frames);
+  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);
+  const resized=await page.evaluate(()=>ularnGraphics.metrics().renderedFrames);
+  expect(resized).toBeGreaterThan(frames);
+  await page.waitForTimeout(300);expect(await page.evaluate(()=>ularnGraphics.metrics().renderedFrames)).toBe(resized);
+});
+
+test("landing links and content are usable without JavaScript",async({browser})=>{
+  const context=await browser.newContext({javaScriptEnabled:false,baseURL:test.info().project.use.baseURL}),page=await context.newPage();
+  try{
+    await page.goto("/");
+    await expect(page.locator("#see-title")).toBeVisible();
+    await expect(page.getByRole("link",{name:/Play in your browser/}).first()).toBeVisible();
+  }finally{await context.close();}
 });
 
 test("narrow phone start screen keeps controls from colliding", async ({ page }) => {

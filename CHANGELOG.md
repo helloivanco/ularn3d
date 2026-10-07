@@ -4,6 +4,21 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.64 — A second look at the full cast
+
+- All eight player classes have clearer clothing, faces and silhouettes; the Rogue's hood no longer stretches behind its head
+- All 66 enemies now have distinct procedural models, including the loot goblin with its sack
+- Serpents stay low and coiled, the floating eye faces upward, and insects, spirits, dragons and demon ranks read apart
+- Wing membranes light correctly on both sides, and creature movement returns to its authored resting pose under reduced motion
+- Walking has less bounce, smaller arm swings and articulated knees/ankles; footsteps land with the animation and use quieter, varied grass, stone and ash sounds
+- Enemy walking blends into and out of movement instead of snapping limbs back to rest
+- Door, pickup, coin, reading and stair sounds are softer during exploration
+- Stone, grass, wood and roof textures use consistent detail at every resolution; walls have baked depth and characters have softer ground contact
+- Auto uses available headroom for sharper graphics while keeping shadows and post-processing reserved for Cinematic; sustained slow frames reduce resolution
+- A simpler landing page leads with the world and quest; the play screen shows actual class portraits and makes saved expeditions easier to continue
+- The landing preview allows phone scrolling and stops rendering off-screen; page content remains readable without JavaScript
+- Starting equipment, character attributes, combat rules and visibility remain unchanged
+
 ## 1.3.63 — Reconciled graphics, controls and expedition records
 
 - Animated models cover all 65 classic Ularn species; detailed sword variants add bounded trails and confirmed-hit feedback while the thin dagger and class rigs remain

@@ -45,7 +45,7 @@ export const createCueReader = () => {
     const cues = [];
     if (state.level !== prev.level) {
       if (STAIR_TILES.has(prev.under)) cues.push("stairs");
-    } else if (state.x !== prev.x || state.y !== prev.y) {
+    } else if (Math.max(Math.abs(state.x-prev.x),Math.abs(state.y-prev.y)) === 1) {
       cues.push("step");
     }
     if (state.level === prev.level && doorMoved(prev.doors, doors)) cues.push("door");

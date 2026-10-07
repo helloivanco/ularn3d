@@ -1,5 +1,6 @@
 import "./style.css";
 import "./hud.css";
+import "./entry.css";
 import { GameAudio } from "./audio.js";
 import { audioSettings } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
@@ -149,8 +150,12 @@ const syncHeard = (snapshot) => {
     return;
   }
   audio.syncBed(snapshot.level);
-  for (const cue of cues) sound(cue, {surface: snapshot.level===0 && !world?.paths.has(`${snapshot.x},${snapshot.y}`) ? "grass" : "stone"});
+  for (const cue of cues) if (cue!=="step" || !world) sound(cue);
 };
+window.addEventListener("ularn:footstep",({detail}) => {
+  if (!state || state.over || state.level!==detail.level || state.prompt || document.querySelector("dialog[open]")) return;
+  sound("step",{foot:detail.right?"right":"left",surface:detail.level===0 && !world?.paths.has(`${detail.x},${detail.y}`) ? "grass" : detail.level>15 ? "ash" : "stone"});
+});
 window.addEventListener("ularn:action", ({detail}) => {
   if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest"].includes(detail.kind)) sound(detail.kind,detail);
 });
@@ -294,12 +299,12 @@ function updateInventoryAndEffects() {
   $("auto-loot").setAttribute("aria-pressed", String(state.autoLoot));
   $("auto-loot").querySelector(".button-label").textContent = `Auto-loot ${state.autoLoot ? "on" : "off"}`;
 }
-for (const [name, icon, description] of classes) {
+for (const [name, , description] of classes) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "class-choice";
   button.setAttribute("aria-pressed", String(name === character));
-  button.innerHTML = `<span class="class-emblem" aria-hidden="true">${iconMarkup(icon)}</span>${name}`;
+  button.innerHTML = `<img class="class-portrait" src="/art/classes/${name.toLowerCase()}.webp" alt="" width="160" height="192" />${name}`;
   button.addEventListener("click", () => {
     character = name;
     document
@@ -310,8 +315,15 @@ for (const [name, icon, description] of classes) {
   $("classes").appendChild(button);
 }
 $("class-description").textContent = classes[0][2];
-$("continue").hidden = !engine.hasSave();
-$("save-notice").hidden = !engine.hasSave();
+const hasExpedition = engine.hasSave();
+$("continue").hidden = !hasExpedition;
+$("return-expedition").hidden = !hasExpedition;
+$("welcome").classList.toggle("has-save", hasExpedition);
+$("save-notice").hidden = !hasExpedition;
+if (hasExpedition) {
+  $("class-label").textContent = "NEW EXPEDITION · CHOOSE YOUR CALLING";
+  $("begin").firstChild.textContent = "Start new expedition ";
+}
 const showMonsterCard = (card, info, event) => {
   const art = card.querySelector(".monster-card-art");
   const name = card.querySelector(".monster-card-name");

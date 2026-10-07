@@ -99,38 +99,15 @@
 
     <main id="main">
       <section class="home-hero" id="home-hero" aria-labelledby="home-brand">
-        <div id="world" class="home-hero-world" aria-label="Interactive 3D town preview"></div>
+        <div id="world" class="home-hero-world" role="img" aria-label="Ularn’s town, with its shops and entrance to the caves"></div>
         <div class="home-hero-veil" aria-hidden="true"></div>
         <div id="home-loading" class="home-loading" role="status">Preparing the caves…</div>
 
-        <aside class="hero-panel hero-panel--stats" aria-hidden="true">
-          <div class="hero-panel-heading"><span>Adventurer</span><span>LV 1 · Rogue</span></div>
-          <div class="hero-meters">
-            <div><span>HP</span><i style="--fill:100%"></i><strong>12/12</strong></div>
-            <div><span>POWER</span><i style="--fill:100%"></i><strong>1/1</strong></div>
-          </div>
-          <div class="hero-attrs">
-            <span>ARM 4</span><span>WPN 5</span><span>INT 12</span><span>WIS 10</span><span>DEX 16</span><span>CHA 11</span>
-          </div>
-        </aside>
-
-        <aside class="hero-panel hero-panel--map" aria-hidden="true">
-          <div class="hero-panel-heading"><span>Charted territory</span><span>SURFACE</span></div>
-          <div class="hero-minimap" aria-hidden="true"></div>
-          <div class="hero-map-legend"><span>You</span><span>Landmark</span><span>Creature</span></div>
-        </aside>
-
-        <aside class="hero-panel hero-panel--quest" aria-hidden="true">
-          <div class="hero-panel-heading"><span>Your expedition</span></div>
-          <p class="hero-quest-title">A cure for your child.</p>
-          <p>Seek the Eye of Larn in the deepest dungeon. Then brave the volcano for the cure.</p>
-          <p class="hero-quest-time">400 mobuls remain</p>
-        </aside>
-
         <div class="home-hero-copy">
           <h1 class="home-brand" id="home-brand">ULARN <span class="edition">3D</span><span class="tagline">THE CAVES BELOW</span></h1>
-          <p class="home-headline">A classic dungeon crawl, seen from above.</p>
-          <p class="lede">Eight classes. Twenty floors. Time moves only when you do.</p>
+          <p class="home-headline">A quiet town.<br />A perilous descent.</p>
+          <p class="lede">Your child needs a cure. Choose a calling, brave twenty floors, and bring it home.</p>
+          <p class="home-facts">Free to play <span>·</span> No account needed <span>·</span> Turn based</p>
           <div class="cta-row">
             <a class="button primary" href="/play/">Play in your browser <span aria-hidden="true">↗</span></a>
             <a
@@ -148,40 +125,38 @@
       <section class="section wrap reveal" aria-labelledby="see-title">
         <p class="section-kicker">See the caves</p>
         <h2 id="see-title">Town above. Depths beneath.</h2>
-        <p class="support">
-          Prepare among shops and landmarks, then descend floor by floor through stone halls and volcanic heat.
-        </p>
+        <p class="support">Stock up in town. Find your way through the caves. Every turn is yours to take.</p>
         <div class="gallery gallery--pair">
           <figure>
             <img
               src="/screenshots/town.jpg"
-              width="1600"
+              width="1280"
               height="720"
               alt="Ularn 3D town view with adventurer near home, trading post, caves, and volcano"
               loading="lazy"
             />
-            <figcaption>The surface town — shops, landmarks, and the cave mouth waiting beyond.</figcaption>
+            <figcaption>Prepare above. Shops, supplies, and a way into the caves.</figcaption>
           </figure>
           <figure>
             <img
               src="/screenshots/dungeon.jpg"
-              width="1600"
+              width="1280"
               height="720"
               alt="Ularn 3D dungeon room with stairs, stone walls, and a waiting creature"
               loading="lazy"
             />
-            <figcaption>The caves below — stone halls, one turn at a time.</figcaption>
+            <figcaption>Explore below. Creatures, artifacts, and twenty floors to discover.</figcaption>
           </figure>
         </div>
       </section>
 
       <section class="section wrap reveal" aria-labelledby="play-title">
         <p class="section-kicker">Play or download</p>
-        <h2 id="play-title">Start an expedition in seconds.</h2>
+        <h2 id="play-title">Your first turn is waiting.</h2>
         <div class="play-band">
           <div>
             <p>
-              The browser game needs no account. Choose a name, a class, and a difficulty, then walk the town before you commit to the caves. Prefer a separate window? The Windows portable build carries the same adventure offline.
+              Choose from eight classes and begin in your browser. Nothing to install. Prefer to play offline? Take the same adventure with you on Windows.
             </p>
             <p class="download-note web-only">
               Latest release <strong><a href="/changelog/">v__APP_VERSION__</a></strong> ·
@@ -202,17 +177,7 @@
         <p class="section-kicker">A living lineage</p>
         <h2 id="lineage-title">Born from Larn and Ultra-Larn.</h2>
         <div class="lineage">
-          <p>
-            <strong>Larn</strong> began in 1986 with <strong>Noah Morgan</strong> — a Unix roguelike about racing the clock to cure your daughter. Ports by Don Kneller, Kevin Routley, and others carried it across machines.
-          </p>
-          <p>
-            <strong>Ultra-Larn</strong>, better known as <strong>Ularn</strong>, was created by <strong>Phil Cordier</strong> (copyright 1987; first posted widely in 1989). It added true character classes, deeper dungeons and volcano levels, and new artifacts. Later maintainers including David Richerby, Josh Brandt, and Josh Bressers kept the tradition alive.
-          </p>
-          <p>
-            <strong>Ularn 3D</strong> presents that Ularn through an overhead world, built on
-            <a href="https://github.com/primeau/Larn">Jason Primeau’s JavaScript Larn / Ularn engine</a>.
-            <a href="/about/#history">Read the full history and creators</a>.
-          </p>
+          <p>A new view of a classic adventure. From <strong>Noah Morgan’s Larn</strong> and <strong>Phil Cordier’s Ultra-Larn</strong>, through <a href="https://github.com/primeau/Larn">Jason Primeau’s JavaScript engine</a>, to the caves you see today. <a href="/about/#history">Read the full history and creators</a>.</p>
         </div>
       </section>
     </main>

@@ -70,3 +70,9 @@ test("bundled audio stays local and small", () => {
     assert.ok(size < limit, `${file} is ${size} bytes`);
   }
 });
+
+test("a teleport does not pretend to be a footstep", () => {
+  const read=createCueReader();read(place({x:2,y:2}));
+  assert.deepEqual(read(place({x:12,y:2})),[]);
+  assert.deepEqual(read(place({x:13,y:3})),["step"]);
+});

@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   attackPose,
+  blendStep,
+  STEP_CONTACT,
   attackStyle,
   CAPE_REST,
   dampStep,
@@ -27,14 +29,14 @@ test("a step plants at both ends and strides in the middle", () => {
   planted(end.leftLeg);
   assert.equal(end.capeX, CAPE_REST);
   assert.equal(end.forearmX, FOREARM_REST);
-  assert.ok(mid.bodyY > 0.1);
-  assert.ok(mid.rightLeg < -0.8, "lead foot reaches forward");
-  assert.ok(mid.leftLeg > 0.6, "trail foot stays back");
-  assert.ok(mid.leftArm < -0.4, "opposite arm swings forward");
-  assert.ok(mid.rightLift > 0.05);
+  assert.ok(mid.bodyY > 0 && mid.bodyY < .03, "weight shifts without a hop");
+  assert.ok(mid.rightLeg < -.25 && mid.rightLeg > -.5, "lead foot reaches forward");
+  assert.ok(mid.leftLeg > .15 && mid.leftLeg < .35, "trail foot stays back");
+  assert.ok(mid.leftArm < -.08 && mid.leftArm > -.25, "opposite arm swings forward");
+  assert.ok(mid.rightLift > .015 && mid.rightLift < .04);
   const other = stepPose(0.5, false);
-  assert.ok(other.leftLeg < -0.8);
-  assert.ok(other.rightLeg > 0.6);
+  assert.ok(other.leftLeg < -.25);
+  assert.ok(other.rightLeg > .15);
 });
 
 test("a step is clearly faster than a 200ms follow and still plants", () => {
@@ -112,4 +114,16 @@ test("a slash rises overhead and an empty hand only jabs", () => {
   assert.equal(attackStyle({ id: 30, type: "spear" }), "thrust");
   assert.equal(attackStyle({ id: 65, type: "lance" }), "thrust");
   assert.equal(attackStyle({ id: 89, type: "staff" }), "thrust");
+});
+
+test("knees flex on the swing, ankles counter-rotate, and a carried weapon stays steady", () => {
+  const pose=stepPose(.5,true,true),empty=stepPose(.5,true,false);
+  assert.ok(pose.rightKnee>.3 && pose.leftKnee<.1);
+  assert.ok(pose.rightFoot<0 && pose.leftFoot<0);
+  assert.ok(Math.abs(pose.rightArm)<Math.abs(empty.rightArm));
+  const contact=stepPose(STEP_CONTACT,true,true);
+  assert.ok(contact.rightLift<.012 && contact.bodyY<.005);
+  const from=stepPose(.6,true,true),to=stepPose(0,false,true);
+  assert.deepEqual(blendStep(from,to,0),from);
+  assert.deepEqual(blendStep(from,to,.22),to);
 });
