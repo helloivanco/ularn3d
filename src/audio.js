@@ -60,14 +60,11 @@ const FILES = {
   spell: "/audio/spell.mp3",
 };
 
-const EFFECT_GAIN = {
-  step: 0.78,
-  swing: 0.7,
-  hit: 0.74,
-  door: 0.68,
-  stairs: 0.7,
-  spell: 0.46,
-};
+export const FOOTSTEP_PROFILES = Object.freeze({
+  grass:{frequency:620,end:280,duration:.07,noise:.022,weight:.008},
+  stone:{frequency:1050,end:420,duration:.075,noise:.03,weight:.012},
+  ash:{frequency:760,end:310,duration:.075,noise:.023,weight:.009},
+});
 
 const rateForWeapon = (weapon) => {
   const [frequency] = weaponProfile(weapon);
@@ -91,6 +88,7 @@ export class GameAudio {
     this.paused = false; this.unlocked = false; this.status = "idle"; this.error = "";
     this.sampleCache = new Map();
     this.history = []; this.effectsCount = 0; this.notesPlayed = 0;
+    this.stepIndex=0;
   }
   random() { this.randomState = (Math.imul(this.randomState, 1664525) + 1013904223) >>> 0; return this.randomState / 4294967296; }
   prepare() {
@@ -99,6 +97,7 @@ export class GameAudio {
       this.stopMusic();
       for (const source of [...this.voices]) source.onended?.();
       this.context = this.contextFactory(); this.graph = null; this.noise = null;
+      this.lastFootstepAt = -Infinity;
     }
     const ctx = this.context;
     if (!this.graph) {
@@ -226,7 +225,7 @@ export class GameAudio {
     this.duckGain.gain.cancelScheduledValues(now); this.duckGain.gain.setTargetAtTime(.45, now, .025);
     this.duckGain.gain.setTargetAtTime(this.menu ? .55 : 1, now + .3, .18);
   }
-  voice({ frequency = 200, end = 100, duration = .2, delay = 0, type = "sine", volume = .1, noise = false, pan = 0, resonance = 1, wet = true }) {
+  voice({ frequency = 200, end = 100, duration = .2, delay = 0, type = "sine", volume = .1, noise = false, pan = 0, resonance = 1, wet = true, attack = .006 }) {
     if (this.voices.size >= this.maxVoices) return;
     const ctx = this.prepare(), start = ctx.currentTime + delay;
     const source = noise ? ctx.createBufferSource() : ctx.createOscillator(), gain = ctx.createGain();
@@ -236,7 +235,7 @@ export class GameAudio {
     const panner = ctx.createStereoPanner?.(); if (panner) panner.pan.value = Math.max(-.7, Math.min(.7, pan));
     source.connect(filter); filter.connect(gain); gain.connect(panner || this.effectsGain);
     if (panner) panner.connect(this.effectsGain); if (wet) gain.connect(this.reverb);
-    gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.0002, volume), start + .006);
+    gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(Math.max(.0002, volume), start + attack);
     gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
     this.voices.add(source); this.notesPlayed++;
     source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); panner?.disconnect(); this.voices.delete(source); source.onended = null; };
@@ -280,6 +279,12 @@ export class GameAudio {
     });
   }
   renderFX(kind, detail = {}) {
+    if (kind === "step") {
+      if (this.menu || this.ended) return;
+      const now=this.prepare().currentTime;
+      if (now-(this.lastFootstepAt ?? -Infinity)<.085) return;
+      this.lastFootstepAt=now;
+    }
     this.prepare(); this.effectsCount++; this.history.push(kind); if (this.history.length > 24) this.history.shift();
     const pan = Number(detail.pan) || 0;
     if (kind === "weapon") {
@@ -306,28 +311,33 @@ export class GameAudio {
       this.voice({ frequency: 110, end: 45, duration: .18, volume: .2 });
       this.voice({ frequency: 700, end: 120, duration: .1, volume: .12, noise: true }); this.combat(); this.duck();
     } else if (kind === "step") {
-      this.sampleEffect("step", { volume: .055 });
-      const grass = detail.surface === "grass", ash = this.region === "volcano";
-      const pitch = (grass ? 900 : ash ? 1700 : 2500) * (.94 + this.random() * .12);
-      this.voice({ frequency: pitch, end: grass ? 350 : 700, noise: true, duration: grass ? .11 : .08, volume: .11, wet: !grass, pan: this.random() * .16 - .08 });
-      if (!grass) this.voice({ frequency: ash ? 90 : 150, end: 65, duration: .07, volume: .085, wet: false });
+      const surface=detail.surface || (this.region==="town"?"grass":this.region==="volcano"?"ash":"stone");
+      const profile=FOOTSTEP_PROFILES[surface] || FOOTSTEP_PROFILES.stone;
+      const variation=.88+this.random()*.16, pitch=.94+this.random()*.12;
+      const side=detail.foot==="left"?-1:detail.foot==="right"?1:(++this.stepIndex%2?1:-1);
+      // A short dry scuff and a soft sole: no duplicate recording or reverb
+      // tail accumulating beneath a long walk. Variation uses private RNG.
+      this.voice({frequency:profile.frequency*pitch,end:profile.end,noise:true,duration:profile.duration,
+        volume:profile.noise*variation,resonance:.55,wet:false,pan:side*.025,attack:.012});
+      this.voice({frequency:surface==="stone"?94:78,end:48,duration:.05,
+        volume:profile.weight*variation,wet:false,pan:side*.025,attack:.009});
     } else if (kind === "door" || kind === "chest") {
-      this.sampleEffect("door", { volume: .09 });
-      this.voice({ frequency: 350, end: 100, noise: true, duration: .35, volume: .14 });
-      this.voice({ frequency: 170, end: 55, type: "triangle", duration: .14, delay: .22, volume: .14 });
+      this.sampleEffect("door", { volume: .05 });
+      this.voice({ frequency: 350, end: 100, noise: true, duration: .25, volume: .075 });
+      this.voice({ frequency: 170, end: 55, type: "triangle", duration: .12, delay: .17, volume: .07 });
       if (detail.exploded) this.voice({ frequency: 800, end: 45, noise: true, duration: .5, volume: .25 });
     } else if (kind === "potion") {
       for (let i = 0; i < 3; i++) this.voice({ frequency: 260 + i * 90, end: 110, duration: .075, delay: i * .09, volume: .09 });
       this.voice({ frequency: 1800, end: 800, duration: .15, noise: true, volume: .04 });
     } else if (kind === "read" || kind === "loot") {
-      this.voice({ frequency: kind === "read" ? 2400 : 850, end: 400, noise: true, duration: .18, volume: .085 });
-      if (kind === "loot") this.voice({ frequency: 660, end: 600, duration: .18, volume: .035 });
+      this.voice({ frequency: kind === "read" ? 1500 : 650, end: 400, noise: true, duration: .13, volume: .045,wet:false });
+      if (kind === "loot") this.voice({ frequency: 660, end: 600, duration: .13, volume: .02 });
     } else if (kind === "coins") {
-      for (let i = 0; i < 3; i++) this.voice({ frequency: 1500 + i * 310, end: 1300 + i * 300, duration: .13, delay: i * .025, volume: .045 });
+      for (let i = 0; i < 3; i++) this.voice({ frequency: 1300 + i * 250, end: 1100 + i * 250, duration: .09, delay: i * .025, volume: .02,wet:false });
     } else if (kind === "stairs") {
-      this.sampleEffect("stairs", { volume: .1 });
-      this.voice({ frequency: 140, end: 65, noise: true, duration: .28, volume: .15 });
-      this.voice({ frequency: detail.down ? 220 : 165, end: detail.down ? 110 : 330, duration: .65, delay: .1, volume: .05 });
+      this.sampleEffect("stairs", { volume: .055 });
+      this.voice({ frequency: 140, end: 65, noise: true, duration: .22, volume: .085 });
+      this.voice({ frequency: detail.down ? 220 : 165, end: detail.down ? 110 : 330, duration: .45, delay: .1, volume: .028 });
     } else if (kind === "victory" || kind === "death") {
       this.stopMusic(); const notes = kind === "victory" ? [64, 67, 71, 76] : [52, 51, 47, 40];
       notes.forEach((note, i) => this.voice({ frequency: 440 * 2 ** ((note - 69) / 12), end: 440 * 2 ** ((note - 69) / 12), duration: 1.8, delay: i * .2, type: kind === "death" ? "triangle" : "sine", volume: .1 }));

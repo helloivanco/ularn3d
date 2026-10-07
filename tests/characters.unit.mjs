@@ -95,3 +95,20 @@ test("mirrored wing triangle winding agrees with its normals on both sides", () 
     }
   }
 });
+
+test("enemy gait eases in and out, remains instance-local and reduced motion resets it", () => {
+  const moving = creature({id:2}), still = creature({id:2});
+  animateCreature(moving,0,true,false);
+  animateCreature(still,0,false,false);
+  for (let time=16;time<=96;time+=16) animateCreature(moving,time,true,false);
+  const before = moving.userData.stride;
+  assert.ok(before > .8 && before < 1);
+  assert.equal(still.userData.stride,0);
+  assert.equal(animateCreature(moving,112,false,false),true);
+  assert.ok(moving.userData.stride > 0 && moving.userData.stride < before);
+  for (let time=128;time<=500;time+=16) animateCreature(moving,time,false,false);
+  assert.equal(moving.userData.stride,0);
+  animateCreature(moving,516,true,false); animateCreature(moving,532,true,true);
+  assert.equal(moving.userData.stride,0);
+  assert.equal(moving.getObjectByName("creature-body").position.y,0);
+});

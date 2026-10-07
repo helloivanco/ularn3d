@@ -10,6 +10,9 @@ When shipping a product version, add a short entry here and on `/changelog/`, th
 - All 66 enemies now have distinct procedural models, including the loot goblin with its sack
 - Serpents stay low and coiled, the floating eye faces upward, and insects, spirits, dragons and demon ranks read apart
 - Wing membranes light correctly on both sides, and creature movement returns to its authored resting pose under reduced motion
+- Walking has less bounce, smaller arm swings and articulated knees/ankles; footsteps land with the animation and use quieter, varied grass, stone and ash sounds
+- Enemy walking blends into and out of movement instead of snapping limbs back to rest
+- Door, pickup, coin, reading and stair sounds are softer during exploration
 - Starting equipment, character attributes, combat rules and visibility remain unchanged
 
 ## 1.3.63 — Reconciled graphics, controls and expedition records

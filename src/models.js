@@ -501,16 +501,21 @@ export function hero(character = "Adventurer") {
   for (const side of [-1, 1]) {
     const leg = new THREE.Group(); leg.position.set(side * .115, .3, 0);
     leg.name = side < 0 ? "left-leg" : "right-leg"; body.add(leg);
-    box(leg, cloth, 0, -.12, 0, .15, .29, .17);
-    box(leg, kit.boot, 0, -.26, -.055, .175, .12, .26);
+    box(leg, cloth, 0, -.055, 0, .15, .15, .17);
+    const knee = new THREE.Group(); knee.name = side < 0 ? "left-knee" : "right-knee";
+    knee.position.y = -.14; leg.add(knee);
+    markDetail(box(knee,cloth,0,-.055,0,.14,.13,.15));
+    const foot = new THREE.Group(); foot.name = side < 0 ? "left-foot" : "right-foot";
+    foot.position.set(0,-.11,-.01);knee.add(foot);
+    box(foot,kit.boot,0,-.01,-.045,.175,.1,.26);
   }
   // A chest and waist rather than a pointed cone. The existing bones/rest
   // transforms remain the walking and weapon animation contract.
   tapered(body, cloth, 0, .57, 0, .22, .38, 1.18, .84);
   if (kit.plate) {
-    box(body, character === "Klingon" ? 0x71544b : 0x83978e, 0, .65, -.1, .3, .23, .13,
-      { metalness: .16, roughness: .48 });
-  } else box(body, bareArms ? skin : cloth, 0, .66, -.055, .28, .2, .16);
+    markDetail(box(body, character === "Klingon" ? 0x71544b : 0x83978e, 0, .65, -.1, .3, .23, .13,
+      { metalness: .16, roughness: .48 }));
+  } else markDetail(box(body, bareArms ? skin : cloth, 0, .66, -.055, .28, .2, .16));
   markDetail(box(body, 0x60482f, 0, .41, 0, .43, .065, .26));
   markDetail(box(body, trim, 0, .415, -.15, .075, .065, .03));
   if (kit.cape) {
@@ -530,7 +535,7 @@ export function hero(character = "Adventurer") {
     box(arm, bareArms ? skin : cloth, 0, -.1, 0, bareArms ? .14 : .12, .18, .13);
     const forearm = new THREE.Group(); forearm.name = side < 0 ? "left-forearm" : "right-forearm";
     forearm.position.set(0, -.2, 0); forearm.rotation.x = FOREARM_REST; arm.add(forearm);
-    box(forearm, bareArms ? skin : cloth, 0, -.08, 0, .1, .16, .11);
+    markDetail(box(forearm, bareArms ? skin : cloth, 0, -.08, 0, .1, .16, .11));
     orb(forearm, skin, 0, -.18, -.02, character === "Ogre" ? .09 : .07);
     if (["Rogue", "Elf", "Klingon", "Rambo"].includes(character))
       markDetail(box(forearm, kit.boot, 0, -.065, -.055, .115, .085, .025));

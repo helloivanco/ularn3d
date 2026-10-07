@@ -565,25 +565,34 @@ export function faceCreature(group, facing) {
 export function animateCreature(group, now, walking, reduced) {
   const body = group.getObjectByName("creature-body");
   if (!body) return;
+  const elapsed = Math.max(0, Math.min(50, now - (group.userData.animationAt ?? now)));
+  group.userData.animationAt = now;
+  const target = walking && !reduced ? 1 : 0;
+  let stride = group.userData.stride || 0;
+  stride += (target - stride) * (1 - Math.exp(-elapsed / (walking ? 35 : 55)));
+  if (reduced || (!target && stride < .003)) stride = 0;
+  group.userData.stride = stride;
   const phase = now * .008 + (group.userData.uid || group.userData.species) * .7;
   const angle = group.userData.targetAngle ?? group.rotation.y;
   let difference = (angle - group.rotation.y + Math.PI) % (Math.PI * 2);
   if (difference < 0) difference += Math.PI * 2;
   group.rotation.y += (difference - Math.PI) * (reduced ? 1 : .35);
-  body.position.y = reduced ? 0 : Math.sin(phase) * (walking ? .018 : .006);
+  body.position.y = reduced ? 0 : Math.sin(phase) * (.006 + stride * .01);
   for (const part of body.children) {
     const rest = part.userData.restRotation;
     if (!rest) continue;
     const motion = part.userData.motion, wave = Math.sin(phase + (part.userData.phase || 0));
     part.rotation.set(...rest);
     if (reduced) continue;
-    if (walking && ["leg", "arm", "insect"].includes(motion)) part.rotation.x += wave * (motion === "insect" ? .15 : .25);
+    if (["leg", "arm", "insect"].includes(motion))
+      part.rotation.x += wave * stride * (motion === "insect" ? .12 : motion === "arm" ? .15 : .22);
     if (motion === "wing") part.rotation.z += Math.sin(phase * .6) * .09;
     if (motion === "tail") part.rotation.y += Math.sin(phase * .5) * .12;
     if (motion === "tendril") part.rotation.z += wave * .08;
     if (motion === "whirl") part.rotation.y += (now * .00035) % (Math.PI * 2);
-    if (motion === "jaw" && walking) part.rotation.x -= Math.abs(wave) * .04;
+    if (motion === "jaw") part.rotation.x -= Math.abs(wave) * stride * .04;
   }
+  return stride > .003;
 }
 
 export function creatureMetrics() { return { creatureTemplates: templates.size, monsterTextures: 0, monsterMaterials: 0 }; }

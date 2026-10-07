@@ -1,0 +1,37 @@
+{
+  "order": [
+    "before-stone",
+    "after-stone",
+    "after-grass",
+    "after-ash"
+  ],
+  "secondsPerSegment": 2,
+  "gapSeconds": 0.35,
+  "metrics": [
+    {
+      "name": "before-stone",
+      "sampleRate": 24000,
+      "rms": 0.007960317360923721,
+      "peak": 0.09554797410964966
+    },
+    {
+      "name": "after-stone",
+      "sampleRate": 24000,
+      "rms": 0.0011100231519041682,
+      "peak": 0.016182098537683487,
+      "changeDb": -17.111966909197307
+    },
+    {
+      "name": "after-grass",
+      "sampleRate": 24000,
+      "rms": 0.0007627924948837775,
+      "peak": 0.011036651208996773
+    },
+    {
+      "name": "after-ash",
+      "sampleRate": 24000,
+      "rms": 0.0008535851887191276,
+      "peak": 0.011317403987050056
+    }
+  ]
+}

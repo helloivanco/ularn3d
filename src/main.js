@@ -149,8 +149,12 @@ const syncHeard = (snapshot) => {
     return;
   }
   audio.syncBed(snapshot.level);
-  for (const cue of cues) sound(cue, {surface: snapshot.level===0 && !world?.paths.has(`${snapshot.x},${snapshot.y}`) ? "grass" : "stone"});
+  for (const cue of cues) if (cue!=="step" || !world) sound(cue);
 };
+window.addEventListener("ularn:footstep",({detail}) => {
+  if (!state || state.over || state.level!==detail.level || state.prompt || document.querySelector("dialog[open]")) return;
+  sound("step",{foot:detail.right?"right":"left",surface:detail.level===0 && !world?.paths.has(`${detail.x},${detail.y}`) ? "grass" : detail.level>15 ? "ash" : "stone"});
+});
 window.addEventListener("ularn:action", ({detail}) => {
   if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest"].includes(detail.kind)) sound(detail.kind,detail);
 });

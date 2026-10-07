@@ -49,12 +49,14 @@ import {
   attackPose,
   attackStyle,
   CAST_MS,
+  blendStep,
   castPose,
   dampStep,
   LEG_Y,
   pointOnRoute,
   pushOutOfWalls,
   STEP_MS,
+  STEP_CONTACT,
   stepEase,
   stepPose,
   stepRoute,
@@ -528,6 +530,7 @@ export class World {
       e.preventDefault();
       this.lost = true;
       this.heroAnimation.clear();
+      this.footstepPending=null;
       this.stopFrames();
       this.releaseLostResources();
       window.dispatchEvent(new Event("ularn:graphics-lost"));
@@ -743,6 +746,11 @@ export class World {
           rightArmZ: this.heroRightArm?.rotation.z ?? 0,
           leftLegX: this.heroLeftLeg?.rotation.x ?? 0,
           rightLegX: this.heroRightLeg?.rotation.x ?? 0,
+          leftKneeX: this.heroLeftKnee?.rotation.x ?? 0,
+          rightKneeX: this.heroRightKnee?.rotation.x ?? 0,
+          leftFootX: this.heroLeftFoot?.rotation.x ?? 0,
+          rightFootX: this.heroRightFoot?.rotation.x ?? 0,
+          footfalls: this.footfalls || 0,
         };
       },
       ambientRats: () => this.ambientRats?.snapshot() ?? {
@@ -814,6 +822,7 @@ export class World {
   setPaused(paused) {
     if (this.paused === !!paused) return;
     this.paused = !!paused;
+    if (this.paused) this.footstepPending = null;
     if (this.paused) this.heroAnimation.clear();
     this.nextFrameTime = 0;
     this.invalidate();
@@ -856,6 +865,10 @@ export class World {
     this.heroBody = this.player.getObjectByName("body");
     this.heroLeftLeg = this.player.getObjectByName("left-leg");
     this.heroRightLeg = this.player.getObjectByName("right-leg");
+    this.heroLeftKnee = this.player.getObjectByName("left-knee");
+    this.heroRightKnee = this.player.getObjectByName("right-knee");
+    this.heroLeftFoot = this.player.getObjectByName("left-foot");
+    this.heroRightFoot = this.player.getObjectByName("right-foot");
     this.heroWeapon = this.player.getObjectByName("weapon");
     this.heroCape = this.player.getObjectByName("cape");
     this.heroLeftArm = this.player.getObjectByName("left-arm");
@@ -968,12 +981,16 @@ export class World {
     body.rotation.z = pose.roll;
     this.setLeg(this.heroLeftLeg, pose.leftLeg, pose.leftLift);
     this.setLeg(this.heroRightLeg, pose.rightLeg, pose.rightLift);
+    for (const [joint,angle] of [[this.heroLeftKnee,pose.leftKnee],[this.heroRightKnee,pose.rightKnee],
+      [this.heroLeftFoot,pose.leftFoot],[this.heroRightFoot,pose.rightFoot]])
+      if (joint) joint.rotation.x = angle || 0;
     this.setArm(this.heroLeftArm, pose.leftArm, 0, 0);
     this.setArm(this.heroRightArm, pose.rightArm, 0, 0);
     this.setForearm(this.heroLeftForearm, pose.forearmX);
     this.setForearm(this.heroRightForearm, pose.forearmX);
     if (this.heroCape) this.heroCape.rotation.x = pose.capeX;
     this.setWeaponGrip(0);
+    this.lastStepPose = pose;
   }
   fitStride(pose) {
     if (!this.nearSolid()) return pose;
@@ -1042,13 +1059,16 @@ export class World {
   }
   poseHero(now) {
     const body = this.heroBody;
-    if (!body || this.reduced) return false;
+    if (!body) return false;
+    if (this.reduced) {this.applyStepPose(stepPose(1,false));return false;}
     const swingT = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
     const castT = this.castStartedAt == null ? 1 : (now - this.castStartedAt) / CAST_MS;
     const stepping = this.followLive();
     const swinging = swingT >= 0 && swingT < 1;
     const casting = castT >= 0 && castT < 1;
-    const rawStep = stepPose(stepping ? Math.min(1, (now - this.followStart) / this.followMs) : 1, !!this.stepLeadRight);
+    const stepTime = stepping ? Math.min(1,(now-this.followStart)/this.followMs) : 1;
+    const rawStep = blendStep(stepping ? this.stepPoseFrom : null,
+      stepPose(stepTime,!!this.stepLeadRight,(this.heroWeapon?.children.length || 0)>0),stepTime);
     const step = stepping ? this.fitStride(rawStep) : rawStep;
     this.applyStepPose(step);
     if (casting && !swinging) {
@@ -1916,6 +1936,7 @@ export class World {
     if (!this.playerTarget) this.playerTarget = new THREE.Vector3();
     const target = this.playerTarget.set(state.x, 0, state.y);
     if (!this.lastPlayer) {
+      this.footstepPending=null;
       this.player.position.copy(target);
       this.stepHome = { x: state.x, z: state.y };
       this.stepDest = null;
@@ -1934,7 +1955,8 @@ export class World {
         this.yawTo = this.yawFrom + dy;
         this.yawEase = true;
       }
-      this.startFollow(target);
+      const nearby = old && old.level === state.level && Math.max(Math.abs(state.x-old.x),Math.abs(state.y-old.y))===1;
+      this.startFollow(target,nearby ? {x:state.x,y:state.y,level:state.level} : null);
     }
     if (
       old &&
@@ -2139,6 +2161,7 @@ export class World {
   }
   reset() {
     if (this.state) {
+      this.footstepPending=null;
       const prefs = readCameraPrefs();
       this.heldCameraOffset = northCameraOffset(
         prefs?.radius ?? GAME_CAMERA_DIST,
@@ -2158,7 +2181,15 @@ export class World {
       this.invalidate();
     }
   }
-  startFollow(target) {
+  emitFootstep() {
+    const step=this.footstepPending;this.footstepPending=null;
+    if (!step || this.paused || this.lost || document.hidden || !this.state?.maze || this.state.over) return;
+    this.footfalls=(this.footfalls||0)+1;
+    window.dispatchEvent(new CustomEvent("ularn:footstep",{detail:{...step,right:!!this.stepLeadRight}}));
+  }
+  startFollow(target,footstep=null) {
+    this.stepPoseFrom=this.followLive() ? this.lastStepPose : null;
+    this.footstepPending=document.hidden || this.lost ? null : footstep;
     this.followFrom.copy(this.player.position);
     this.followCam.copy(this.controls.target);
     this.followStart = performance.now();
@@ -2168,13 +2199,14 @@ export class World {
     this.followMs = this.reduced || !moving ? 0 : FOLLOW_MS;
     this.followHeld = this.followMs === 0;
     this.hasMotion = this.followMs > 0;
-    if (this.followMs) this.stepLeadRight = !this.stepLeadRight;
+    if (moving && footstep) this.stepLeadRight = !this.stepLeadRight;
     this.stepHome = { x: Math.round(this.followFrom.x), z: Math.round(this.followFrom.z) };
     this.stepDest = { x: Math.round(target.x), z: Math.round(target.z) };
     this.ensureSolid();
     if (!this.followMs) {
       this.snapFollow();
       this.finishStepTiles();
+      this.emitFootstep();
       return;
     }
     this.followRoute = stepRoute(
@@ -2269,6 +2301,7 @@ export class World {
         this.player.position.set(clear.x, 0, clear.z);
         this.faceStep(eased);
       }
+      if (t>=STEP_CONTACT) this.emitFootstep();
     }
     if (this.playerTarget) {
       this.playerLight.position
@@ -2325,7 +2358,9 @@ export class World {
           : base;
       }
       if (moving) this.hasMotion = true;
-      if (mesh.userData.model) animateCreature(mesh, now, moving, this.reduced);
+      if (mesh.userData.model) {
+        if (animateCreature(mesh, now, moving, this.reduced)) this.hasMotion = true;
+      }
       else if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
     }
     if (camTurned) {
