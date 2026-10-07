@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { mat, matBasic, surface, noise } from "./materials.js";
 import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { compact, disposeGeometry } from "./graphics-utils.js";
+import { compact, disposeGeometry, featherContact } from "./graphics-utils.js";
 export { mat } from "./materials.js";
 const shared = new Map();
 const weaponModels = new Map();
@@ -119,6 +119,7 @@ const CONTACT_DISC = new THREE.MeshBasicMaterial({
   opacity: 0.62,
   depthWrite: false,
   toneMapped: false,
+  vertexColors: true,
 });
 const HERO_OUTLINE = new THREE.MeshBasicMaterial({
   color: 0x101816,
@@ -132,7 +133,7 @@ const HERO_OUTLINE = new THREE.MeshBasicMaterial({
 /** Flat dark disc. Not a shadow map. */
 export function contactDisc(radius = 0.46) {
   const mesh = new THREE.Mesh(
-    geometry("contact-disc", () => new THREE.CircleGeometry(1, 20)),
+    geometry("contact-disc", () => featherContact(new THREE.CircleGeometry(1, 20))),
     CONTACT_DISC,
   );
   mesh.name = "contact-disc";

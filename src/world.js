@@ -17,7 +17,7 @@ import { CombatEffects } from "./combat-effects.js";
 import { StaticTiles } from "./static-world.js";
 import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
 import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
-import { compact, percentile, sample, releaseCompactMaterials } from "./graphics-utils.js";
+import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } from "./graphics-utils.js";
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
 import { TorchLighting, stabilizeShadow } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -337,7 +337,7 @@ export class World {
     }
     this.cooperationAura = createCooperationAura();
     this.scene.add(this.cooperationAura);
-    const wallGeo = new THREE.BoxGeometry(1, 1, 1);
+    const wallGeo = bakeWallRelief(new THREE.BoxGeometry(1, 1, 1));
     floorGeo.userData.shared=wallGeo.userData.shared=true;
     this.floorGeometry=floorGeo; this.wallGeometry=wallGeo;
     this.walls = new ChunkedTerrainMesh(
@@ -636,7 +636,8 @@ export class World {
         shadowUpdates: this.shadowUpdates,
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
         torchReassignments:this.lighting.reassignments,
-        antialiasing:this.effectiveTier===2 ? "SMAA" : "MSAA",
+        antialiasing:this.cinematicRendering() ? "SMAA" : "none",
+        wallRelief:!!this.walls.geometry.getAttribute("color"),
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
         wallCastShadow: this.walls.castShadow,
@@ -1183,11 +1184,17 @@ export class World {
       light.intensity = 0;
     });
   }
-  cinematicRendering() { return this.effectiveTier === 2; }
+  // Auto spends headroom on sharpness. The full post-processing/shadow stack
+  // is an explicit Cinematic choice, avoiding a large automatic cost cliff.
+  cinematicRendering() { return this.quality === "cinematic"; }
+  qualityPixelRatio() {
+    const cap=this.cinematicRendering()?1.5:this.quality==="auto"?[.65,.75,1][this.effectiveTier]:.75;
+    return Math.min(devicePixelRatio,cap);
+  }
   applyGpuQuality() {
     const cinematic = this.cinematicRendering();
     // Balanced caps below native DPR: 1440×1000 fill already dominates web frame time.
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, cinematic ? 1.5 : 0.75));
+    this.renderer.setPixelRatio(this.qualityPixelRatio());
     // Balanced never runs a shadow pass — walls already do not cast, and the
     // leftover sun/hero shadow setup still cost town frames in Chrome.
     this.renderer.shadowMap.enabled = cinematic;
@@ -1263,8 +1270,8 @@ export class World {
     const courses = shiftedTexture("stone", "courses", 0.37, 0.19);
     this.floor.material = this.floorSurface("stone", tint.floor);
     this.grassFloor.material = this.floorSurface("grass", 0xffffff);
-    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses });
-    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses });
+    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses, vertexColors:true });
+    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses, vertexColors:true });
   }
   floorVariation(level, grass, x, y) {
     const n = noise(x, y);
@@ -1293,7 +1300,7 @@ export class World {
     this.shadowUpdates++;
   }
   syncPlayerLight() {
-    const enabled=this.effectiveTier===2 && this.state?.level===0;
+    const enabled=this.cinematicRendering() && this.state?.level===0;
     if (!enabled) { this.disablePointLights(); return; }
     this.playerLight.visible=true; this.playerLight.intensity=3.5;
     this.torchLights.forEach((light,index)=>{light.visible=index<4;});
@@ -1312,8 +1319,7 @@ export class World {
   applyQuality() {
     this.effectiveTier = this.quality === "auto" ? this.autoTier : this.quality === "cinematic" ? 2 : 1;
     this.applyGpuQuality();
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, [.65, .75, 1.5][this.effectiveTier]));
-    const cinematic=this.effectiveTier===2;
+    const cinematic=this.cinematicRendering();
     if (cinematic) this.ensureComposer(); else this.disposeComposer();
     if (this.composer) {
       this.bloom.enabled=this.ao.enabled=this.antialias.enabled=cinematic;
@@ -1325,7 +1331,7 @@ export class World {
     if (this.quality !== "auto" || this.frameSamples.length < 20) return;
     const p95 = percentile(this.frameSamples);
     this.overBudgetMs = p95 > 20 ? (this.overBudgetMs || 0) + frameMs : 0;
-    this.headroomMs = p95 < 18 ? (this.headroomMs || 0) + frameMs : 0;
+    this.headroomMs = p95 < 19 ? (this.headroomMs || 0) + frameMs : 0;
     if (this.overBudgetMs > 2000 && this.autoTier > 0) this.autoTier--;
     else if (this.headroomMs > 10000 && this.autoTier < 2) this.autoTier++;
     else return;
@@ -2376,7 +2382,7 @@ export class World {
       }
     }
     if (this.wallCells.length) this.updateWalls(dt);
-    if (this.effectiveTier===2 && this.state?.level===0) {
+    if (this.cinematicRendering() && this.state?.level===0) {
       this.syncPlayerLight();
       const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
       this.hasMotion ||= lightsMoving;
@@ -2393,16 +2399,19 @@ export class World {
     }
     this.applyPixelGrid();
     try {
-      if (this.composer && this.effectiveTier === 2) this.composer.render(dt);
+      if (this.composer && this.cinematicRendering()) this.composer.render(dt);
       else this.renderer.render(this.scene, this.camera);
     } finally {
       this.restorePixelGrid();
     }
     sample(this.renderSamples, performance.now() - now);
     if (!this.paused && this.state && this.hasMotion) {
-      sample(this.frameSamples, Math.min(100, dt * 1000));
+      // Animation integration clamps long frames, but Auto must still see
+      // actual GPU/main-thread stalls and reduce resolution when overloaded.
+      const activeFrameMs=Math.min(100,elapsed*1000);
+      sample(this.frameSamples, activeFrameMs);
       if (this.lastInputAt != null) { sample(this.inputSamples, performance.now() - this.lastInputAt); this.lastInputAt=null; }
-      this.adaptQuality(now, dt*1000);
+      this.adaptQuality(now, activeFrameMs);
     }
     this.renderedFrames++;
     this.animating = false;

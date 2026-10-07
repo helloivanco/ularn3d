@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { box, orb, cone, cylinder, tapered, mat } from "./models.js";
 import { matBasic } from "./materials.js";
-import { compact } from "./graphics-utils.js";
+import { compact, featherContact } from "./graphics-utils.js";
 
 // Exact Ularn IDs, including its lemming, bitbug and lama nobe variants.
 // Family rigs share topology; species have their own proportions and features.
@@ -76,9 +76,9 @@ const definitions = [
 export const CREATURES = Object.freeze(definitions.map(([model, family, color, scale, feature], i) =>
   Object.freeze({ id: i + 1, model, family, color, scale, feature })));
 const templates = new Map();
-const shadowGeometry = new THREE.CircleGeometry(.37, 24);
+const shadowGeometry = featherContact(new THREE.CircleGeometry(.37, 24));
 shadowGeometry.userData.shared = true;
-const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x061316, transparent: true, opacity: .28, depthWrite: false });
+const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x061316, transparent: true, opacity: .38, depthWrite: false, vertexColors:true });
 
 function pivot(parent, name, x, y, z) {
   const group = new THREE.Group(); group.name = name; group.position.set(x, y, z); parent.add(group); return group;
