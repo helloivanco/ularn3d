@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.68 — Stable ground edges and house cutaways
+
+- Town and dungeon bases meet floor tiles below the ground, removing overlapping side faces that flickered during movement
+- Houses keep a solid floor and rear walls while roofs and camera-facing walls cut away to reveal the hero
+- Obstructing sections fade briefly, then disappear; restored sections return to opaque rendering and shadows
+
 ## 1.3.67 — Readable scoreboard fates
 
 - Creature names in the Fate column render in their colors instead of showing HTML tags

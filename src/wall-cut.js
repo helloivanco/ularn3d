@@ -4,8 +4,17 @@
 export const WALL_FULL = 1.15;
 export const WALL_CUT = 0.36;
 export const WALL_TILE_SIZE = 1;
+export const FLOOR_HEIGHT = 0.18;
+export const FLOOR_CENTER_Y = -0.105;
+export const FLOOR_BOTTOM_Y = FLOOR_CENTER_Y - FLOOR_HEIGHT / 2;
 /** The floor box's upper face. Bodies and caps meet without overlapping skins. */
-export const WALL_BASE_Y = -0.015;
+export const WALL_BASE_Y = FLOOR_CENTER_Y + FLOOR_HEIGHT / 2;
+
+/** Join the base below the floor boxes, without coplanar overlapping sides. */
+export const groundSlab = bottom => ({
+  y: (FLOOR_BOTTOM_Y + bottom) / 2,
+  height: FLOOR_BOTTOM_Y - bottom,
+});
 /** Cap on a full-height wall. Cutaway columns keep the shorter lip below. */
 export const WALL_LIP = 0.08;
 export const WALL_LIP_CUT = 0.028;

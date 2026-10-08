@@ -30,7 +30,34 @@ test("the actual world wall matrices close neighboring seams and meet the floor/
   }
 });
 
-test("town roof surfaces write depth when opaque and recover after hiding the hero",async({page})=>{
+test("town and dungeon bases meet floor bottoms without overlapping edge faces",async({page})=>{
+  await page.route('**/src/world.js*',async route=>{
+    const response=await route.fetch();
+    await route.fulfill({response,body:(await response.text()).replace(
+      'this.scene = new THREE.Scene();','window.__surfaceWorld = this; this.scene = new THREE.Scene();')});
+  });
+  await page.goto('/play/');await expect(page.locator('#loading')).toBeHidden();await page.locator('#begin').click();
+  const joins=await page.evaluate(async()=>{
+    const THREE=await import('/node_modules/three/build/three.module.js');
+    return [0,1,16].map(depth=>{
+      newcavelevel(depth);paint();
+      const world=window.__surfaceWorld;
+      const slab=world.terrain.children.find(mesh=>mesh.isMesh&&mesh.material.color.getHex()===(depth===0?0x70806e:depth>15?0x22191a:0x101d24));
+      const base=new THREE.Box3().setFromObject(slab);
+      const floor=world.floor.count?world.floor:world.grassFloor;
+      const matrix=new THREE.Matrix4();floor.getMatrixAt(0,matrix);
+      floor.geometry.computeBoundingBox();
+      const tile=floor.geometry.boundingBox.clone().applyMatrix4(matrix);
+      return {depth,baseTop:base.max.y,floorBottom:tile.min.y};
+    });
+  });
+  for(const join of joins){
+    expect(join.baseTop).toBeLessThanOrEqual(join.floorBottom+1e-6);
+    expect(join.baseTop).toBeCloseTo(join.floorBottom,6);
+  }
+});
+
+test("town cutaways keep the floor and rear walls solid and restore opaque roofs",async({page})=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   page.on("console",message=>{if(message.type()==="error")errors.push(message.text());});
   await page.addInitScript(()=>{localStorage.setItem("ularn3d.quality","balanced");localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));});
@@ -42,8 +69,13 @@ test("town roof surfaces write depth when opaque and recover after hiding the he
   const read=()=>page.evaluate(store=>ularnGraphics.buildings().find(b=>b.tile.x===store.x&&b.tile.y===store.y),store);
   await expect.poll(async()=>{const b=await read();return b?.opacity===1&&b.depthWrite;}).toBe(true);
   await page.evaluate(store=>{player.x=store.x;player.y=store.y-1;paint();},store);
-  await expect.poll(async()=>(await read()).opacity).toBeLessThan(.3);
-  expect((await read()).depthWrite).toBe(false);
+  await expect.poll(async()=>(await read()).opacity).toBe(0);
+  const cut=await read();
+  expect(cut.parts.filter(part=>part.part==='base').every(part=>part.visible&&!part.transparent&&part.opacity===1&&part.depthWrite)).toBe(true);
+  expect(cut.parts.filter(part=>part.part==='roof').every(part=>!part.visible&&part.opacity===0)).toBe(true);
+  expect(cut.parts.some(part=>['front','back','left','right'].includes(part.part)&&part.visible&&part.opacity===1)).toBe(true);
+  expect(cut.parts.some(part=>['front','back','left','right'].includes(part.part)&&!part.visible)).toBe(true);
+  expect(cut.parts.every(part=>!part.transparent&&part.depthWrite)).toBe(true);
   await page.evaluate(store=>{player.x=store.x-8;player.y=store.y;paint();},store);
   await expect.poll(async()=>{const b=await read();return b.opacity===1&&b.depthWrite;}).toBe(true);
   expect(errors).toEqual([]);
@@ -57,4 +89,37 @@ test("roof mip filtering blends LODs while retaining the existing terrain maps",
       linear:THREE.LinearMipmapLinearFilter,crisp:THREE.LinearMipmapNearestFilter};
   });
   expect(filters.roof).toBe(filters.linear);expect(filters.stone).toBe(filters.crisp);
+});
+
+test("house cutaways follow the camera from every side and stop changing when settled",async({page})=>{
+  await page.setViewportSize({width:720,height:540});
+  await page.route('**/src/world.js*',async route=>{
+    const response=await route.fetch();
+    await route.fulfill({response,body:(await response.text()).replace(
+      'this.scene = new THREE.Scene();','window.__surfaceWorld = this; this.scene = new THREE.Scene();')});
+  });
+  await page.addInitScript(()=>localStorage.setItem('ularn3d.quality','cinematic'));
+  await page.goto('/play/');await expect(page.locator('#loading')).toBeHidden();await page.locator('#begin').click();
+  const store=await page.evaluate(()=>{
+    const tile=ularn.snapshot().tiles.find(tile=>tile.id===12);
+    player.x=tile.x;player.y=tile.y;paint();return {x:tile.x,y:tile.y};
+  });
+  for(const [x,z,near,far] of [[0,12,'front','back'],[12,0,'right','left'],[0,-12,'back','front'],[-12,0,'left','right']]){
+    await page.evaluate(({x,z,store})=>{
+      const world=window.__surfaceWorld;
+      world.snapFollow();world.controls.target.set(store.x,0,store.y);
+      world.camera.position.set(store.x+x,15,store.y+z);world.controls.update();world.invalidate();
+    },{x,z,store});
+    const read=()=>page.evaluate(store=>ularnGraphics.buildings().find(b=>b.tile.x===store.x&&b.tile.y===store.y),store);
+    await expect.poll(async()=>{
+      const parts=(await read()).parts;
+      return parts.filter(part=>part.part===near||part.part==='roof').every(part=>!part.visible)&&
+        parts.filter(part=>part.part===far||part.part==='base').every(part=>part.visible&&part.opacity===1);
+    }).toBe(true);
+    const before=await page.evaluate(()=>ularnGraphics.metrics().shadowUpdates);
+    await page.evaluate(async()=>{
+      for(let frame=0;frame<12;frame++) await new Promise(requestAnimationFrame);
+    });
+    expect(await page.evaluate(()=>ularnGraphics.metrics().shadowUpdates)).toBe(before);
+  }
 });
