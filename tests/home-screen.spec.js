@@ -39,12 +39,12 @@ for (const viewport of desktops) {
     await expect(page.locator(".topbar #whats-new")).toBeVisible();
     await expect(page.locator("#guide")).toContainText("Field guide");
     await expect(page.getByRole("link", { name: "History", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Github", exact: true })).toBeVisible();
-    await expect(page.locator(".site-links")).toContainText("Verify Download");
+    await expect(page.getByRole("link", { name: "GitHub", exact: true })).toBeVisible();
+    await expect(page.locator(".site-links")).toContainText("Verify download");
     await expect(page.locator(".site-links .github-link")).toBeVisible();
     await expect(page.locator("#welcome")).not.toContainText("Time moves only when you do.");
     await expect(page.locator(".site-version")).toHaveCount(0);
-    await expect(page.locator("#download-windows small")).toContainText(/^v\d+\.\d+\.\d+/);
+    await expect(page.locator("#download-windows small")).toContainText("Portable · 64-bit · Offline play");
 
     const titleLine = await page.evaluate(() => {
       const logo = document.querySelector("#title .brand img").getBoundingClientRect();
@@ -73,8 +73,8 @@ for (const viewport of desktops) {
         getComputedStyle(document.querySelector(selector).querySelector(child)).color;
       const mid = (box) => box.top + box.height / 2;
       const download = document.querySelector("#download-windows").getBoundingClientRect();
-      const verify = document.querySelector(".site-links a[href='/downloads/SHA256SUMS.txt']").getBoundingClientRect();
-      const logo = document.querySelector(".github-link").getBoundingClientRect();
+      const verify = document.querySelector(".site-links a[href='/about/#verify-download']").getBoundingClientRect();
+      const logo = document.querySelector(".github-link .icon").getBoundingClientRect();
       const github = document.querySelector(".github-word").getBoundingClientRect();
       const order = [...document.querySelector(".topbar nav").children]
         .filter((el) => getComputedStyle(el).display !== "none")

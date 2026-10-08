@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 const origin = "https://ularn-3d.vercel.app";
 const routes = ["/", "/play/", "/about/", "/changelog/"];
 const { version } = JSON.parse(readFileSync("package.json", "utf8"));
-const downloadName = `Ularn-${version}.windows.exe`;
+const downloadName = "Ularn.windows.exe";
 test.use({ javaScriptEnabled: false });
 
 test("indexable pages expose unique metadata, headings and canonical URLs without JavaScript", async ({ page }) => {
@@ -67,7 +67,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/");
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
-  await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
+  await expect(page.locator("#download-windows")).toContainText("Offline play");
   await expect(page.locator(".footer-version")).toContainText(`v${version}`);
   await expect(page.locator(".footer-version a")).toHaveAttribute("href", "/changelog/");
   await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /What’s New/i })).toHaveAttribute(
@@ -83,9 +83,9 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await expect(page.getByRole("link", { name: "What’s New", exact: true })).toHaveAttribute("href", "/changelog/");
   await expect(page.locator(".topbar #whats-new")).toBeVisible();
   await expect(page.getByRole("link", { name: "History", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Verify Download", exact: true })).toHaveAttribute("href", "/downloads/SHA256SUMS.txt");
+  await expect(page.getByRole("link", { name: "Verify download", exact: true })).toHaveAttribute("href", "/about/#verify-download");
   await expect(page.getByRole("link", { name: /About & controls|History & creators|Site home/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Github", exact: true })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
+  await expect(page.getByRole("link", { name: "GitHub", exact: true })).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator(".github-link")).toHaveAttribute("href", "https://github.com/helloivanco/ularn3d");
   await expect(page.locator(".site-links .github-link svg")).toBeVisible();
   const linkLefts = await page.locator(".site-links a").evaluateAll((els) =>
@@ -97,7 +97,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await expect(page.getByRole("link", { name: "Site home" })).toHaveCount(0);
   await expect(page.locator("#download-windows")).toHaveAttribute("href", "/downloads/Ularn.windows.exe");
   await expect(page.locator("#download-windows")).toHaveAttribute("download", downloadName);
-  await expect(page.locator("#download-windows")).toContainText(new RegExp(`v${version}`));
+  await expect(page.locator("#download-windows")).toContainText("Offline play");
   await expect(page.locator(".site-version")).toHaveCount(0);
   await expect(page.locator("#welcome")).not.toContainText("Time moves only when you do.");
   await expect(page.locator("#begin")).toHaveAttribute("type", "submit");
@@ -110,7 +110,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   const aboutDownload = page.locator('#windows a[href="/downloads/Ularn.windows.exe"]');
   await expect(aboutDownload).toBeVisible();
   await expect(aboutDownload).toHaveAttribute("download", downloadName);
-  await expect(aboutDownload).toContainText(new RegExp(`v${version}`));
+  await expect(aboutDownload).toContainText("Download for Windows");
   await expect(page.locator('a[href="/downloads/SHA256SUMS.txt"]')).toBeVisible();
   await expect(page.locator(".footer-version")).toContainText(`v${version}`);
   await expect(page.locator(".footer-version a")).toHaveAttribute("href", "/changelog/");
@@ -137,7 +137,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
   await page.goto("/changelog/");
   await expect(page.locator("h1")).toContainText(/What’s new/i);
   await expect(page.locator(`#v${version.replaceAll(".", "-")}`)).toBeVisible();
-  await expect(page.locator(".changelog-list > li")).toHaveCount(59);
+  await expect(page.locator(".changelog-list > li")).toHaveCount(60);
   await expect(page.getByRole("navigation", { name: "Footer" }).getByRole("link", { name: "Releases" })).toHaveAttribute(
     "href",
     "https://github.com/helloivanco/ularn3d/releases",
@@ -175,7 +175,7 @@ test("published Windows link serves a real executable and its checksum", async (
   const path = "/downloads/Ularn.windows.exe";
   const redirect = await request.head(path, { maxRedirects: 0 });
   expect(redirect.status()).toBe(307);
-  expect(new URL(redirect.headers().location).href).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/${downloadName}`);
+  expect(new URL(redirect.headers().location).href).toBe(`https://github.com/helloivanco/ularn3d/releases/latest/download/${downloadName}`);
   const head = await request.head(path);
   expect(head.status()).toBe(200);
   expect(head.headers()["content-type"]).not.toContain("text/html");
@@ -224,7 +224,7 @@ test("deployed utility pages stay out of search and unknown routes are real 404s
   expect(missing.status()).toBe(404);
 });
 
-test("vercel download points at the GitHub Release for this package version", async () => {
+test("Vercel download and checksum follow the last fully published Windows release", async () => {
   const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
   const disposition = vercel.headers
     .flatMap((entry) => entry.headers)
@@ -232,10 +232,10 @@ test("vercel download points at the GitHub Release for this package version", as
     ?.value;
   expect(disposition).toBe(`attachment; filename="${downloadName}"`);
   const exeRedirect = vercel.redirects.find((entry) => entry.source === "/downloads/Ularn.windows.exe");
-  expect(exeRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/${downloadName}`);
+  expect(exeRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/latest/download/${downloadName}`);
   expect(exeRedirect?.permanent).toBe(false);
   const checksumRedirect = vercel.redirects.find((entry) => entry.source === "/downloads/SHA256SUMS.txt");
-  expect(checksumRedirect?.destination).toBe(`https://github.com/helloivanco/ularn3d/releases/download/v${version}/SHA256SUMS.txt`);
+  expect(checksumRedirect?.destination).toBe("https://github.com/helloivanco/ularn3d/releases/latest/download/Ularn.windows.exe.sha256");
   for (const source of ["/credits", "/credits/", "/credits/index.html"]) {
     const creditsRedirect = vercel.redirects.find((entry) => entry.source === source);
     expect(creditsRedirect?.destination).toBe("/about/#history");
