@@ -17,9 +17,11 @@ const fixture=(t,{badUpload=false,latest='v1.3.68',authenticationError=false}={}
   if(args[0]==='api'){
    if(authenticationError)return{status:1,stderr:'HTTP 401'};
    if(args[1].endsWith('/latest'))return{status:0,stdout:JSON.stringify({tag_name:latest})};
+   if(args[1].includes('?per_page='))return{status:0,stdout:JSON.stringify(release?[release]:[])};
+   if(args[1].includes('/tags/')&&release?.draft)return{status:1,stderr:'HTTP 404: published releases only'};
    return release?{status:0,stdout:JSON.stringify(release)}:{status:1,stderr:'HTTP 404'};
   }
-  if(args[1]==='create')release={draft:true,assets:[]};
+  if(args[1]==='create')release={id:42,tag_name:'v1.3.69',draft:true,assets:[]};
   if(args[1]==='upload')release.assets=args.slice(3,args.indexOf('--repo')).map(path=>{
    const bytes=readFileSync(path);return{name:path.split(/[\\/]/).at(-1),state:'uploaded',size:bytes.length,digest:badUpload?'sha256:wrong':digest(bytes)};
   });
@@ -57,6 +59,27 @@ test('a local checksum failure stops before any GitHub operation',t=>{
 
 test('retries do not replace already published files',t=>{
  const f=fixture(t);publish(f);f.calls.length=0;
+ assert.equal(publish(f).alreadyPublished,true);
+ assert.equal(f.calls.some(args=>args[0]==='release'),false);
+});
+
+test('draft uploads are verified by release ID instead of the published tag endpoint',t=>{
+ const f=fixture(t);publish(f);
+ assert.ok(f.calls.some(args=>args[0]==='api'&&args[1].endsWith('/releases/42')));
+ assert.equal(f.calls.some(args=>args[0]==='api'&&args[1].includes('/tags/')),false);
+});
+
+test('a draft from an interrupted run is reused instead of creating a duplicate',t=>{
+ const f=fixture(t,{badUpload:true});assert.throws(()=>publish(f),/stays a draft/);
+ f.calls.length=0;assert.throws(()=>publish(f),/stays a draft/);
+ assert.equal(f.calls.some(args=>args[1]==='create'),false);
+});
+
+test('a rebuilt portable payload does not overwrite an already published version',t=>{
+ const f=fixture(t);publish(f);f.calls.length=0;
+ const bytes=Buffer.from('MZ rebuilt at a later timestamp');
+ writeFileSync(join(f.directory,'Ularn.windows.exe'),bytes);
+ writeFileSync(join(f.directory,'Ularn.windows.exe.sha256'),`${digest(bytes).slice(7)}  Ularn.windows.exe\n`);
  assert.equal(publish(f).alreadyPublished,true);
  assert.equal(f.calls.some(args=>args[0]==='release'),false);
 });
