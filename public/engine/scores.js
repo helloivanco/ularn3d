@@ -220,6 +220,7 @@ function loadScores(newScore, showWinners, showLosers, local = false) {
   amiga_mode = false;
   if (GAMEOVER) detachDisplay();
   clear();
+  alternativeDisplay = ' ';
   lprcat(`Loading Scoreboard...\n`);
   setDiv('STATS', 'Loading global records…');
   blt();
@@ -282,6 +283,7 @@ let bound_exitscores; // for button callback comparison
 function exitscores(newScore, local, key) {
   if (key == ESC || key == ENTER) {
     scoreboardActive = false;
+    alternativeDisplay = undefined;
     ++scoreboardRequest;
     ++scoreDetailsRequest;
     scoreIndex = 0;
@@ -303,13 +305,14 @@ function exitscores(newScore, local, key) {
 
 function showScores(newScore, local, showWinners, showLosers, offset) {
   scoreboardLocal = local;
-  if (GAMEOVER) alternativeDisplay = ' ';
   mazeMode = false;
 
   const gotwLabel = GOTW ? ` Weekly ` : ` `;
   const movesLabel = ``;
 
   if (!GAMEOVER) clear();
+  // Keep score rows outside the 80-column grid until the board closes.
+  alternativeDisplay = ' ';
 
   if (local) {
     lprcat(`                    <b>${GAMENAME} Local Scoreboard</b>\n\n`);
@@ -325,16 +328,8 @@ function showScores(newScore, local, showWinners, showLosers, offset) {
   }
 
   if (GAMEOVER) {
-    lprc(`<b>This game</b> (Click score for more info)`);
-    lprc(`<hr>`);
-    if (newScore.winner) {
-      lprcat(ULARN ? WINNER_HEADER_ULARN : WINNER_HEADER_LARN);
-    } else {
-      lprcat(ULARN ? VISITOR_HEADER_ULARN : VISITOR_HEADER_LARN);
-    }
+    printScore(newScore, true, true);
     lprc(`\n`);
-    printScore(newScore, true);
-    lprc(`<hr>\n`);
   }
 
   if (winners.length != 0 || losers.length != 0) {
@@ -371,15 +366,30 @@ function escapeScoreText(value) {
   })[char]);
 }
 
+function formatScoreFate(value) {
+  const fate = String(value ?? '');
+  let html = '';
+  let end = 0;
+  // Older and current records contain the engine's creature-color markup.
+  // Recognize only a font with one literal color; all other input stays text.
+  const fonts = /<font\s+color=(['"])([a-z]+|#[\da-f]{3}|#[\da-f]{6})\1>([^<>]*)<\/font>/gi;
+  for (const match of fate.matchAll(fonts)) {
+    html += escapeScoreText(fate.slice(end, match.index));
+    html += `<span style="color:${match[2]}">${escapeScoreText(match[3])}</span>`;
+    end = match.index + match[0].length;
+  }
+  return html + escapeScoreText(fate.slice(end));
+}
+
 function scoreDetailsText(score) {
   if (!score) return "Could not load this expedition's details.";
   if (score.player) {
     try { return getStatString(score, true); } catch { /* Older records may lack full state. */ }
   }
-  return `Player: ${escapeScoreText(score.who)}\nClass: ${escapeScoreText(score.character)}\nScore: ${score.score}\nDiff: ${score.hardlev}\nMobuls: ${score.timeused}\nWinner: ${score.winner ? 'Yes' : 'No'}\nFate: ${escapeScoreText(score.what)} on ${escapeScoreText(score.level)}`;
+  return `Player: ${escapeScoreText(score.who)}\nClass: ${escapeScoreText(score.character)}\nScore: ${score.score}\nDiff: ${score.hardlev}\nMobuls: ${score.timeused}\nWinner: ${score.winner ? 'Yes' : 'No'}\nFate: ${formatScoreFate(score.what)} on ${escapeScoreText(score.level)}`;
 }
 
-function printScore(p, local = scoreboardLocal) {
+function printScore(p, local = scoreboardLocal, latest = false) {
   let score;
   if (p.winner) {
     if (ULARN) {
@@ -389,9 +399,9 @@ function printScore(p, local = scoreboardLocal) {
     }
   } else {
     if (ULARN) {
-      score = `${padString(Number(p.score).toLocaleString(), 10)}  ${padString(`` + p.hardlev, 4)}  ${padString(p.who, -24)}  ${padString(p.character, -10)}  ${p.what} on ${p.level}`;
+      score = `${padString(Number(p.score).toLocaleString(), 10)}  ${padString(`` + p.hardlev, 4)}  ${padString(p.who, -24)}  ${padString(p.character, -10)}  `;
     } else {
-      score = `${padString(Number(p.score).toLocaleString(), 10)}   ${padString(`` + p.hardlev, 10)}   ${padString(p.who, -25)} ${p.what} on ${p.level}`;
+      score = `${padString(Number(p.score).toLocaleString(), 10)}   ${padString(`` + p.hardlev, 10)}   ${padString(p.who, -25)} `;
     }
   }
   const endcode = GAMEOVER ? `<br>` : ``;
@@ -399,8 +409,18 @@ function printScore(p, local = scoreboardLocal) {
   const isNewScore = gameID ? p.gameID.split(`+`)[0] == gameID.split(`+`)[0] : false;
 
   score = escapeScoreText(score);
+  if (!p.winner) score += `${formatScoreFate(p.what)} on ${escapeScoreText(p.level)}`;
   if (isNewScore) {
     score = `<b>${score}</b>`;
+  }
+
+  if (latest) {
+    const board = p.winner ? winners : losers;
+    const index = board.findIndex(entry => entry.gameID === p.gameID);
+    const position = index < 0 ? '' : `<span class="score-latest-position">${scoreboardLocal ? 'Local' : 'Global'} ${p.winner ? 'winners' : 'visitors'} · #${index + 1}</span>`;
+    score = `<span class="score-latest-label">Your latest expedition</span>${position}<span class="score-latest-value">${escapeScoreText(Number(p.score).toLocaleString())}<small> score</small></span><span>${escapeScoreText(p.who)} · ${escapeScoreText(p.character)} · Difficulty ${escapeScoreText(p.hardlev)}</span><span>${p.winner ? 'Victory' : formatScoreFate(p.what)} on ${escapeScoreText(p.level)}</span><span class="score-latest-hint">View expedition details →</span>`;
+  } else if (isNewScore) {
+    score += ` <span class="score-you">← You</span>`;
   }
 
   // console.log(`score.js`, dofs, gameID, p.gameID, isNewScore, `${p.gameID}${addplus}`);
@@ -408,7 +428,7 @@ function printScore(p, local = scoreboardLocal) {
   // use this to keep local players off the scoreboard
   // const local = !navigator.onLine || isLocal() || isFile();
 
-  lprcat(`<a href='#' data-score-game='${escapeScoreText(p.gameID)}' data-score-local='${local}' data-score-winner='${p.winner}'>${score}</a>${endcode}`);
+  lprcat(`<a href='#'${latest ? ' class="score-latest" data-score-latest="true"' : isNewScore ? ' class="score-current"' : ''} data-score-game='${escapeScoreText(p.gameID)}' data-score-local='${local}' data-score-winner='${p.winner}'>${score}</a>${endcode}`);
   if (!GAMEOVER) lprc(`\n`);
 }
 

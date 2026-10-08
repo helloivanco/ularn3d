@@ -54,7 +54,7 @@ async function openScores(page) {
   await expect(page.locator("#engine-modal")).toBeVisible();
 }
 async function finish(page) {
-  await page.evaluate(async () => { player.GOLD = 100; await died(GNOME, true); });
+  await page.evaluate(async () => { player.GOLD = 100; await died(createMonster(GNOME), true); });
   await page.locator('.terminal-footer [data-key="return"]').click();
 }
 
@@ -81,14 +81,25 @@ test("Supabase global records load on demand, paginate, and open details", async
   await expect(page.locator("#LARN")).toContainText("Global Visitor");
   await page.keyboard.press("Escape");
   await expect(page.locator("#engine-modal")).toBeHidden();
+  const before = await page.evaluate(() => player.MOVESMADE);
+  await page.keyboard.press(".");
+  await expect.poll(() => page.evaluate(() => player.MOVESMADE)).toBeGreaterThan(before);
+  await page.locator('.actionbar [data-key="i"]').click();
+  await expect(page.locator("#LARN")).not.toContainText("Global Hero");
   expect(fixture.requests).toEqual(["GET", "GET", "GET"]);
 });
 
 test("completed scores persist to Supabase and another player can read them", async ({ page, browser }) => {
   const fixture = fixtures.get(page);
   await finish(page);
-  await expect(page.locator("#LARN")).toContainText("This game");
+  await expect(page.locator("#LARN")).toContainText("Your latest expedition");
   await expect(page.locator("#score-sync-status")).toContainText("saved globally");
+  const latest = page.locator('#LARN [data-score-latest="true"]');
+  await expect(latest.locator(".score-latest-value")).toHaveText("100 score");
+  await expect(latest.locator(".score-latest-position")).toHaveText("Global visitors · #1");
+  await expect(page.locator("#LARN .score-current")).toContainText("← You");
+  await latest.click();
+  await expect(page.locator("#score-details")).toContainText("Fate: killed by a gnome");
   expect(fixture.submitted).toHaveLength(1);
   const saved = fixture.submitted[0];
   expect(saved).toMatchObject({ edition: "3d", score: 100, winner: false });
@@ -183,6 +194,92 @@ test("empty and untrusted Supabase scores render safely", async ({ page }) => {
   await page.locator("#global-scores").click();
   await expect(page.locator("#LARN")).toContainText("The scoreboard is empty");
   await expect(page.locator("#LARN")).toContainText("Ularn Global Scoreboard");
+});
+
+test("global visitor fates render creature colors and readable details", async ({ page }) => {
+  const fixture = fixtures.get(page);
+  fixture.rows = [
+    ["gnome", "darkkhaki", "rgb(189, 183, 107)"],
+    ["orc", "tan", "rgb(210, 180, 140)"],
+    ["kobold", "brown", "rgb(165, 42, 42)"],
+  ].map(([name, color, rgb]) => ({
+    ...globalScore, game_id: name, winner: false, player_name: `Visitor ${name}`,
+    fate: `killed by a${name === "orc" ? "n" : ""} <font color='${color}'>${name}</font>`,
+    level_name: "2", rgb,
+  }));
+  fixture.rows[1].details = await page.evaluate(() => {
+    const score = new LocalScore();
+    return { player: JSON.parse(score.player), extra: score.extra };
+  });
+  await openScores(page);
+  for (const row of fixture.rows) {
+    const link = page.locator(`#LARN [data-score-game="${row.game_id}"]`);
+    await expect(link).toContainText(`killed by a${row.game_id === "orc" ? "n" : ""} ${row.game_id} on 2`);
+    await expect(link).not.toContainText("<font");
+    await expect(link.locator("span")).toHaveCSS("color", row.rgb);
+    await link.click();
+    await expect(page.locator("#score-details")).toContainText(`Fate: killed by a${row.game_id === "orc" ? "n" : ""} ${row.game_id} on 2`);
+    await expect(page.locator("#score-details")).not.toContainText("<font");
+  }
+});
+
+test("current and previously saved local fates render without raw tags", async ({ page }) => {
+  await page.evaluate(() => {
+    const score = new LocalScore();
+    score.gameID = "past-local-fate"; score.who = "Past Visitor";
+    score.what = getWhyDead(createMonster(GNOME));
+    localWriteHighScore(score);
+  });
+  await finish(page);
+  await expect(page.locator("#LARN")).toContainText("Your latest expedition");
+  await expect(page.locator("#LARN")).toContainText("killed by a gnome");
+  await expect(page.locator("#LARN")).not.toContainText("<font");
+  await page.locator("#local-scores").click();
+  const past = page.locator('#LARN [data-score-game="past-local-fate"]');
+  await expect(past).toContainText("killed by a gnome");
+  await expect(past.locator("span")).toHaveCSS("color", "rgb(189, 183, 107)");
+  await past.click();
+  await expect(page.locator("#score-details")).toContainText("Fate: killed by a gnome");
+  await expect(page.locator("#score-details")).not.toContainText("<font");
+});
+
+test("fate formatting cannot render injected tags, attributes or CSS", async ({ page }) => {
+  const fixture = fixtures.get(page);
+  const injected = '<img src=x onerror="window.scoreInjected=true">';
+  fixture.rows = [{
+    ...globalScore, winner: false, player_name: "Unsafe Fate",
+    fate: `killed by ${injected} <font color='tan' onclick='window.scoreInjected=true'>orc</font> <font color='red;position:fixed'>kobold</font> <font color='brown'>${injected}</font>`,
+    level_name: injected,
+  }];
+  await openScores(page);
+  const link = page.locator('#LARN [data-score-game="global-game"]');
+  await expect(link).toContainText(injected);
+  await expect(link.locator("img, font, span, [onclick], [onerror]")).toHaveCount(0);
+  await link.click();
+  await expect(page.locator("#score-details")).toContainText(injected);
+  await expect(page.locator("#score-details img, #score-details font")).toHaveCount(0);
+  expect(await page.evaluate(() => window.scoreInjected)).toBeUndefined();
+});
+
+test("the latest score stays prominent when an older personal best is listed", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => {
+    const best = new LocalScore(); best.gameID = "older-best"; best.score = 5000;
+    best.what = "an older run";
+    localWriteHighScore(best);
+  });
+  await context.setOffline(true);
+  await finish(page);
+  const latest = page.locator('#LARN [data-score-latest="true"]');
+  await expect(latest).toContainText("Your latest expedition");
+  await expect(latest.locator(".score-latest-value")).toHaveText("100 score");
+  await expect(latest.locator(".score-latest-position")).toHaveCount(0);
+  await expect(page.locator('#LARN [data-score-game="older-best"]')).toContainText("5,000");
+  const box = await latest.boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  await latest.click();
+  await expect(page.locator("#score-details")).toContainText("Score:  100");
 });
 
 test("a stalled Supabase service times out to local records", async ({ page }) => {
