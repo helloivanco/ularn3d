@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { APP_VERSION, CHECKSUM_RELEASE_URL, DOWNLOAD_FILENAME, DOWNLOAD_RELEASE_URL } from "../scripts/app-version.mjs";
+import { APP_VERSION, CHECKSUM_RELEASE_URL, DOWNLOAD_FILENAME, DOWNLOAD_RELEASE_URL, VERSIONED_DOWNLOAD_FILENAME } from "../scripts/app-version.mjs";
 import { expandSiteComponents } from "../scripts/site-components.mjs";
 import {
   checkReleaseBump,
@@ -13,12 +13,13 @@ import {
 const htmlSources = ["index.html", "play/index.html", "public/about/index.html", "public/changelog/index.html"];
 const downloadSources = ["index.html", "play/index.html", "public/about/index.html", "public/changelog/index.html"];
 
-test("npm version restamp keeps package.json, lockfile, and Vercel filename together", () => {
+test("product versions agree while download links follow the last completed Windows release", () => {
   const version = checkStampedVersion();
   assert.equal(version, APP_VERSION);
-  assert.equal(DOWNLOAD_FILENAME, `Ularn-${version}.windows.exe`);
-  assert.equal(DOWNLOAD_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/download/v${version}/${DOWNLOAD_FILENAME}`);
-  assert.equal(CHECKSUM_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/download/v${version}/SHA256SUMS.txt`);
+  assert.equal(DOWNLOAD_FILENAME, "Ularn.windows.exe");
+  assert.equal(VERSIONED_DOWNLOAD_FILENAME, `Ularn-${version}.windows.exe`);
+  assert.equal(DOWNLOAD_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/latest/download/${DOWNLOAD_FILENAME}`);
+  assert.equal(CHECKSUM_RELEASE_URL, "https://github.com/helloivanco/ularn3d/releases/latest/download/Ularn.windows.exe.sha256");
   assert.notEqual(version, "1.0.0");
   assert.notEqual(version, "1.1.0");
   assert.notEqual(version, "1.2.0");
@@ -56,7 +57,8 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.match(home, /href="\/changelog\/"/);
   const play = readStampedPage("play/index.html");
   assert.match(play, /"softwareVersion": "__APP_VERSION__"/);
-  assert.match(play, /Download for Windows <small>v__APP_VERSION__/);
+  assert.match(play, /Portable · 64-bit · Offline play/);
+  assert.match(play, /href="\/about\/#verify-download"/);
   assert.doesNotMatch(play, /class="site-version"/);
   assert.doesNotMatch(play, /Time moves only when you do/);
   assert.match(play, /href="\/changelog\/"/);
@@ -74,7 +76,7 @@ test("play page and field guide stamp version from package.json placeholders", (
   assert.doesNotMatch(play, /href="\/about\/#history"/);
   assert.match(play, /id="about-game"/);
   assert.match(play, /id="whats-new"/);
-  assert.match(play, />Github</);
+  assert.match(play, />GitHub</);
   const changelog = readStampedPage("public/changelog/index.html");
   assert.match(changelog, /class="changelog-list"/);
   assert.match(changelog, /href="https:\/\/github\.com\/helloivanco\/ularn3d\/releases"/);

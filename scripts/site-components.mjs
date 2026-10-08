@@ -25,7 +25,7 @@ export const renderSiteHeader = ({ variant = "", current = "" } = {}) => {
           class="nav-cta nav-cta--secondary web-only"
           href="/downloads/Ularn.windows.exe"
           download="__DOWNLOAD_FILENAME__"
-          aria-label="Download Ularn 3D for Windows, version __APP_VERSION__"
+          aria-label="Download Ularn 3D for Windows"
           >Download for Windows</a
         >
       </nav>

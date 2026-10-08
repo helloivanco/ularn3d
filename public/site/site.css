@@ -846,3 +846,5 @@ html[data-runtime="desktop"] .web-only {
   .page-home .home-hero .lede { margin-bottom: 12px; }
   .home-facts { margin-bottom: 14px; }
 }
+#verify-download { scroll-margin-top: 96px; margin-top: 28px; }
+#verify-download pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; border: 1px solid #9bb6ac35; border-radius: 4px; background: #0b171b; font-size: 13px; }

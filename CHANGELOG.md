@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.69 — Reliable Windows downloads
+
+- Windows download and checksum links follow the last completed desktop release while the next build is being prepared
+- Releases publish only after executable and checksum uploads are verified; automatic checks exercise both public links
+- The play screen has a clearer download card, one GitHub link and a verification guide with the checksum command
+
 ## 1.3.68 — Stable ground edges and house cutaways
 
 - Town and dungeon bases meet floor tiles below the ground, removing overlapping side faces that flickered during movement

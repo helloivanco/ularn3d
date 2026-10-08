@@ -46,7 +46,7 @@ export const dispositionHeader = (vercel) =>
 export const redirectDestination = (vercel, source) =>
   (vercel.redirects || []).find((item) => item.source === source)?.destination;
 
-/** package.json, lockfile, Vercel filename, and GitHub Release download URL must share one version. */
+/** Product versions agree; download routes stay on the last complete release. */
 export const checkStampedVersion = () => {
   const pkg = readJson("package.json");
   const lock = readJson("package-lock.json");
