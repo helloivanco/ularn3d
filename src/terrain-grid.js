@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { noise, surface } from "./materials.js";
-import { wallLip, WALL_TILE_SIZE, WALL_BASE_Y } from "./wall-cut.js";
+import { wallLip, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_CENTER_Y } from "./wall-cut.js";
 
 const SIZE = 8, matrix = new THREE.Matrix4(), position = new THREE.Vector3(), scale = new THREE.Vector3(), rotation = new THREE.Quaternion();
 export class TerrainGrid {
@@ -46,7 +46,7 @@ export class TerrainGrid {
         const mesh = grassy ? chunk.grass : chunk.floor, index = grassy ? grass++ : stone++;
         const color = new THREE.Color(grassy ? 0xa0af80 : state.level === 0 ? 0xb6b49c : state.level > 15 ? 0xb39382 : 0xb1c0ba);
         color.multiplyScalar(.82 + noise(tile.x, tile.y) * .23);
-        matrix.makeTranslation(tile.x, -.105, tile.y);
+        matrix.makeTranslation(tile.x, FLOOR_CENTER_Y, tile.y);
         mesh.setMatrixAt(index, matrix); mesh.setColorAt(index, color);
       }
       chunk.floor.count = stone; chunk.grass.count = grass;

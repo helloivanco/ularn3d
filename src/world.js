@@ -21,7 +21,7 @@ import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } 
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
 import { TorchLighting, stabilizeShadow } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y } from "./wall-cut.js";
+import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import { auraControl } from "./cooperation-aura.js";
 import {
@@ -121,8 +121,9 @@ function batch(group, { castShadow = true } = {}) {
       return;
     }
     if (!o.isMesh) return;
-    const key = o.material.uuid;
-    if (!sets.has(key)) sets.set(key, { material: o.material, geometries: [] });
+    const part = o.userData.buildingPart;
+    const key = `${o.material.uuid}:${part || ''}`;
+    if (!sets.has(key)) sets.set(key, { material: o.material, part, geometries: [] });
     sets
       .get(key)
       .geometries.push(
@@ -133,12 +134,13 @@ function batch(group, { castShadow = true } = {}) {
       );
   });
   group.clear();
-  for (const { material, geometries } of sets.values()) {
+  for (const { material, part, geometries } of sets.values()) {
     const merged = mergeGeometries(geometries);
     geometries.forEach((g) => g.dispose());
     const m = new THREE.Mesh(merged, material);
     m.castShadow = castShadow;
     m.receiveShadow = true;
+    if (part) m.userData.buildingPart = part;
     group.add(m);
   }
   sprites.forEach((s) => group.add(s));
@@ -297,7 +299,7 @@ export class World {
     this.scene.add(this.aimGrid);
     // Exact shared edges: undersized tiles leak, oversized coplanar tops fight
     // for the same depth samples. Integer centers and half-tile edges join.
-    const floorGeo = new THREE.BoxGeometry(WALL_TILE_SIZE, 0.18, WALL_TILE_SIZE);
+    const floorGeo = new THREE.BoxGeometry(WALL_TILE_SIZE, FLOOR_HEIGHT, WALL_TILE_SIZE);
     this.floor = new ChunkedTerrainMesh(
       floorGeo,
       surface("stone", 0xffffff),
@@ -754,8 +756,12 @@ export class World {
       },
       buildings: () => (this.cutawayBuildings || []).map(mesh => ({
         tile: {...mesh.userData.tile}, opacity: mesh.userData.opacity ?? 1,
-        depthWrite: mesh.children.filter(child => child.material?.userData.cutaway)
-          .every(child => child.material.depthWrite),
+        depthWrite: (mesh.userData.buildingParts || []).every(child => child.material.depthWrite),
+        parts: (mesh.userData.buildingParts || []).map(child => ({
+          part: child.userData.buildingPart, visible: child.visible,
+          opacity: child.material.opacity, transparent: child.material.transparent,
+          depthWrite: child.material.depthWrite,
+        })),
       })),
       ambientRats: () => this.ambientRats?.snapshot() ?? {
         pool: AMBIENT_RAT_POOL,
@@ -1553,14 +1559,15 @@ export class World {
       this.lastStructureRev = null;
       this.lastActorRev = null;
       if (!town) {
+        const base = groundSlab(-0.625);
         const slab = box(
           this.terrain,
           volcano ? 0x22191a : 0x101d24,
           (state.width - 1) / 2,
-          -0.4,
+          base.y,
           (state.height - 1) / 2,
           state.width,
-          0.45,
+          base.height,
           state.height,
         );
         // Town terrain is merged with castShadow off. The dungeon slab used to
@@ -1568,15 +1575,16 @@ export class World {
         slab.castShadow = false;
         slab.receiveShadow = false;
       } else {
+        const base = groundSlab(-0.715);
         block(
           this.terrain,
           "stone",
           0x70806e,
           (state.width - 1) / 2,
-          -0.39,
+          base.y,
           (state.height - 1) / 2,
           state.width,
-          0.65,
+          base.height,
           state.height,
         );
         for (let i = 0; i < 48; i++) {
@@ -1730,7 +1738,7 @@ export class World {
           UP,
           Math.floor(noise(t.x + 4, t.y + 9) * 4) * (Math.PI / 2),
         );
-        this.scratchPosition.set(t.x, -0.105, t.y);
+        this.scratchPosition.set(t.x, FLOOR_CENTER_Y, t.y);
         this.scratchScale.set(1, 1, 1);
         matrix.compose(this.scratchPosition, this.spinQ, this.scratchScale);
         const floor = grass ? this.grassFloor : this.floor,
@@ -1826,10 +1834,13 @@ export class World {
         this.props.add(g);
         if (t.store && ![54, 55, 56].includes(t.id)) {
           g.userData.building = true;
+          g.userData.buildingParts = [];
           g.traverse((object) => {
             if (!object.isMesh) return;
+            g.userData.buildingParts.push(object);
+            if (object.userData.buildingPart === "base") return;
             object.material = object.material.clone();
-            object.material.transparent = true;
+            object.material.transparent = false;
             object.material.depthWrite = true;
             object.material.userData.cutaway = true;
           });
@@ -2402,7 +2413,7 @@ export class World {
       if(tile)this.marker.position.set(tile.x,0,tile.y);
       this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
     }
-    if (this.state?.level === 0) this.updateCutaways(dt);
+    if (this.state?.level === 0) this.updateCutaways(Math.min(elapsed, .1));
     this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) this.composer.render(dt);
@@ -2425,6 +2436,7 @@ export class World {
   }
   updateCutaways(dt) {
     if (!this.state) return;
+    let shadowChanged = false;
     const toward = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
     const heroPoint = this.project(this.player.position.clone().add(new THREE.Vector3(0, .6, 0)));
     for (const mesh of this.cutawayBuildings || []) {
@@ -2443,18 +2455,36 @@ export class World {
         obscures = heroPoint.x > left - margin && heroPoint.x < right + margin && heroPoint.y > top - margin && heroPoint.y < bottom + margin;
       }
       mesh.userData.obscuresHero = obscures;
-      const target = obscures ? .2 : 1;
-      let opacity = mesh.userData.opacity ?? 1;
-      opacity += (target - opacity) * (this.reduced ? 1 : 1 - Math.exp(-dt * 14));
-      if (Math.abs(target - opacity) < .005) opacity = target;
-      else this.hasMotion = true;
-      mesh.userData.opacity = opacity;
-      mesh.traverse((object) => {
-        if (!object.material?.userData.cutaway) return;
-        object.material.opacity = opacity;
-        object.material.depthWrite = opacity >= .995;
-      });
+      let minimumOpacity = 1;
+      for (const object of mesh.userData.buildingParts || []) {
+        const material = object.material;
+        if (!material.userData.cutaway) continue;
+        const part = object.userData.buildingPart;
+        const facing = part === 'front' ? toward.z : part === 'back' ? -toward.z :
+          part === 'right' ? toward.x : part === 'left' ? -toward.x : 1;
+        const target = obscures && facing > .05 ? 0 : 1;
+        let opacity = material.opacity;
+        opacity += (target - opacity) * (this.reduced ? 1 : 1 - Math.exp(-dt * 22));
+        if (Math.abs(target - opacity) < .005) opacity = target;
+        else this.hasMotion = true;
+        const fading = opacity > 0 && opacity < 1;
+        if (material.transparent !== fading) {
+          material.transparent = fading;
+          material.needsUpdate = true;
+        }
+        material.opacity = opacity;
+        material.depthWrite = !fading;
+        object.visible = opacity > 0;
+        const castsShadow = opacity === 1;
+        if (object.castShadow !== castsShadow) {
+          object.castShadow = castsShadow;
+          shadowChanged = true;
+        }
+        minimumOpacity = Math.min(minimumOpacity, opacity);
+      }
+      mesh.userData.opacity = minimumOpacity;
     }
+    if (shadowChanged && this.cinematicRendering()) this.markShadowUpdate();
   }
   dispose() {
     if (this.disposed) return;

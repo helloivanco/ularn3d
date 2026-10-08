@@ -71,6 +71,7 @@ function mesh(group, geo, material, x, y, z, sx = 1, sy = 1, sz = 1) {
   m.scale.set(sx, sy, sz);
   m.castShadow = true;
   m.receiveShadow = true;
+  if (group.userData.buildingPart) m.userData.buildingPart = group.userData.buildingPart;
   group.add(m);
   return m;
 }
@@ -244,6 +245,7 @@ function beam(g, color, a, b, r = 0.04) {
 }
 export function torch(g, x, y, z, scale = 1) {
   const holder = new THREE.Group();
+  if (g.userData.buildingPart) holder.userData.buildingPart = g.userData.buildingPart;
   holder.position.set(x, y, z);
   holder.scale.setScalar(scale);
   g.add(holder);
@@ -860,27 +862,46 @@ export function building(id) {
         : id === 10
           ? 0x4a7a80
           : 0x577976;
-  block(g, "stone", 0x8a9380, 0, 0.1, 0, 1.72, 0.22, 1.52);
-  block(g, "stone", stone, 0, 0.76, 0, 1.42, 1.2, 1.2);
+  g.userData.buildingPart = "base";
+  // An opaque floor supports the hero when the roof and near walls cut away.
+  block(g, "stone", 0x8a9380, 0, -0.06, 0, 1.72, 0.12, 1.52);
+  for (const [part, x, z, width, depth] of [
+    ["front", 0, 0.54, 1.42, 0.12],
+    ["back", 0, -0.54, 1.42, 0.12],
+    ["left", -0.65, 0, 0.12, 0.96],
+    ["right", 0.65, 0, 0.12, 0.96],
+  ]) {
+    g.userData.buildingPart = part;
+    block(g, "stone", stone, x, 0.68, z, width, 1.36, depth);
+  }
   for (const x of [-0.72, 0.72])
-    for (const z of [-0.6, 0.6])
-      block(g, "wood", 0x685b46, x, 0.79, z, 0.085, 1.27, 0.085);
+    for (const z of [-0.6, 0.6]) {
+      g.userData.buildingPart = z > 0 ? "front" : "back";
+      block(g, "wood", 0x685b46, x, 0.68, z, 0.085, 1.36, 0.085);
+    }
+  g.userData.buildingPart = "front";
   block(g, "wood", 0x75634b, 0, 0.37, 0.615, 1.45, 0.07, 0.06);
   block(g, "wood", 0x75634b, 0, 1.34, 0.615, 1.48, 0.085, 0.07);
+  g.userData.buildingPart = "roof";
   roof(g, roofColor, 1.36, 1.82, 1.62, 0.65);
   // The triangular gable and its timber braces sit under the two shingle slopes.
   const gable = cone(g, stone, 0, 1.56, 0, 0.72, 0.48, 4);
   gable.rotation.y = Math.PI / 4;
   gable.scale.z = 0.82;
+  g.userData.buildingPart = "front";
   block(g, "wood", 0x6a5441, 0, 0.51, 0.635, 0.34, 0.88, 0.07);
   box(g, 0xbba765, 0.105, 0.49, 0.686, 0.04, 0.06, 0.03, { metalness: 0.8 });
   windowDetail(g, -0.46, 0.93, 0.625, 0.22, 0.34);
   windowDetail(g, 0.46, 0.93, 0.625, 0.22, 0.34);
-  block(g, "stone", 0xb1b09a, 0, 0.16, 0.8, 0.65, 0.14, 0.43);
+  g.userData.buildingPart = "base";
+  block(g, "stone", 0xb1b09a, 0, 0.015, 0.8, 0.65, 0.06, 0.43);
+  g.userData.buildingPart = "roof";
   block(g, "stone", 0x8f9689, 0.43, 1.98, -0.28, 0.22, 0.62, 0.26);
   block(g, "stone", 0xb9b9a1, 0.43, 2.3, -0.28, 0.29, 0.075, 0.31);
+  g.userData.buildingPart = "front";
   torch(g, -0.24, 0.82, 0.72, 0.52);
   if (id === 10 || id === 16) {
+    g.userData.buildingPart = "roof";
     block(g, "stone", 0x9da996, -0.64, 1.1, -0.36, 0.65, 2.2, 0.67);
     const r = cone(g, roofColor, -0.64, 2.59, -0.36, 0.56, 0.9, 8);
     r.material = surface("roof", roofColor);
@@ -890,6 +911,7 @@ export function building(id) {
       emissiveIntensity: 1.8,
     });
   }
+  g.userData.buildingPart = "front";
   if (id === 12 || id === 77) {
     for (let i = 0; i < 6; i++) {
       const awning = box(
@@ -913,15 +935,18 @@ export function building(id) {
     box(g, 0xf0e6d0, 0, 1.48, 1.26, 0.28, 0.18, 0.02);
   }
   if (id === 69) {
+    g.userData.buildingPart = "base";
     box(g, 0x6d8a55, -0.78, 0.14, 0.95, 0.32, 0.18, 0.18);
     box(g, 0xc45b4a, 0.62, 0.16, 0.98, 0.14, 0.18, 0.12);
     box(g, 0xe6c56a, 0.62, 0.28, 0.98, 0.08, 0.08, 0.08);
   }
   if (id === 16 || id === 15) {
+    g.userData.buildingPart = "front";
     for (const x of [-0.48, 0.48]) cylinder(g, 0xd5d0bc, x, 0.72, 0.9, 0.08, 1.2, 6);
     block(g, "stone", 0xe4dfcb, 0, 1.34, 0.9, 1.25, 0.1, 0.24);
   }
   if (id === 10) {
+    g.userData.buildingPart = "roof";
     box(g, 0x1f5c64, -0.64, 2.2, 0.02, 0.05, 0.62, 0.02);
     box(g, 0xf2e2b0, -0.64, 2.55, 0.02, 0.16, 0.1, 0.02);
   }
