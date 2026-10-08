@@ -821,6 +821,48 @@ button.primary:not(.button) {
 #LARN a {
   color: #d7bc83;
 }
+#LARN .score-latest {
+  display: grid;
+  gap: 5px;
+  width: min(100%, 560px);
+  box-sizing: border-box;
+  padding: 16px 20px;
+  border: 1px solid #d7bc834d;
+  border-left: 3px solid #d7bc83;
+  border-radius: 4px;
+  background: #d7bc830d;
+  white-space: normal;
+  text-decoration: none;
+}
+#LARN .score-latest:hover {
+  background: #d7bc8317;
+}
+.score-latest-label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #e7e6d3;
+}
+.score-latest-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.score-latest-value small {
+  font-size: 12px;
+  font-weight: 400;
+}
+.score-latest-position,
+.score-latest-hint {
+  font-size: 11px;
+  color: #c8d4c9;
+}
+#LARN .score-current {
+  background: #d7bc8317;
+}
+.score-you {
+  font-weight: 700;
+}
 #LARN dim {
   opacity: 0.6;
 }
