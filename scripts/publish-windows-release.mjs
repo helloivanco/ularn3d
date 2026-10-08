@@ -34,23 +34,41 @@ export function publishWindowsRelease({ version = APP_VERSION, directory = "rele
     if (result.status !== 0) throw new Error(result.stderr || `GitHub command failed: ${args.slice(0, 2).join(" ")}`);
     return result.stdout;
   };
-  const query = () => JSON.parse(run(["api", `repos/${repo}/releases/tags/${tag}`]));
-  const ready = release => expected.every(file => release.assets?.some(asset =>
+  // The tag endpoint returns published releases only. Listing includes drafts
+  // for the writer, and reading by ID works before publication.
+  const locate = () => JSON.parse(run(["api", `repos/${repo}/releases?per_page=100`])).find(release => release.tag_name === tag);
+  const ready = (release, manifest = expected) => manifest.every(file => release.assets?.some(asset =>
     asset.name === file.name && asset.state === "uploaded" && asset.size === file.size && asset.digest === file.digest));
-  const found = gh(["api", `repos/${repo}/releases/tags/${tag}`]);
-  if (found.status === 0 && !JSON.parse(found.stdout).draft) {
-    if (!ready(JSON.parse(found.stdout))) throw new Error("Published release assets differ; keep existing downloads intact and repair them explicitly.");
+  let found = locate();
+  if (found && !found.draft) {
+    // Rebuilt NSIS files can differ by timestamps. Preserve the published
+    // payload, checking its aliases and checksums against its own digest.
+    const exe = found.assets?.find(asset => asset.name === DOWNLOAD_FILENAME);
+    if (!/^sha256:[a-f0-9]{64}$/.test(exe?.digest || '') || exe.size < 2)
+      throw new Error("Published Windows executable is missing or unverified.");
+    const publishedHash = exe.digest.slice(7);
+    const sidecarText = `${publishedHash}  ${DOWNLOAD_FILENAME}\n`;
+    const sumsText = `${sidecarText}${publishedHash}  ${versionedName}\n`;
+    const published = [
+      { name: DOWNLOAD_FILENAME, size: exe.size, digest: exe.digest },
+      { name: versionedName, size: exe.size, digest: exe.digest },
+      { name: `${DOWNLOAD_FILENAME}.sha256`, size: Buffer.byteLength(sidecarText), digest: digest(sidecarText) },
+      { name: "SHA256SUMS.txt", size: Buffer.byteLength(sumsText), digest: digest(sumsText) },
+    ];
+    if (!ready(found, published)) throw new Error("Published release assets differ; keep existing downloads intact and repair them explicitly.");
     return { tag, alreadyPublished: true };
   }
-  if (found.status !== 0) {
-    if (!/\b404\b/.test(found.stderr || "")) throw new Error(found.stderr || "Could not inspect the release.");
+  if (!found) {
     const commit = target || spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
     if (!/^[a-f0-9]{40}$/i.test(commit)) throw new Error("A tested commit is required to create the release tag.");
     run(["release", "create", tag, "--repo", repo, "--draft", "--target", commit,
       "--title", `Ularn ${version}`, "--notes", `Windows portable download for Ularn ${version}.`]);
+    found = locate();
   }
+  if (!Number.isSafeInteger(found?.id)) throw new Error("Could not resolve the draft release ID.");
   run(["release", "upload", tag, portable, versioned, `${portable}.sha256`, sums, "--repo", repo, "--clobber"]);
-  if (!ready(query())) throw new Error("Uploaded asset checksums or sizes do not match; the release stays a draft.");
+  const uploaded = JSON.parse(run(["api", `repos/${repo}/releases/${found.id}`]));
+  if (!ready(uploaded)) throw new Error("Uploaded asset checksums or sizes do not match; the release stays a draft.");
   const latest = gh(["api", `repos/${repo}/releases/latest`]);
   if (latest.status !== 0 && !/\b404\b/.test(latest.stderr || "")) throw new Error(latest.stderr || "Could not inspect the latest release.");
   const newer = latest.status === 0 && versionGreater(JSON.parse(latest.stdout).tag_name.replace(/^v/, ""), version);
