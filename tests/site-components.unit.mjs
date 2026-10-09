@@ -12,7 +12,10 @@ test("header and footer expand once per page", () => {
   assert.match(home, />Play <span aria-hidden="true">/);
   assert.match(home, /What’s New/);
   assert.doesNotMatch(home, /aria-current/);
-  assert.match(home, /class="text-link web-only"/);
+  const footer = home.slice(home.indexOf("<footer"));
+  assert.doesNotMatch(footer, /href="\/downloads\//);
+  assert.match(footer, /class="text-link footer-github"[^>]*aria-label="GitHub"/);
+  assert.match(footer, /<svg[^>]*aria-hidden="true"/);
   assert.doesNotMatch(home, /download="/);
   assert.match(home, /aria-label="Footer"/);
 

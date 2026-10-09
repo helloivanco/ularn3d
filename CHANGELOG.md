@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.75 — A cleaner footer
+
+- Footer branding, copyright, version and links align on desktop and stack cleanly on smaller screens
+- Footer navigation removes the Windows link and uses an accessible GitHub icon
+
 ## 1.3.74 — Shorter homepage Play button
 
 - The homepage game button uses the concise “Play” label
