@@ -231,9 +231,14 @@ test("harmless contact does not flag attacks or hide nearby interactions and exp
 test("shifted running continues through harmless lemmings and ends at the wall", async ({ page }) => {
   await corridor(page);
   await page.evaluate(() => { rnd = (n) => Math.max(1, Math.floor(n)); });
+  const before = await page.evaluate(() => gtime);
   await page.keyboard.press("Shift+ArrowRight");
   expect(await page.evaluate(() => player.x)).toBe(18);
+  expect(await page.evaluate((start) => gtime - start, before)).toBe(8);
   expect(await count(page)).toBe(0);
+  await page.keyboard.press("ArrowLeft");
+  expect(await page.evaluate(() => player.x)).toBe(17);
+  expect(await page.evaluate((start) => gtime - start, before)).toBe(9);
 });
 
 test("moving lemmings never reproduce even when the original birth roll succeeds", async ({ page }) => {

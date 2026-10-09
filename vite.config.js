@@ -17,14 +17,18 @@ const serveWindowsDownloads = server => {
     const url = new URL(request.url || "/", "http://localhost");
     if (url.pathname !== "/api/windows-download") return next();
     const key = `${request.method}:${url.search}`, cached = cache.get(key);
-    let result;
-    if (cached && cached.expires > Date.now()) result = cached.response.clone();
+    let status, headers, body;
+    if (cached && cached.expires > Date.now()) ({ status, headers, body } = cached);
     else {
-      result = await windowsDownload(new Request(url, { method: request.method }));
-      if (result.ok || result.status === 307) cache.set(key, { response: result.clone(), expires: Date.now() + 300000 });
+      const result = await windowsDownload(new Request(url, { method: request.method }));
+      status = result.status;
+      headers = Object.fromEntries(result.headers);
+      // A 307 has no body. Cloning that response throws in Node and kills Vite.
+      body = Buffer.from(await result.arrayBuffer());
+      if (result.ok || result.status === 307) cache.set(key, { status, headers, body, expires: Date.now() + 300000 });
     }
-    response.writeHead(result.status, Object.fromEntries(result.headers));
-    response.end(await result.text());
+    response.writeHead(status, headers);
+    response.end(request.method === "HEAD" ? undefined : body);
   });
 };
 
