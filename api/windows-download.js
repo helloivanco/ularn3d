@@ -21,21 +21,30 @@ export async function windowsDownload(request, fetcher = fetch) {
     return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
   }
   const file = new URL(request.url).searchParams.get("file");
-  if (file && file !== "checksum") return new Response("Unknown download", { status: 400 });
+  if (file && !["checksum", "info"].includes(file)) return new Response("Unknown download", { status: 400 });
   try {
     const response = await fetcher(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "Ularn-Windows-download" },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) throw new Error(`GitHub release lookup returned ${response.status}.`);
-    const asset = selectWindowsAsset(await response.json(), file === "checksum");
+    const release = await response.json(), asset = selectWindowsAsset(release, file === "checksum");
+    const headers = {
+      "Cache-Control": "public, max-age=0, must-revalidate",
+      "Vercel-CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=300",
+      "X-Robots-Tag": "noindex, nofollow",
+    };
+    if (file === "info") {
+      const info = { version: release.tag_name.slice(1), filename: asset.name, url: asset.browser_download_url };
+      return new Response(request.method === "HEAD" ? null : JSON.stringify(info), {
+        headers: { ...headers, "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
     return new Response(null, {
       status: 307,
       headers: {
         Location: asset.browser_download_url,
-        "Cache-Control": "public, max-age=0, must-revalidate",
-        "Vercel-CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=300",
-        "X-Robots-Tag": "noindex, nofollow",
+        ...headers,
       },
     });
   } catch (error) {
