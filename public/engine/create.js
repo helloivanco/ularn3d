@@ -1557,6 +1557,8 @@ function troom(lv, xsize, ysize, tx, ty, glyph) {
 
 /* Treasure-room monsters. One rnd(rndcount) per column, same as Ularn troom. */
 function placeDeferredMonsters(depth) {
+  beginDeferredLemmingCap();
+  try {
   for (const rect of pendingVolcanoMons) {
     for (let i = rect.xa; i < rect.xb; i++) {
       for (let j = rect.ya; j < rect.yb; j++) {
@@ -1581,6 +1583,9 @@ function placeDeferredMonsters(depth) {
     }
   }
   stockNewLevelMonsters();
+  } finally {
+    endDeferredLemmingCap();
+  }
   if (depth == null) return;
 }
 
@@ -1920,7 +1925,7 @@ function fillmonst(what, awake) {
         (!placementNetwork || placementNetwork.has(`${x},${y}`)) &&
         ((player.x != x) || (player.y != y))) { // not on player
       let monster = createMonster(what);
-      /* A refused lemming still ends the try, so later monsters keep the same rolls. */
+      /* A refused lemming still ends the try. Stocking defers that refusal. */
       if (!setMonster(x, y, monster)) return null;
       if (awake) monster.awake = awake;
       setKnow(x, y, getKnow(x, y) & ~KNOWHERE);
@@ -1937,6 +1942,8 @@ function fillmonst(what, awake) {
     if sethp(1) then wipe out old monsters else leave them there
  */
 function stockNewLevelMonsters() {
+  beginDeferredLemmingCap();
+  try {
   const nummonsters = (rnd(12) + 2 + (level >> 1)) * coopScale();
   for (let i = 0; i < nummonsters; i++) {
     fillmonst(makemonst(level));
@@ -1962,6 +1969,9 @@ function stockNewLevelMonsters() {
   while (placed < numdemons && guard-- > 0) {
     const which = kind === DEMONLORD ? DEMONLORD + rund(7) : DEMONPRINCE;
     if (fillmonst(which)) placed++;
+  }
+  } finally {
+    endDeferredLemmingCap();
   }
 }
 
@@ -1993,9 +2003,14 @@ function sethp(newLevel) {
   if (newLevel) {
     stockNewLevelMonsters();
   } else {
-    const nummonsters = ((level >> 1) + 1) * coopScale();
-    for (let i = 0; i < nummonsters; i++) {
-      fillmonst(makemonst(level));
+    beginDeferredLemmingCap();
+    try {
+      const nummonsters = ((level >> 1) + 1) * coopScale();
+      for (let i = 0; i < nummonsters; i++) {
+        fillmonst(makemonst(level));
+      }
+    } finally {
+      endDeferredLemmingCap();
     }
   }
 

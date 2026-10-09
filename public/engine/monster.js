@@ -74,9 +74,21 @@ function monsterAt(x, y) {
  * One lemming on a floor. A second one cannot land within two tiles of the
  * first, so the eight tiles around the hero cannot fill up as a ring.
  * `moving` is a lemming already on the floor stepping to a new tile.
+ * Stocking defers the cap so every rolled monster occupies its tile the way
+ * 1.3.39 did. thinLemmings then leaves a single lemming.
  */
 const LEMMING_FLOOR_CAP = 1;
 const LEMMING_SEPARATION = 2;
+let deferLemmingCap = 0;
+
+function beginDeferredLemmingCap() {
+  deferLemmingCap++;
+}
+
+function endDeferredLemmingCap() {
+  if (deferLemmingCap > 0) deferLemmingCap--;
+  if (deferLemmingCap === 0) thinLemmings();
+}
 
 function isLemmingspecies(monster) {
   if (!ULARN || monster == null) return false;
@@ -156,7 +168,7 @@ function setMonster(x, y, monster, placement, moving) {
     placement = OVERWRITE;
   }
 
-  const spawningLemmings = !moving && isLemmingspecies(monster);
+  const spawningLemmings = deferLemmingCap === 0 && !moving && isLemmingspecies(monster);
   const lemmingTileOk = (tx, ty) => !spawningLemmings || (lemmingCount() < LEMMING_FLOOR_CAP && !lemmingTooClose(tx, ty));
 
   if (placement === SCATTER || placement === EXACT_OR_SCATTER) {
