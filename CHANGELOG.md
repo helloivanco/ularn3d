@@ -4,6 +4,10 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.74 — Shorter homepage Play button
+
+- The homepage game button uses the concise “Play” label
+
 ## 1.3.73 — Shorter Play navigation
 
 - The main navigation uses “Play” as its game link label
