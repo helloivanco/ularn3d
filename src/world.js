@@ -909,9 +909,13 @@ export class World {
     let node = obj;
     while (node) {
       if (node.name === "weapon" || node.name === "contact-disc") return true;
+      // Only the rig has a body footprint. The ground ring's rotated bounding
+      // box can span adjacent walls even though the circular ring fits, making
+      // wall correction alternate forever at diagonal corridor corners.
+      if (node === this.heroBody) return false;
       node = node.parent;
     }
-    return false;
+    return true;
   }
   heroBodyBox() {
     const box = this.heroBounds;

@@ -9,8 +9,8 @@ const digest=bytes=>`sha256:${createHash('sha256').update(bytes).digest('hex')}`
 const fixture=(t,{badUpload=false,latest='v1.3.68',authenticationError=false}={})=>{
  const directory=mkdtempSync(join(tmpdir(),'ularn-publish-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
  const bytes=Buffer.from('MZ verified portable test fixture');
- writeFileSync(join(directory,'Ularn.windows.exe'),bytes);
- writeFileSync(join(directory,'Ularn.windows.exe.sha256'),`${digest(bytes).slice(7)}  Ularn.windows.exe\n`);
+ writeFileSync(join(directory,'Ularn-1.3.69.windows.exe'),bytes);
+ writeFileSync(join(directory,'Ularn-1.3.69.windows.exe.sha256'),`${digest(bytes).slice(7)}  Ularn-1.3.69.windows.exe\n`);
  const calls=[];let release=null;
  const gh=args=>{
   calls.push(args);
@@ -40,7 +40,7 @@ test('a Windows release becomes latest only after all stable and versioned files
  assert.ok(mutations[0].includes('a'.repeat(40)));
  assert.ok(mutations.at(-1).includes('--draft=false'));
  assert.ok(mutations.at(-1).includes('--latest=true'));
- assert.deepEqual(f.release().assets.map(asset=>asset.name),['Ularn.windows.exe','Ularn-1.3.69.windows.exe','Ularn.windows.exe.sha256','SHA256SUMS.txt']);
+ assert.deepEqual(f.release().assets.map(asset=>asset.name),['Ularn.windows.exe','Ularn-1.3.69.windows.exe','Ularn.windows.exe.sha256','Ularn-1.3.69.windows.exe.sha256','SHA256SUMS.txt']);
  const checksum=readFileSync(join(f.directory,'Ularn.windows.exe.sha256'),'utf8');
  assert.match(checksum,/^[a-f0-9]{64}  Ularn\.windows\.exe\n$/);
  const sums=readFileSync(join(f.directory,'SHA256SUMS.txt'),'utf8');
@@ -53,7 +53,7 @@ test('an incomplete or corrupted upload stays a draft, preserving the previous d
 });
 
 test('a local checksum failure stops before any GitHub operation',t=>{
- const f=fixture(t);writeFileSync(join(f.directory,'Ularn.windows.exe.sha256'),'0'.repeat(64));
+ const f=fixture(t);writeFileSync(join(f.directory,'Ularn-1.3.69.windows.exe.sha256'),'0'.repeat(64));
  assert.throws(()=>publish(f),/verified checksum/);assert.equal(f.calls.length,0);
 });
 
@@ -78,8 +78,8 @@ test('a draft from an interrupted run is reused instead of creating a duplicate'
 test('a rebuilt portable payload does not overwrite an already published version',t=>{
  const f=fixture(t);publish(f);f.calls.length=0;
  const bytes=Buffer.from('MZ rebuilt at a later timestamp');
- writeFileSync(join(f.directory,'Ularn.windows.exe'),bytes);
- writeFileSync(join(f.directory,'Ularn.windows.exe.sha256'),`${digest(bytes).slice(7)}  Ularn.windows.exe\n`);
+ writeFileSync(join(f.directory,'Ularn-1.3.69.windows.exe'),bytes);
+ writeFileSync(join(f.directory,'Ularn-1.3.69.windows.exe.sha256'),`${digest(bytes).slice(7)}  Ularn-1.3.69.windows.exe\n`);
  assert.equal(publish(f).alreadyPublished,true);
  assert.equal(f.calls.some(args=>args[0]==='release'),false);
 });

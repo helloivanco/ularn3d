@@ -173,14 +173,13 @@
             The browser game is ready without a download. If you prefer a separate window, the Windows edition bundles the same adventure for offline play.
           </p>
           <p>
-            Download and run <strong>__DOWNLOAD_FILENAME__</strong>. This portable build needs no installation and targets 64-bit Windows 10 or later. It is unsigned, so Windows may identify it as an unrecognized publisher. Desktop saves are separate from browser saves.
+            Download and run <strong>Ularn-&lt;version&gt;.windows.exe</strong>. This portable build needs no installation and targets 64-bit Windows 10 or later. It is unsigned, so Windows may identify it as an unrecognized publisher. Desktop saves are separate from browser saves.
           </p>
         </div>
         <div class="cta-row cta-row--offset">
           <a
             class="button accent"
             href="/downloads/Ularn.windows.exe"
-            download="__DOWNLOAD_FILENAME__"
             aria-label="Download Ularn 3D for Windows"
             >Download for Windows <span aria-hidden="true">↓</span></a
           >
@@ -192,8 +191,8 @@
         <div class="prose" id="verify-download">
           <h3>Verify your download</h3>
           <p>Download the <a href="/downloads/SHA256SUMS.txt">matching SHA-256 checksum file</a>. In PowerShell, open the folder where you saved the game and run:</p>
-          <pre><code>Get-FileHash .\Ularn.windows.exe -Algorithm SHA256</code></pre>
-          <p>Use your saved filename if your browser renamed the file. Compare the result with the line for <strong>Ularn.windows.exe</strong> in the checksum file. The values should match. For an older build, use its checksum from <a href="https://github.com/helloivanco/ularn3d/releases" rel="noopener noreferrer">release history</a>.</p>
+          <pre><code>Get-FileHash .\Ularn-*.windows.exe -Algorithm SHA256</code></pre>
+          <p>Use your saved filename if your browser renamed the file. Compare the result with the line for your versioned filename in the checksum file. The values should match. For an older build, use its checksum from <a href="https://github.com/helloivanco/ularn3d/releases" rel="noopener noreferrer">release history</a>.</p>
         </div>
       </section>
 

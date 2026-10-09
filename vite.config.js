@@ -61,7 +61,7 @@ const injectAppVersion = () => ({
     stampPublicHtmlTree(join(process.cwd(), "dist"));
   },
   buildStart() {
-    this.info?.(`app version ${APP_VERSION}; download saves as ${DOWNLOAD_FILENAME}`);
+    this.info?.(`app version ${APP_VERSION}; desktop artifact ${DOWNLOAD_FILENAME}`);
   },
 });
 

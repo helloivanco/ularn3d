@@ -24,7 +24,6 @@ export const renderSiteHeader = ({ variant = "", current = "" } = {}) => {
         <a
           class="nav-cta nav-cta--secondary web-only"
           href="/downloads/Ularn.windows.exe"
-          download="__DOWNLOAD_FILENAME__"
           aria-label="Download Ularn 3D for Windows"
           >Download for Windows</a
         >
@@ -38,7 +37,7 @@ const FOOTER_LINKS = {
     ["About", "/about/"],
     ["What’s New", "/changelog/"],
     ["GitHub", "https://github.com/helloivanco/ularn3d", ' rel="noopener noreferrer"'],
-    ["Windows", "/downloads/Ularn.windows.exe", ' class="web-only" download="__DOWNLOAD_FILENAME__"', true],
+    ["Windows", "/downloads/Ularn.windows.exe", ' class="web-only"', true],
   ],
   about: [
     ["Play", "/play/"],

@@ -9,6 +9,7 @@ export const PRODUCT_PATHS = [
   "src/",
   "public/",
   "desktop/",
+  "api/",
   "index.html",
   "play/",
   "vite.config.js",
@@ -60,10 +61,11 @@ export const checkStampedVersion = () => {
   if (lock.version !== pkg.version || lock.packages?.[""]?.version !== pkg.version) {
     throw new Error(`package-lock.json version does not match package.json ${pkg.version}`);
   }
-  const expected = `attachment; filename="${DOWNLOAD_FILENAME}"`;
+  const expected = `Ularn-${pkg.version}.windows.exe`;
+  if (DOWNLOAD_FILENAME !== expected) throw new Error(`Windows artifact filename must be ${expected}.`);
   const disposition = dispositionHeader(vercel);
-  if (disposition !== expected) {
-    throw new Error(`vercel.json Content-Disposition is ${disposition}; expected ${expected}. Run npm version patch|minor|major.`);
+  if (disposition) {
+    throw new Error("The Windows release asset must supply its own filename; remove the fixed Content-Disposition header.");
   }
   const exeRedirect = redirectDestination(vercel, DOWNLOAD_PATH);
   if (exeRedirect !== DOWNLOAD_RELEASE_URL) {

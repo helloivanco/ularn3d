@@ -16,7 +16,7 @@ Descend into the dungeon and uncover its passages one turn at a time.
 
 ## Windows desktop
 
-The [optional Windows download](https://ularn-3d.vercel.app/downloads/Ularn.windows.exe) is a self-contained portable executable: run `Ularn.windows.exe` without extracting a ZIP or installing the game. It includes the complete runtime and works offline. Browser play remains available at the same site. The executable targets 64-bit Windows 10 or later and is unsigned; its [SHA-256 checksum](https://ularn-3d.vercel.app/downloads/SHA256SUMS.txt) is published alongside it.
+The [optional Windows download](https://ularn-3d.vercel.app/downloads/Ularn.windows.exe) is a self-contained portable executable: run the versioned `Ularn-<version>.windows.exe` without extracting a ZIP or installing the game. It includes the complete runtime and works offline. Browser play remains available at the same site. The executable targets 64-bit Windows 10 or later and is unsigned; its [SHA-256 checksum](https://ularn-3d.vercel.app/downloads/SHA256SUMS.txt) is published alongside it.
 
 Desktop saves live in `%APPDATA%\Ularn`, separately from browser saves. See [desktop instructions](docs/DESKTOP.md) for profile details, alternate packages, and verification limits. Build and verify the portable executable locally with:
 
@@ -25,7 +25,7 @@ npm run desktop:package:win:portable
 npm run desktop:verify:portable
 ```
 
-These commands produce `release/Ularn.windows.exe` and `release/Ularn.windows.exe.sha256`. The verifier extracts the executable and compares its bundled runtime and game files with the build output. The pinned native NSIS toolset supports portable builds on Apple Silicon without Rosetta.
+These commands produce `release/Ularn-<version>.windows.exe` and its matching `.sha256` file. The verifier extracts the executable and compares its bundled runtime and game files with the build output. The pinned native NSIS toolset supports portable builds on Apple Silicon without Rosetta.
 
 ## Play locally
 
@@ -108,32 +108,11 @@ npm run preview
 
 The home page presents the quest over a lightweight town preview, with Play as its primary action and Windows as an optional download. The background does not capture page gestures and stops rendering off-screen or while hidden. Marketing content is visible without JavaScript. The play entry centers its setup column vertically within a safe area below the navigation, keeping the controls left-aligned and allowing inner scrolling on short windows. It shows the eight actual class models as small cached WebP portraits, with name/difficulty controls and a separate multiplayer action. Continue is the primary action when a saved expedition exists. Repeated introductory and scene-caption text is omitted. `node scripts/render-class-portraits.mjs` regenerates the portraits from the shared models against the development server; no extra WebGL scenes run in the class chooser. Entry styling is isolated in `src/entry.css`, leaving expedition controls intact.
 
-`vercel.json` specifies Vite, `npm run build`, and the `dist` output directory. It normalizes the guide URL, marks engine/download URLs as non-indexable, and serves the executable as an attachment with cache revalidation. No application server functions are needed. `scoreboard.config.json` contains the public Supabase project URL and publishable key; optional `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` overrides select another project. These are public client settings, not server credentials.
+`vercel.json` specifies Vite, `npm run build`, and the `dist` output directory. It normalizes the guide URL, marks engine/download URLs as non-indexable, and serves the executable as an attachment with cache revalidation. A small download resolver selects the last fully published Windows release and lets its versioned asset supply the saved filename. `scoreboard.config.json` contains the public Supabase project URL and publishable key; optional `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` overrides select another project. These are public client settings, not server credentials.
 
-The Windows executable is deliberately excluded from Git. A source-only Git deployment therefore cannot embed it. Production keeps the stable `/downloads/Ularn.windows.exe` URL and redirects it to the GitHub Release asset `Ularn-${version}.windows.exe` for the current `package.json` version. A push to `main` runs the Windows desktop workflow, which publishes that release after verifying the portable build.
+The Windows executable is deliberately excluded from Git. A source-only Git deployment therefore cannot embed it. Production keeps the stable `/downloads/Ularn.windows.exe` URL. Its resolver selects `Ularn-${version}.windows.exe` from the last fully published GitHub Release, so downloading an older ready desktop build preserves that build’s actual version in the filename. A push to `main` runs the Windows desktop workflow, which publishes that release after verifying the portable build.
 
-Optional local prebuilt deploys can still stage a verified executable under `public/downloads/` before building:
-
-```sh
-npm ci
-npm run desktop:package:win:portable
-npm run desktop:verify:portable
-mkdir -p public/downloads
-cp release/Ularn.windows.exe public/downloads/Ularn.windows.exe
-cp release/Ularn.windows.exe.sha256 public/downloads/SHA256SUMS.txt
-npx vercel pull --yes --environment=production --scope hellos-projects-dbb58047
-npx vercel build --prod --scope hellos-projects-dbb58047
-cmp release/Ularn.windows.exe .vercel/output/static/downloads/Ularn.windows.exe
-cmp public/downloads/SHA256SUMS.txt .vercel/output/static/downloads/SHA256SUMS.txt
-```
-
-After both comparisons succeed, publish that prebuilt output:
-
-```sh
-npx vercel deploy --prebuilt --prod --scope hellos-projects-dbb58047
-```
-
-Vercel's local build writes `.vercel/output`, and `--prebuilt` uploads that verified output. See the [Vercel build documentation](https://vercel.com/docs/cli/build). `release/` is excluded from Vercel uploads. Git-connected production deploys rely on the GitHub Release redirect rather than a staged binary. Desktop packaging excludes `dist/downloads/`, preventing the executable from recursively bundling itself.
+Git-connected production deploys use the download resolver and GitHub Release assets. Desktop packaging excludes `dist/downloads/`, preventing the executable from recursively bundling itself.
 
 A classic 2D fallback is available at `/engine/larn_local.html?ularn=true` for devices without WebGL2. Its saves use the original engine's storage keys, separate from the 3D edition's autosave.
 

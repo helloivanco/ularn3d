@@ -329,7 +329,6 @@ const showMonsterCard = (card, info, event) => {
   const name = card.querySelector(".monster-card-name");
   const body = card.querySelector(".monster-card-desc");
   if (art.getAttribute("src") !== info.art) art.setAttribute("src", info.art);
-  art.classList.toggle("monster-card-cutout", info.art.startsWith("/engine/"));
   name.textContent = info.name;
   body.textContent = info.description;
   card.hidden = false;

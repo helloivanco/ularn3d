@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { APP_VERSION, DOWNLOAD_FILENAME } from "./app-version.mjs";
+import { APP_VERSION, LEGACY_DOWNLOAD_FILENAME } from "./app-version.mjs";
 import { versionGreater } from "./check-release-version.mjs";
 
 const digest = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -12,21 +12,23 @@ const defaultGh = args => spawnSync("gh", args, { encoding: "utf8" });
 export function publishWindowsRelease({ version = APP_VERSION, directory = "release", gh = defaultGh,
   target = process.env.GITHUB_SHA } = {}) {
   const repo = "helloivanco/ularn3d", tag = `v${version}`;
-  const portable = join(directory, DOWNLOAD_FILENAME);
+  const versionedName = `Ularn-${version}.windows.exe`;
+  const portable = join(directory, versionedName);
   const bytes = readFileSync(portable), hash = digest(bytes);
   const sidecar = readFileSync(`${portable}.sha256`, "utf8").trim().split(/\s+/)[0];
   if (bytes[0] !== 77 || bytes[1] !== 90 || hash !== `sha256:${sidecar}`)
     throw new Error("The portable executable does not match its verified checksum.");
 
-  const versionedName = `Ularn-${version}.windows.exe`;
-  const versioned = join(directory, versionedName), sums = join(directory, "SHA256SUMS.txt");
-  copyFileSync(portable, versioned);
-  writeFileSync(`${portable}.sha256`, `${hash.slice(7)}  ${DOWNLOAD_FILENAME}\n`);
-  writeFileSync(sums, `${hash.slice(7)}  ${DOWNLOAD_FILENAME}\n${hash.slice(7)}  ${versionedName}\n`);
+  const legacy = join(directory, LEGACY_DOWNLOAD_FILENAME), sums = join(directory, "SHA256SUMS.txt");
+  copyFileSync(portable, legacy);
+  writeFileSync(`${portable}.sha256`, `${hash.slice(7)}  ${versionedName}\n`);
+  writeFileSync(`${legacy}.sha256`, `${hash.slice(7)}  ${LEGACY_DOWNLOAD_FILENAME}\n`);
+  writeFileSync(sums, `${hash.slice(7)}  ${LEGACY_DOWNLOAD_FILENAME}\n${hash.slice(7)}  ${versionedName}\n`);
   const expected = [
-    { name: DOWNLOAD_FILENAME, size: bytes.length, digest: hash },
+    { name: LEGACY_DOWNLOAD_FILENAME, size: bytes.length, digest: hash },
     { name: versionedName, size: bytes.length, digest: hash },
-    { name: `${DOWNLOAD_FILENAME}.sha256`, size: readFileSync(`${portable}.sha256`).length, digest: digest(readFileSync(`${portable}.sha256`)) },
+    { name: `${LEGACY_DOWNLOAD_FILENAME}.sha256`, size: readFileSync(`${legacy}.sha256`).length, digest: digest(readFileSync(`${legacy}.sha256`)) },
+    { name: `${versionedName}.sha256`, size: readFileSync(`${portable}.sha256`).length, digest: digest(readFileSync(`${portable}.sha256`)) },
     { name: "SHA256SUMS.txt", size: readFileSync(sums).length, digest: digest(readFileSync(sums)) },
   ];
   const run = args => {
@@ -43,16 +45,17 @@ export function publishWindowsRelease({ version = APP_VERSION, directory = "rele
   if (found && !found.draft) {
     // Rebuilt NSIS files can differ by timestamps. Preserve the published
     // payload, checking its aliases and checksums against its own digest.
-    const exe = found.assets?.find(asset => asset.name === DOWNLOAD_FILENAME);
+    const exe = found.assets?.find(asset => asset.name === versionedName);
     if (!/^sha256:[a-f0-9]{64}$/.test(exe?.digest || '') || exe.size < 2)
       throw new Error("Published Windows executable is missing or unverified.");
     const publishedHash = exe.digest.slice(7);
-    const sidecarText = `${publishedHash}  ${DOWNLOAD_FILENAME}\n`;
+    const sidecarText = `${publishedHash}  ${LEGACY_DOWNLOAD_FILENAME}\n`;
     const sumsText = `${sidecarText}${publishedHash}  ${versionedName}\n`;
     const published = [
-      { name: DOWNLOAD_FILENAME, size: exe.size, digest: exe.digest },
+      { name: LEGACY_DOWNLOAD_FILENAME, size: exe.size, digest: exe.digest },
       { name: versionedName, size: exe.size, digest: exe.digest },
-      { name: `${DOWNLOAD_FILENAME}.sha256`, size: Buffer.byteLength(sidecarText), digest: digest(sidecarText) },
+      { name: `${LEGACY_DOWNLOAD_FILENAME}.sha256`, size: Buffer.byteLength(sidecarText), digest: digest(sidecarText) },
+      { name: `${versionedName}.sha256`, size: Buffer.byteLength(`${publishedHash}  ${versionedName}\n`), digest: digest(`${publishedHash}  ${versionedName}\n`) },
       { name: "SHA256SUMS.txt", size: Buffer.byteLength(sumsText), digest: digest(sumsText) },
     ];
     if (!ready(found, published)) throw new Error("Published release assets differ; keep existing downloads intact and repair them explicitly.");
@@ -66,7 +69,7 @@ export function publishWindowsRelease({ version = APP_VERSION, directory = "rele
     found = locate();
   }
   if (!Number.isSafeInteger(found?.id)) throw new Error("Could not resolve the draft release ID.");
-  run(["release", "upload", tag, portable, versioned, `${portable}.sha256`, sums, "--repo", repo, "--clobber"]);
+  run(["release", "upload", tag, legacy, portable, `${legacy}.sha256`, `${portable}.sha256`, sums, "--repo", repo, "--clobber"]);
   const uploaded = JSON.parse(run(["api", `repos/${repo}/releases/${found.id}`]));
   if (!ready(uploaded)) throw new Error("Uploaded asset checksums or sizes do not match; the release stays a draft.");
   const latest = gh(["api", `repos/${repo}/releases/latest`]);
