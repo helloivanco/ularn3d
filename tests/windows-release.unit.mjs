@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishWindowsRelease} from '../scripts/publish-windows-release.mjs';
 const digest=bytes=>`sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-const fixture=(t,{badUpload=false,latest='v1.3.68',authenticationError=false}={})=>{
+const fixture=(t,{badUpload=false,latest='v1.3.68',authenticationError=false,staleListAfterCreate=false}={})=>{
  const directory=mkdtempSync(join(tmpdir(),'ularn-publish-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
  const bytes=Buffer.from('MZ verified portable test fixture');
  writeFileSync(join(directory,'Ularn-1.3.69.windows.exe'),bytes);
@@ -16,12 +16,15 @@ const fixture=(t,{badUpload=false,latest='v1.3.68',authenticationError=false}={}
   calls.push(args);
   if(args[0]==='api'){
    if(authenticationError)return{status:1,stderr:'HTTP 401'};
+   if(args.includes('POST')){
+    release={id:42,tag_name:'v1.3.69',draft:true,assets:[]};
+    return{status:0,stdout:JSON.stringify(release)};
+   }
    if(args[1].endsWith('/latest'))return{status:0,stdout:JSON.stringify({tag_name:latest})};
-   if(args[1].includes('?per_page='))return{status:0,stdout:JSON.stringify(release?[release]:[])};
+   if(args[1].includes('?per_page='))return{status:0,stdout:JSON.stringify(release&&!staleListAfterCreate?[release]:[])};
    if(args[1].includes('/tags/')&&release?.draft)return{status:1,stderr:'HTTP 404: published releases only'};
    return release?{status:0,stdout:JSON.stringify(release)}:{status:1,stderr:'HTTP 404'};
   }
-  if(args[1]==='create')release={id:42,tag_name:'v1.3.69',draft:true,assets:[]};
   if(args[1]==='upload')release.assets=args.slice(3,args.indexOf('--repo')).map(path=>{
    const bytes=readFileSync(path);return{name:path.split(/[\\/]/).at(-1),state:'uploaded',size:bytes.length,digest:badUpload?'sha256:wrong':digest(bytes)};
   });
@@ -35,9 +38,10 @@ const publish=f=>publishWindowsRelease({...f,version:'1.3.69',target:'a'.repeat(
 test('a Windows release becomes latest only after all stable and versioned files are verified',t=>{
  const f=fixture(t);publish(f);
  const mutations=f.calls.filter(args=>args[0]==='release');
- assert.deepEqual(mutations.map(args=>args[1]),['create','upload','edit']);
- assert.ok(mutations[0].includes('--draft'));
- assert.ok(mutations[0].includes('a'.repeat(40)));
+ assert.deepEqual(mutations.map(args=>args[1]),['upload','edit']);
+ const creation=f.calls.find(args=>args.includes('POST'));
+ assert.ok(creation.includes('draft=true'));
+ assert.ok(creation.includes(`target_commitish=${'a'.repeat(40)}`));
  assert.ok(mutations.at(-1).includes('--draft=false'));
  assert.ok(mutations.at(-1).includes('--latest=true'));
  assert.deepEqual(f.release().assets.map(asset=>asset.name),['Ularn.windows.exe','Ularn-1.3.69.windows.exe','Ularn.windows.exe.sha256','Ularn-1.3.69.windows.exe.sha256','SHA256SUMS.txt']);
@@ -61,6 +65,7 @@ test('retries do not replace already published files',t=>{
  const f=fixture(t);publish(f);f.calls.length=0;
  assert.equal(publish(f).alreadyPublished,true);
  assert.equal(f.calls.some(args=>args[0]==='release'),false);
+ assert.equal(f.calls.some(args=>args.includes('POST')),false);
 });
 
 test('draft uploads are verified by release ID instead of the published tag endpoint',t=>{
@@ -69,10 +74,16 @@ test('draft uploads are verified by release ID instead of the published tag endp
  assert.equal(f.calls.some(args=>args[0]==='api'&&args[1].includes('/tags/')),false);
 });
 
+test('a newly created draft is published even while the release list remains stale',t=>{
+ const f=fixture(t,{staleListAfterCreate:true});publish(f);
+ assert.equal(f.release().draft,false);
+ assert.equal(f.calls.filter(args=>args[1].includes('?per_page=')).length,1);
+});
+
 test('a draft from an interrupted run is reused instead of creating a duplicate',t=>{
  const f=fixture(t,{badUpload:true});assert.throws(()=>publish(f),/stays a draft/);
  f.calls.length=0;assert.throws(()=>publish(f),/stays a draft/);
- assert.equal(f.calls.some(args=>args[1]==='create'),false);
+ assert.equal(f.calls.some(args=>args.includes('POST')),false);
 });
 
 test('a rebuilt portable payload does not overwrite an already published version',t=>{
@@ -92,4 +103,5 @@ test('an older delayed build does not replace the latest release',t=>{
 test('authentication failure does not create a release',t=>{
  const f=fixture(t,{authenticationError:true});assert.throws(()=>publish(f),/HTTP 401/);
  assert.equal(f.calls.some(args=>args[0]==='release'),false);
+ assert.equal(f.calls.some(args=>args.includes('POST')),false);
 });

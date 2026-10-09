@@ -64,9 +64,12 @@ export function publishWindowsRelease({ version = APP_VERSION, directory = "rele
   if (!found) {
     const commit = target || spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
     if (!/^[a-f0-9]{40}$/i.test(commit)) throw new Error("A tested commit is required to create the release tag.");
-    run(["release", "create", tag, "--repo", repo, "--draft", "--target", commit,
-      "--title", `Ularn ${version}`, "--notes", `Windows portable download for Ularn ${version}.`]);
-    found = locate();
+    // The release list may still be cached immediately after creation. The
+    // create response supplies the new draft's ID without another list read.
+    found = JSON.parse(run(["api", `repos/${repo}/releases`, "--method", "POST",
+      "-f", `tag_name=${tag}`, "-f", `target_commitish=${commit}`,
+      "-f", `name=Ularn ${version}`, "-f", `body=Windows portable download for Ularn ${version}.`,
+      "-F", "draft=true"]));
   }
   if (!Number.isSafeInteger(found?.id)) throw new Error("Could not resolve the draft release ID.");
   run(["release", "upload", tag, legacy, portable, `${legacy}.sha256`, `${portable}.sha256`, sums, "--repo", repo, "--clobber"]);
