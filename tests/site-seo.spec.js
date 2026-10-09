@@ -123,7 +123,7 @@ test("field guide, history, changelog, and optional Windows download are reachab
     "/changelog/",
   );
   await expect(page.locator(".site-nav a[href='/play/']").filter({ hasText: /^Play$/ })).toHaveCount(0);
-  await expect(page.locator(".site-nav .nav-cta[href='/play/']")).toContainText(/Play free/i);
+  await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Play", exact: true })).toHaveAttribute("href", "/play/");
   await expect(page.locator(".class-grid article")).toHaveCount(8);
   await expect(page.locator("#controls")).toContainText("F2");
   await expect(page.locator("#controls")).toContainText("F3");

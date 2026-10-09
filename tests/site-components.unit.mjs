@@ -9,11 +9,11 @@ test("header and footer expand once per page", () => {
   assert.match(home, /class="site-header site-header--hero"/);
   assert.match(home, /class="brand"/);
   assert.match(home, /class="nav-cta"/);
-  assert.match(home, /Play free/);
+  assert.match(home, />Play <span aria-hidden="true">/);
   assert.match(home, /What’s New/);
   assert.doesNotMatch(home, /aria-current/);
   assert.match(home, /class="text-link web-only"/);
-  assert.match(home, /download="__DOWNLOAD_FILENAME__"/);
+  assert.doesNotMatch(home, /download="/);
   assert.match(home, /aria-label="Footer"/);
 
   const about = expandSiteComponents('<site-header current="about"></site-header><site-footer page="about"></site-footer>');
