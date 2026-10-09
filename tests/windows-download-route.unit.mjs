@@ -33,6 +33,18 @@ test("drafts, incomplete uploads, missing checksums and unexpected asset URLs ne
   ]) assert.throws(() => selectWindowsAsset(invalid));
 });
 
+test("card metadata identifies the available desktop release and pins its versioned download", async () => {
+  const fetcher = async () => Response.json(release);
+  const response = await windowsDownload(request("?file=info"), fetcher);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    version: "1.3.69", filename: "Ularn-1.3.69.windows.exe", url: release.assets[0].browser_download_url,
+  });
+  assert.match(response.headers.get("vercel-cdn-cache-control"), /s-maxage=300/);
+  const head = await windowsDownload(request("?file=info", "HEAD"), fetcher);
+  assert.equal(head.status, 200); assert.equal(await head.text(), "");
+});
+
 test("GitHub outages fail explicitly without caching an error as a download", async t => {
   t.mock.method(console, "error", () => {});
   for (const fetcher of [async () => new Response("unavailable", { status: 503 }), async () => { throw new Error("network failure"); }]) {

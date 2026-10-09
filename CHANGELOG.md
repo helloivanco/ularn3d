@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.72 — Windows version on the download card
+
+- The Windows download card shows the version of the available desktop release beside its portable-build details
+- The displayed version and download link stay paired, including while a newer Windows build is being prepared
+
 ## 1.3.71 — Intact buildings and sharper blades
 
 - Town buildings keep their roofs and walls when you walk beside them; actual obstructions fade as a whole without exposing inner walls

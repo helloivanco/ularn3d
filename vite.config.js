@@ -4,9 +4,29 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { APP_VERSION, DOWNLOAD_FILENAME, stampVersion } from "./scripts/app-version.mjs";
 import { expandSiteComponents } from "./scripts/site-components.mjs";
+import { windowsDownload } from "./api/windows-download.js";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 const staticDirs = ["about", "changelog"];
+
+// Use the deployed resolver locally too. Cache ready responses as the Vercel
+// CDN does, so repeated development page loads share a GitHub lookup.
+const serveWindowsDownloads = server => {
+  const cache = new Map();
+  server.middlewares.use(async (request, response, next) => {
+    const url = new URL(request.url || "/", "http://localhost");
+    if (url.pathname !== "/api/windows-download") return next();
+    const key = `${request.method}:${url.search}`, cached = cache.get(key);
+    let result;
+    if (cached && cached.expires > Date.now()) result = cached.response.clone();
+    else {
+      result = await windowsDownload(new Request(url, { method: request.method }));
+      if (result.ok || result.status === 307) cache.set(key, { response: result.clone(), expires: Date.now() + 300000 });
+    }
+    response.writeHead(result.status, Object.fromEntries(result.headers));
+    response.end(await result.text());
+  });
+};
 
 // Marketing pages live under public/; play and home are Vite HTML entries.
 const directoryIndex = (server) => {
@@ -56,7 +76,9 @@ const injectAppVersion = () => ({
   },
   configureServer(server) {
     serveStampedPublicPage(server);
+    serveWindowsDownloads(server);
   },
+  configurePreviewServer: serveWindowsDownloads,
   closeBundle() {
     stampPublicHtmlTree(join(process.cwd(), "dist"));
   },
