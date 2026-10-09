@@ -38,7 +38,7 @@ async function count(page, floor = 1) {
   return page.evaluate((floor) => LEVELS[floor].monsters.flat().filter((m) => m?.matches(LEMMING)).length, floor);
 }
 
-test("new cave floors include rodents without exceeding the population cap", async ({ page }) => {
+test("new cave floors keep at most one lemming", async ({ page }) => {
   const populations = await page.evaluate(() => {
     const result = [];
     for (const depth of [2, 3, 4]) {
@@ -48,46 +48,23 @@ test("new cave floors include rodents without exceeding the population cap", asy
     paint();
     return result;
   });
-  for (const population of populations) {
-    expect(population).toBeGreaterThanOrEqual(1);
-    expect(population).toBeLessThanOrEqual(4);
-  }
+  for (const population of populations) expect(population).toBeLessThanOrEqual(1);
 });
 
-test("cleared caves regain random rodents on turns and the cadence survives Continue", async ({ page }) => {
+test("a cleared cave does not gain a lemming just because the turn count hits 24", async ({ page }) => {
   await page.evaluate(() => {
     player.MOVESMADE = 23; rmst = 100; paint();
   });
   await page.keyboard.press(".");
-  expect(await count(page)).toBe(1);
-  const spawn = await page.evaluate(() => {
-    const tile = ularn.snapshot().tiles.find((tile) => tile.monster?.id === LEMMING);
-    randmonst(); // Repeating a callback on the same turn must not add another.
-    return { distance: Math.max(Math.abs(tile.x - player.x), Math.abs(tile.y - player.y)),
-      empty: itemAt(tile.x, tile.y).matches(OEMPTY), harmless: tile.monster.harmless };
-  });
-  expect(spawn.distance).toBeGreaterThanOrEqual(3);
-  expect(spawn.empty).toBe(true);
-  expect(spawn.harmless).toBe(true);
-  expect(await count(page)).toBe(1);
-  await page.locator("#pause").click();
-  await page.waitForTimeout(150);
-  expect(await count(page)).toBe(1);
-  await page.locator("#resume-game").click();
-  await page.locator("#save").click();
-  await page.reload(); await page.locator("#continue").click();
-  await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);
-  expect(await count(page)).toBe(1);
-  await page.keyboard.press(".");
-  expect(await count(page)).toBe(1);
+  expect(await count(page)).toBe(0);
   await page.evaluate(() => {
     player.MOVESMADE = 47; rmst = 100;
     const random = rnd;
-    rnd = (n) => n === 100 ? 1 : random(n); // Accept the optional additional arrival.
+    rnd = (n) => n === 100 ? 1 : random(n);
     paint();
   });
   await page.keyboard.press(".");
-  expect(await count(page)).toBe(2);
+  expect(await count(page)).toBe(0);
 });
 
 test("periodic cave arrivals stay capped and respect time stop and genocide", async ({ page }) => {
@@ -95,7 +72,7 @@ test("periodic cave arrivals stay capped and respect time stop and genocide", as
     for (let x = 11; x < 15; x++) setMonster(x, 8, LEMMING);
     player.MOVESMADE = 24; rmst = 100; randmonst();
   });
-  expect(await count(page)).toBe(4);
+  expect(await count(page)).toBe(1);
   const blocked = await page.evaluate(() => {
     for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) setMonster(x, y, null);
     player.TIMESTOP = 10; randmonst();
@@ -254,9 +231,14 @@ test("harmless contact does not flag attacks or hide nearby interactions and exp
 test("shifted running continues through harmless lemmings and ends at the wall", async ({ page }) => {
   await corridor(page);
   await page.evaluate(() => { rnd = (n) => Math.max(1, Math.floor(n)); });
+  const before = await page.evaluate(() => gtime);
   await page.keyboard.press("Shift+ArrowRight");
   expect(await page.evaluate(() => player.x)).toBe(18);
+  expect(await page.evaluate((start) => gtime - start, before)).toBe(8);
   expect(await count(page)).toBe(0);
+  await page.keyboard.press("ArrowLeft");
+  expect(await page.evaluate(() => player.x)).toBe(17);
+  expect(await page.evaluate((start) => gtime - start, before)).toBe(9);
 });
 
 test("moving lemmings never reproduce even when the original birth roll succeeds", async ({ page }) => {
@@ -276,7 +258,7 @@ test("moving lemmings never reproduce even when the original birth roll succeeds
   expect(await count(page)).toBe(1);
 });
 
-test("new placements and summon helpers respect the four-per-floor cap without blocking movement", async ({ page }) => {
+test("new placements and summon helpers respect the one-per-floor cap without blocking movement", async ({ page }) => {
   const result = await page.evaluate(() => {
     for (let x = 16; x < 20; x++) setMonster(x, 8, LEMMING);
     const rejected = [
@@ -294,7 +276,7 @@ test("new placements and summon helpers respect the four-per-floor cap without b
     return { rejected, present, other };
   });
   expect(result).toEqual({ rejected: [null, null, null], present: true, other: true });
-  expect(await count(page)).toBe(4);
+  expect(await count(page)).toBe(1);
   const secondFloor = await page.evaluate(() => {
     newcavelevel(2);
     for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) {
@@ -305,8 +287,8 @@ test("new placements and summon helpers respect the four-per-floor cap without b
     return setMonster(20, 8, LEMMING);
   });
   expect(secondFloor).toBe(null);
-  expect(await count(page, 1)).toBe(4);
-  expect(await count(page, 2)).toBe(4);
+  expect(await count(page, 1)).toBe(1);
+  expect(await count(page, 2)).toBe(1);
 });
 
 test("time stop and other monsters retain their combat rules", async ({ page }) => {
@@ -330,7 +312,7 @@ test("time stop and other monsters retain their combat rules", async ({ page }) 
   expect(result).toEqual({ held: true, gnomeUnhurt: true });
 });
 
-test("Continue preserves old swarms above the cap and lets the player clear them", async ({ page }) => {
+test("Continue thins an old lemming swarm to one and the player can clear it", async ({ page }) => {
   await page.evaluate(() => {
     // Recreate a pre-upgrade save without going through today's spawn limit.
     for (let x = 11; x < 18; x++) LEVELS[level].monsters[x][8] = createMonster(LEMMING);
@@ -340,28 +322,20 @@ test("Continue preserves old swarms above the cap and lets the player clear them
   await page.reload();
   await page.locator("#continue").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);
-  expect(await count(page)).toBe(7);
+  expect(await count(page)).toBe(1);
   const result = await page.evaluate(() => {
-    const monster = monsterAt(17, 8), random = rnd;
-    rnd = () => 1;
-    mmove(17, 8, 17, 9);
-    shuffleMonster(17, 9);
-    rnd = random;
-    paint();
-    return {
-      present: LEVELS[level].monsters.flat().includes(monster),
-      rejected: setMonster(22, 8, LEMMING),
-    };
+    const monster = monsterAt(11, 8);
+    return { present: !!monster, rejected: setMonster(22, 8, LEMMING) };
   });
   expect(result).toEqual({ present: true, rejected: null });
-  expect(await count(page)).toBe(7);
+  expect(await count(page)).toBe(1);
   await page.keyboard.press("ArrowRight");
-  expect(await count(page)).toBe(6);
+  expect(await count(page)).toBe(0);
   await page.locator("#save").click();
   await page.reload();
   await page.locator("#continue").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);
-  expect(await count(page)).toBe(6);
+  expect(await count(page)).toBe(0);
 });
 
 test("online rooms retain the native population cap and thinning", async ({ page }) => {
