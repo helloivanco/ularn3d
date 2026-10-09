@@ -59,6 +59,8 @@ The benchmark also accepts two URLs to compare a baseline with a build. It uses 
 
 ## Rendering stability
 
+Town buildings keep their complete exterior when the hero walks beside them. Visibility traces the hero's torso and head against the actual roof and wall meshes, excluding landmark signs and foundations. A real obstruction fades the entire structure together while keeping its foundation and label; all walls and the roof restore together once clear. Hidden meshes remain in the visibility check, with a small boundary margin, so the fade settles without revealing stranded interior walls or repeatedly switching back and forth. `tests/building-occlusion.unit.mjs` and `tests/surface-seams.spec.js` cover false label/bounds overlaps, the College walk-by, restoration, and eight camera directions.
+
 Neighboring wall caps no longer overlap. Wall cutaways ease from the displayed position, use hysteresis and settle; translucent building fades avoid writing depth. Shadow projections retain a stable light-space texel phase and refresh moving geometry at 30/60 Hz. A zoom-sensitive range keeps shadows in view. Torch assignments survive distance ties, fade down before moving, and use only gentle 1.2% variation. Color, normal and roughness maps have mipmaps and anisotropic filtering. Flames and ground indicators do not cast tiny unstable shadows. Higher tiers use SMAA before output mapping, with lookup images embedded locally. Damage briefly highlights health without changing the whole scene palette.
 
 `tests/render-stability.spec.js` verifies shadow phase, lamp identity and zero-intensity handover, disjoint cap bounds, smooth cutaway settling, batching flags and repeated-damage feedback.

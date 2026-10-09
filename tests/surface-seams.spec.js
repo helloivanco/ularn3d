@@ -57,7 +57,7 @@ test("town and dungeon bases meet floor bottoms without overlapping edge faces",
   }
 });
 
-test("town cutaways keep the floor and rear walls solid and restore opaque roofs",async({page})=>{
+test("occluding buildings fade as a whole, keep a solid floor and restore their exterior",async({page})=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   page.on("console",message=>{if(message.type()==="error")errors.push(message.text());});
   await page.addInitScript(()=>{localStorage.setItem("ularn3d.quality","balanced");localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));});
@@ -73,8 +73,7 @@ test("town cutaways keep the floor and rear walls solid and restore opaque roofs
   const cut=await read();
   expect(cut.parts.filter(part=>part.part==='base').every(part=>part.visible&&!part.transparent&&part.opacity===1&&part.depthWrite)).toBe(true);
   expect(cut.parts.filter(part=>part.part==='roof').every(part=>!part.visible&&part.opacity===0)).toBe(true);
-  expect(cut.parts.some(part=>['front','back','left','right'].includes(part.part)&&part.visible&&part.opacity===1)).toBe(true);
-  expect(cut.parts.some(part=>['front','back','left','right'].includes(part.part)&&!part.visible)).toBe(true);
+  expect(cut.parts.filter(part=>part.part!=='base').every(part=>!part.visible&&part.opacity===0)).toBe(true);
   expect(cut.parts.every(part=>!part.transparent&&part.depthWrite)).toBe(true);
   await page.evaluate(store=>{player.x=store.x-8;player.y=store.y;paint();},store);
   await expect.poll(async()=>{const b=await read();return b.opacity===1&&b.depthWrite;}).toBe(true);
@@ -91,7 +90,7 @@ test("roof mip filtering blends LODs while retaining the existing terrain maps",
   expect(filters.roof).toBe(filters.linear);expect(filters.stone).toBe(filters.crisp);
 });
 
-test("house cutaways follow the camera from every side and stop changing when settled",async({page})=>{
+test("whole-building fades keep the hero clear from every camera side and settle",async({page})=>{
   await page.setViewportSize({width:720,height:540});
   await page.route('**/src/world.js*',async route=>{
     const response=await route.fetch();
@@ -104,7 +103,7 @@ test("house cutaways follow the camera from every side and stop changing when se
     const tile=ularn.snapshot().tiles.find(tile=>tile.id===12);
     player.x=tile.x;player.y=tile.y;paint();return {x:tile.x,y:tile.y};
   });
-  for(const [x,z,near,far] of [[0,12,'front','back'],[12,0,'right','left'],[0,-12,'back','front'],[-12,0,'left','right']]){
+  for(const [x,z] of [[0,12],[12,0],[0,-12],[-12,0],[8.5,8.5],[8.5,-8.5],[-8.5,-8.5],[-8.5,8.5]]){
     await page.evaluate(({x,z,store})=>{
       const world=window.__surfaceWorld;
       world.snapFollow();world.controls.target.set(store.x,0,store.y);
@@ -113,8 +112,8 @@ test("house cutaways follow the camera from every side and stop changing when se
     const read=()=>page.evaluate(store=>ularnGraphics.buildings().find(b=>b.tile.x===store.x&&b.tile.y===store.y),store);
     await expect.poll(async()=>{
       const parts=(await read()).parts;
-      return parts.filter(part=>part.part===near||part.part==='roof').every(part=>!part.visible)&&
-        parts.filter(part=>part.part===far||part.part==='base').every(part=>part.visible&&part.opacity===1);
+      return parts.filter(part=>part.part!=='base').every(part=>!part.visible)&&
+        parts.filter(part=>part.part==='base').every(part=>part.visible&&part.opacity===1);
     }).toBe(true);
     const before=await page.evaluate(()=>ularnGraphics.metrics().shadowUpdates);
     await page.evaluate(async()=>{
@@ -122,4 +121,47 @@ test("house cutaways follow the camera from every side and stop changing when se
     });
     expect(await page.evaluate(()=>ularnGraphics.metrics().shadowUpdates)).toBe(before);
   }
+});
+
+test("walking beside the college keeps its roof intact and obstruction leaves no inner walls",async({page})=>{
+  await page.route('**/src/world.js*',async route=>{
+    const response=await route.fetch();
+    await route.fulfill({response,body:(await response.text()).replace(
+      'this.scene = new THREE.Scene();','window.__surfaceWorld = this; this.scene = new THREE.Scene();')});
+  });
+  await page.addInitScript(()=>{
+    localStorage.setItem('ularn3d.quality','balanced');
+    localStorage.setItem('ularn3d.audio.v1',JSON.stringify({enabled:false}));
+  });
+  await page.goto('/play/');await expect(page.locator('#loading')).toBeHidden();await page.locator('#begin').click();
+  const college=await page.evaluate(()=>{
+    const tile=ularn.snapshot().tiles.find(tile=>tile.id===10);
+    player.x=tile.x+1;player.y=tile.y;paint();
+    const world=window.__surfaceWorld;world.snapFollow();world.yawEase=false;
+    world.controls.enableDamping=false;world.controls.target.copy(world.player.position);
+    world.camera.position.set(player.x,15,player.y+10);world.controls.update();world.invalidate();
+    return {x:tile.x,y:tile.y};
+  });
+  const read=()=>page.evaluate(tile=>ularnGraphics.buildings().find(b=>b.tile.x===tile.x&&b.tile.y===tile.y),college);
+  await expect.poll(async()=>{
+    const building=await read();
+    return !building.obscuresHero&&building.parts.every(part=>part.visible&&part.opacity===1&&part.depthWrite);
+  }).toBe(true);
+  for(let step=0;step<4;step++){
+    await page.keyboard.press(step%2?'ArrowUp':'ArrowDown');
+    await page.waitForTimeout(180);
+    const building=await read();
+    expect(building.obscuresHero).toBe(false);
+    expect(building.parts.every(part=>part.visible&&part.opacity===1)).toBe(true);
+  }
+  await page.evaluate(tile=>{player.x=tile.x;player.y=tile.y-1;paint();},college);
+  await expect.poll(async()=>{
+    const building=await read();
+    return building.obscuresHero&&building.parts.filter(part=>part.part!=='base').every(part=>!part.visible);
+  }).toBe(true);
+  expect((await read()).parts.filter(part=>part.part==='base').every(part=>part.visible&&part.depthWrite)).toBe(true);
+  await page.evaluate(tile=>{player.x=tile.x+1;player.y=tile.y;paint();},college);
+  await expect.poll(async()=>{
+    const building=await read();return !building.obscuresHero&&building.parts.every(part=>part.visible&&part.opacity===1);
+  }).toBe(true);
 });
