@@ -79,6 +79,14 @@ Run `node scripts/visual-characters.mjs` against the development server to regen
 
 [Front views of all enemies](screenshots/creatures-front.png) · [Back views of all enemies](screenshots/creatures-back.png) · [Player front views](screenshots/heroes-front.png) · [Player back views](screenshots/heroes-back.png) · [In the caves](screenshots/characters-desktop.png) · [On a phone](screenshots/characters-mobile.png)
 
+### Blade review — October 9, 2026
+
+All eight classes and 66 creatures were reviewed from front, back and gameplay views. The Adventurer and Rogue starting dagger now uses one closed, faceted blade that narrows continuously to a single point. The two old rectangular tip pieces are removed, its glow is lower so the bevels remain visible, and its trail endpoint matches the blade. Hobgoblin, orc, enemy elf and xvart swords use the same pointed geometry instead of flat-ended boxes. Sword variants also taper their thickness toward the point and close their bases without collapsed tip triangles. The affected class and creature portraits were regenerated; class equipment, animation and geometry budgets remain intact.
+
+Validation: 21 model, cast, motion and stability unit checks; eight browser checks covering all classes, all creatures, blade variants, swapping, combat and reduced motion; production build. `node scripts/visual-swords.mjs` now includes the actual starting grips, a six-character blade review and an Adventurer close-up, as well as all seven blade variants and desktop/mobile combat. `SWORD_OUTPUT` selects a capture folder.
+
+[Adventurer blade close-up](screenshots/adventurer-blade.png) · [Affected characters](screenshots/blade-tip-review.png)
+
 Creature info cards use cached transparent portraits rendered from the same exact-ID rigs in `src/creatures.js`, with Balanced cave lighting. All 66 portraits live in `public/art/creatures/`; run `TEST_URL=http://localhost:5173 node scripts/render-creature-portraits.mjs` after changing creature appearance. Cards load these local images without starting an additional WebGL renderer. Hidden creatures and unidentified mimics retain their existing visibility rules. `tests/monster-hover-card.spec.js` checks complete portrait coverage, transparency, distinct species images and card visibility.
 
 ## Graphics boost and latency in 1.3.64
