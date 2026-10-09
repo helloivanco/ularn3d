@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.71 — Intact buildings and sharper blades
+
+- Town buildings keep their roofs and walls when you walk beside them; actual obstructions fade as a whole without exposing inner walls
+- The Adventurer and Rogue daggers taper to a single sharp point, with clearer bevels and no leftover rectangular tips
+- Hobgoblin, orc, enemy elf and xvart swords have pointed blades, and affected class and creature portraits match the updated models
+
 ## 1.3.70 — Stable heroes and matching creature cards
 
 - Heroes stop flickering at diagonal corridor corners; decorative ground rings no longer trigger wall corrections
