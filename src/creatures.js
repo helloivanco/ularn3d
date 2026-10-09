@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { box, orb, cone, cylinder, tapered, mat } from "./models.js";
+import { box, orb, cone, cylinder, tapered, pointedBlade, mat } from "./models.js";
 import { matBasic } from "./materials.js";
 import { compact, featherContact } from "./graphics-utils.js";
 
@@ -266,8 +266,8 @@ function build(definition) {
     if ([3,6,26,51].includes(id)) {
       const hand = body.getObjectByName("arm-1");
       rod(hand,0x796342,[.035,-.27,-.035],[.035,-.27,-.14],.035);
-      const blade=box(hand,id===26?0xb6c9b4:0xa5b8ba,.035,-.19,-.275,.042,.028,.3);
-      blade.rotation.x=-.22;
+      const blade=pointedBlade(hand,id===26?0xb6c9b4:0xa5b8ba,.035,-.265,-.155,.042,.3,.028,undefined,0,true);
+      blade.rotation.x=-Math.PI/2+.22;
       box(hand,0xb29b67,.035,-.265,-.155,.13,.025,.028);
     }
   } else if (["beast", "dragon", "centaur"].includes(family)) {

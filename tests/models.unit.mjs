@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { box, orb, ring, hero, itemModel } from "../src/models.js";
+import { box, orb, ring, hero, itemModel, pointedBlade, fillWieldedWeapon } from "../src/models.js";
 
 const triangles = (root) => {
   let count = 0;
@@ -187,6 +187,65 @@ test("wielded weapons rebuild into distinct larger attack grips", async () => {
   assert.ok(longest(daggerSize) < longest(swordSize) * 0.7, `dagger ${longest(daggerSize)} vs sword ${longest(swordSize)}`);
   assert.ok(longest(daggerSize) < longest(spearSize) * 0.55, `dagger ${longest(daggerSize)} vs spear ${longest(spearSize)}`);
   assert.ok(longest(lanceSize) > longest(daggerSize) * 1.8, `lance ${longest(lanceSize)} vs dagger ${longest(daggerSize)}`);
+});
+
+test("daggers taper continuously to one point on every class, including after weapon swaps", () => {
+  for (const name of ["Adventurer", "Wizard", "Rogue", "Elf", "Dwarf", "Ogre", "Klingon", "Rambo"]) {
+    const model = hero(name), grip = model.getObjectByName("weapon");
+    fillWieldedWeapon(grip, { id: 58, type: "sword" });
+    fillWieldedWeapon(grip, { id: 31, type: "dagger" });
+    assert.equal(grip.getObjectsByProperty("name", "dagger-blade").length, 1, name);
+    const blade = grip.getObjectByName("dagger-blade"), position = blade.geometry.attributes.position;
+    const sections = new Map();
+    for (let i = 0; i < position.count; i++) {
+      const y = position.getY(i), radius = Math.hypot(position.getX(i), position.getZ(i));
+      sections.set(y, Math.max(sections.get(y) || 0, radius));
+    }
+    let radius = Infinity;
+    for (const [, next] of [...sections].sort((a, b) => a[0] - b[0])) {
+      assert.ok(next < radius, `${name}: dagger widens toward its tip`);
+      radius = next;
+    }
+    assert.equal(radius, 0, `${name}: dagger has a flat end`);
+    // Check the assembled weapon too: the original bug had a good blade with
+    // old rectangular meshes extending beyond its point.
+    model.updateMatrixWorld(true);
+    const inverse = grip.matrixWorld.clone().invert();
+    const point = new THREE.Vector3();
+    let maxY = -Infinity;
+    grip.traverse(part => {
+      if (!part.isMesh) return;
+      const positions = part.geometry.attributes.position;
+      const transform = inverse.clone().multiply(part.matrixWorld);
+      for (let i = 0; i < positions.count; i++) {
+        point.fromBufferAttribute(positions, i).applyMatrix4(transform);
+        maxY = Math.max(maxY, point.y);
+        if (point.y > .4) assert.equal(part, blade, `${name}: extra mesh over the point`);
+      }
+    });
+    assert.ok(Math.abs(maxY - grip.userData.bladeLength) < 1e-6, `${name}: trail tip and blade disagree`);
+    const marker = grip.getObjectByName("dagger-tip").getWorldPosition(new THREE.Vector3()).applyMatrix4(inverse);
+    assert.ok(Math.abs(marker.y - maxY) < 1e-6, name);
+  }
+});
+
+test("blade solids have closed bases and tips without collapsed triangles", () => {
+  for (const simple of [true, false]) for (const bend of [0, .065, -.035]) {
+    const blade = pointedBlade(new THREE.Group(), 0xffffff, 0, 0, 0, .1, .8, .03, undefined, bend, simple);
+    const positions = blade.geometry.attributes.position, edges = new Map();
+    const vector = index => new THREE.Vector3().fromBufferAttribute(positions, index);
+    const key = point => point.toArray().join(":");
+    for (let i = 0; i < positions.count; i += 3) {
+      const vertices = [vector(i), vector(i + 1), vector(i + 2)];
+      const area = vertices[1].clone().sub(vertices[0]).cross(vertices[2].clone().sub(vertices[0])).length();
+      assert.ok(area > 1e-8, `collapsed triangle at ${i}: ${simple}/${bend}`);
+      for (let j = 0; j < 3; j++) {
+        const edge = [key(vertices[j]), key(vertices[(j + 1) % 3])].sort().join("|");
+        edges.set(edge, (edges.get(edge) || 0) + 1);
+      }
+    }
+    assert.ok([...edges.values()].every(count => count === 2), `open blade: ${simple}/${bend}`);
+  }
 });
 
 test("town portal has its own landmark mesh", () => {

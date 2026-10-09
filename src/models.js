@@ -301,18 +301,21 @@ function fillClassicWieldedWeapon(grip, weapon = null) {
     return grip;
   }
   if (type === "dagger" || id === 31) {
-    // Dagger-length, but a flat edge. Local X stays horizontal under the
-    // overhead camera, so that axis is the sharp side, not a brick.
-    // Bright edge so the thin blade still reads under dungeon ambient light.
-    const steel = { metalness: 0.4, roughness: 0.3, emissive: 0xc5d0d4, emissiveIntensity: 0.7 };
-    const blade = box(grip, 0xeef3f5, 0, 0.2, 0, 0.022, 0.34, 0.056, steel);
+    // One solid from the guard to the point. Separate box tips left a blunt,
+    // stepped end beyond the faceted blade. X remains the thin overhead edge.
+    const steel = { metalness: 0.4, roughness: 0.3, emissive: 0xc5d0d4, emissiveIntensity: 0.12 };
+    const blade = pointedBlade(grip, 0xe2eaf0, 0, 0.03, 0, 0.022, 0.45, 0.056, steel, 0, true);
     blade.name = "dagger-blade";
-    const tip = box(grip, 0xf7fbfc, 0, 0.4, 0, 0.014, 0.08, 0.028, steel);
+    const tip = new THREE.Object3D();
     tip.name = "dagger-tip";
-    box(grip, 0xffffff, 0, 0.46, 0, 0.008, 0.045, 0.014, steel);
+    tip.position.y = 1;
+    blade.add(tip);
     const guard = box(grip, 0xddba70, 0, 0.02, 0, 0.11, 0.018, 0.032, metal);
     guard.name = "dagger-guard";
     box(grip, 0x463e32, 0, -0.07, 0, 0.028, 0.13, 0.032, haft);
+    const gem = geometry("dagger-small-gem", () => new THREE.TetrahedronGeometry(1));
+    markDetail(mesh(grip, gem, mat(0xbda06c, { metalness: .6 }), 0, -.15, 0, .03, .03, .03));
+    markDetail(mesh(grip, gem, mat(0x5b8998, { emissive: 0x5b8998, emissiveIntensity: .2 }), 0, -.15, -.025, .015, .015, .015));
     return grip;
   }
   if (type === "spear" || id === 30) {
@@ -387,15 +390,7 @@ export function fillWieldedWeapon(pivot, weapon = {}) {
   if (type !== "sword") {
     fillClassicWieldedWeapon(pivot, weapon);
     pivot.userData.weaponModel=type;
-    pivot.userData.bladeLength=type === "dagger" ? .5 : 0; pivot.userData.bladeBend=0;
-    if (type === "dagger") {
-      const blade=pivot.getObjectByName("dagger-blade");
-      if (blade) { blade.geometry=detailedBladeGeometry(0,true); blade.position.y=.03; }
-      // Faceting and small grip details keep the latest thin dagger silhouette.
-      const gem=geometry("dagger-small-gem",()=>new THREE.TetrahedronGeometry(1));
-      markDetail(mesh(pivot,gem,mat(0xbda06c,{metalness:.6}),0,-.15,0,.03,.03,.03));
-      markDetail(mesh(pivot,gem,mat(0x5b8998,{emissive:0x5b8998,emissiveIntensity:.2}),0,-.15,-.025,.015,.015,.015));
-    }
+    pivot.userData.bladeLength=type === "dagger" ? .48 : 0; pivot.userData.bladeBend=0;
     return pivot;
   }
   equipHero({ getObjectByName: () => pivot }, weapon);
@@ -636,16 +631,24 @@ export function hero(character = "Adventurer") {
 function detailedBladeGeometry(bend = 0, simple = false) {
   return geometry(`blade:${bend}:${simple}`, () => {
     const positions = [], uvs = [];
-    const stations = simple ? [[0,.55],[.72,.8],[1,0]] : [[0, .55], [.12, 1], [.72, .8], [.9, .46], [1, 0]];
+    const stations = simple ? [[0, 1], [.55, .78], [.82, .38], [1, 0]] : [[0, .55], [.12, 1], [.72, .8], [.9, .46], [1, 0]];
     const corners = [[-1, 0], [0, 1], [1, 0], [0, -1]];
     const vertex = (station, corner) => {
       const [y, width] = stations[station], [x, z] = corners[corner % 4];
-      positions.push(x * width / 2 + bend * y * y, y, z * (1 - y * .25) / 2 * (station === stations.length - 1 ? 0 : 1));
+      positions.push(x * width / 2 + bend * y * y, y, z * width / 2);
       uvs.push(corner / 4, y);
     };
     for (let i = 0; i < stations.length - 1; i++) for (let j = 0; j < 4; j++) {
       vertex(i, j); vertex(i, j + 1); vertex(i + 1, j);
-      vertex(i, j + 1); vertex(i + 1, j + 1); vertex(i + 1, j);
+      // All four ridges meet at one point; a second triangle here would have
+      // two identical tip vertices and no area.
+      if (i < stations.length - 2) {
+        vertex(i, j + 1); vertex(i + 1, j + 1); vertex(i + 1, j);
+      }
+    }
+    for (let j = 0; j < 4; j++) {
+      positions.push(0, 0, 0); uvs.push(.5, 0);
+      vertex(0, j + 1); vertex(0, j);
     }
     const result = new THREE.BufferGeometry();
     result.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
@@ -655,9 +658,14 @@ function detailedBladeGeometry(bend = 0, simple = false) {
   });
 }
 
+/** Closed diamond section with thin cutting edges and a single tapered tip. */
+export function pointedBlade(group, color, x, y, z, width, length, thickness, extra, bend = 0, simple = false) {
+  return mesh(group, detailedBladeGeometry(bend, simple), mat(color, extra), x, y, z, width, length, thickness);
+}
+
 function detailedBlade(group, style) {
   const metal = { metalness: .85, roughness: .23 };
-  mesh(group, detailedBladeGeometry(style.bend), mat(style.steel, metal), 0, .055, 0, style.width, style.length, .036);
+  pointedBlade(group, style.steel, 0, .055, 0, style.width, style.length, .036, metal, style.bend);
   // The fuller and faceted section make the edge readable at gameplay scale.
   box(group, 0x758e9d, 0, style.length * .37 + .09, -.018, .014, style.length * .57, .006, { metalness: .8, roughness: .34 });
   box(group, style.gold, 0, .027, 0, .115, .066, .085, { metalness: .72, roughness: .3 });

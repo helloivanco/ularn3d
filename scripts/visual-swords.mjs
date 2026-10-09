@@ -2,8 +2,9 @@ import { chromium } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
 const base = process.env.TEST_URL || "http://127.0.0.1:5173";
+const output = process.env.SWORD_OUTPUT || "docs/screenshots";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
-await mkdir("docs/screenshots", { recursive: true });
+await mkdir(output, { recursive: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
   const errors = []; page.on("pageerror", (error) => errors.push(error.message));
@@ -11,7 +12,7 @@ try {
   await page.goto(`${base}/sword-gallery`);
   await page.evaluate(async () => {
     const THREE = await import("/node_modules/three/build/three.module.js");
-    const { hero, equipHero, weaponModel } = await import("/src/models.js");
+    const { hero, fillWieldedWeapon, weaponModel } = await import("/src/models.js");
     const { HeroAnimation } = await import("/src/hero-animation.js");
     const { RoomEnvironment } = await import("/node_modules/three/examples/jsm/environments/RoomEnvironment.js");
     const scene = new THREE.Scene(); scene.background = new THREE.Color(0x12252b);
@@ -39,7 +40,7 @@ try {
     });
     [[0, "Ready"], [55, "Wind-up · 55 ms"], [105, "Strike · 105 ms"], [170, "Follow-through"]].forEach(([time, name], i) => {
       const x = (i - 1.5) * 3.1, model = hero();
-      equipHero(model, { type: "sword", id: 58 }); model.position.set(x, 0, 2); model.rotation.y = Math.PI; model.scale.setScalar(1.45); scene.add(model);
+      fillWieldedWeapon(model.getObjectByName("weapon"), { type: "sword", id: 58 }); model.position.set(x, 0, 2); model.rotation.y = Math.PI; model.scale.setScalar(1.45); scene.add(model);
       const animation = new HeroAnimation(scene, model);
       if (time) {
         animation.start({ kind: "weapon", weapon: { type: "sword" }, hit: true, to: { x, y: 3.45 } }, 0);
@@ -50,7 +51,53 @@ try {
     });
     renderer.render(scene, camera);
   });
-  await page.screenshot({ path: "docs/screenshots/sword-designs.png" });
+  await page.screenshot({ path: `${output}/sword-designs.png` });
+  // Inspect the actual starting grips too: weaponModel() alone used to miss
+  // the legacy box tips left on the Adventurer and Rogue in the live game.
+  await page.route("**/blade-tip-review", route => route.fulfill({ contentType: "text/html", body:
+    '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#12252b"><div id="title" style="position:absolute;top:24px;left:30px;color:#eadcba;font:26px Georgia">ULARN · In-hand blade tips</div></body></html>' }));
+  await page.goto(`${base}/blade-tip-review`);
+  await page.evaluate(async () => {
+    const THREE = await import("/node_modules/three/build/three.module.js");
+    const { hero } = await import("/src/models.js"), { creature } = await import("/src/creatures.js");
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(devicePixelRatio);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; document.body.append(renderer.domElement);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0x12252b);
+    scene.add(new THREE.HemisphereLight(0xc8e1dd, 0x3a4334, 2));
+    const sun = new THREE.DirectionalLight(0xffdfb4, 3.2); sun.position.set(-8, 20, 12); scene.add(sun);
+    const fill = new THREE.DirectionalLight(0x97bcc7, .8); fill.position.set(10, 9, -4); scene.add(fill);
+    const width = 6.6, height = width * innerHeight / innerWidth;
+    const camera = new THREE.OrthographicCamera(-width/2, width/2, height/2, -height/2, .1, 100);
+    camera.position.set(0, 8, 10); camera.lookAt(0, .3, 0);
+    const entries = [["Adventurer", hero("Adventurer")], ["Rogue", hero("Rogue")],
+      ["Hobgoblin", creature({id:3})], ["Orc", creature({id:6})],
+      ["Enemy elf", creature({id:26})], ["Xvart", creature({id:51})]];
+    for (const [i, [name, model]] of entries.entries()) {
+      const x = (i%3-1)*2.2, z = (Math.floor(i/3)-.5)*2.8;
+      model.position.set(x, 0, z); model.rotation.y = Math.PI+.9; scene.add(model);
+      const canvas = document.createElement("canvas"); canvas.width = 400; canvas.height = 80;
+      const ctx = canvas.getContext("2d"); ctx.font = "28px Georgia"; ctx.textAlign = "center";
+      ctx.fillStyle = "#decda9"; ctx.fillText(name, 200, 47);
+      const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace;
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({map, depthTest:false}));
+      label.position.set(x, .02, z+.9); label.scale.set(1.9, .38, 1); scene.add(label);
+    }
+    renderer.render(scene, camera);
+    window.bladeTipReview = { renderer, scene, camera, entries };
+  });
+  await page.screenshot({ path: `${output}/blade-tip-review.png` });
+  await page.setViewportSize({width:640, height:760});
+  await page.evaluate(() => {
+    const { renderer, scene, camera, entries } = bladeTipReview;
+    for (const child of [...scene.children]) if (!child.isLight) scene.remove(child);
+    const model = entries[0][1]; model.position.set(0,0,0); scene.add(model);
+    camera.left=-.6; camera.right=.6; camera.top=.7125; camera.bottom=-.7125;
+    camera.position.set(0, 2.8, 4); camera.lookAt(0, .56, 0); camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight); renderer.render(scene,camera);
+    document.getElementById("title").remove();
+  });
+  await page.screenshot({ path: `${output}/adventurer-blade.png` });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(new URL("/play/", base).href); await page.locator("#loading").waitFor({ state: "hidden" }); await page.locator("#begin").click();
   await page.evaluate(() => {
@@ -66,10 +113,10 @@ try {
   for (let i = 0; i < 6; i++) await page.locator("#zoom-in").click();
   await page.waitForTimeout(400); await page.clock.install(); await page.clock.pauseAt(new Date(Date.now() + 60000));
   await page.keyboard.press("ArrowRight"); await page.clock.runFor(110);
-  await page.screenshot({ path: "docs/screenshots/sword-gameplay.png" });
+  await page.screenshot({ path: `${output}/sword-gameplay.png` });
   await page.setViewportSize({ width: 390, height: 844 }); await page.clock.runFor(450);
   await page.locator("#camera-reset").click(); await page.clock.runFor(100);
-  await page.screenshot({ path: "docs/screenshots/sword-mobile.png" });
+  await page.screenshot({ path: `${output}/sword-mobile.png` });
   if (errors.length) throw new Error(errors.join("\n"));
   console.log("Captured all blade variants, sword poses, gameplay strike and mobile presentation.");
 } finally { await browser.close(); }

@@ -59,6 +59,8 @@ The benchmark also accepts two URLs to compare a baseline with a build. It uses 
 
 ## Rendering stability
 
+Town buildings keep their complete exterior when the hero walks beside them. Visibility traces the hero's torso and head against the actual roof and wall meshes, excluding landmark signs and foundations. A real obstruction fades the entire structure together while keeping its foundation and label; all walls and the roof restore together once clear. Hidden meshes remain in the visibility check, with a small boundary margin, so the fade settles without revealing stranded interior walls or repeatedly switching back and forth. `tests/building-occlusion.unit.mjs` and `tests/surface-seams.spec.js` cover false label/bounds overlaps, the College walk-by, restoration, and eight camera directions.
+
 Neighboring wall caps no longer overlap. Wall cutaways ease from the displayed position, use hysteresis and settle; translucent building fades avoid writing depth. Shadow projections retain a stable light-space texel phase and refresh moving geometry at 30/60 Hz. A zoom-sensitive range keeps shadows in view. Torch assignments survive distance ties, fade down before moving, and use only gentle 1.2% variation. Color, normal and roughness maps have mipmaps and anisotropic filtering. Flames and ground indicators do not cast tiny unstable shadows. Higher tiers use SMAA before output mapping, with lookup images embedded locally. Damage briefly highlights health without changing the whole scene palette.
 
 `tests/render-stability.spec.js` verifies shadow phase, lamp identity and zero-intensity handover, disjoint cap bounds, smooth cutaway settling, batching flags and repeated-damage feedback.
@@ -78,6 +80,14 @@ All eight player classes and all 66 enemies were inspected from front, back and 
 Run `node scripts/visual-characters.mjs` against the development server to regenerate the three-angle galleries and geometry measurements. `CHARACTER_OUTPUT` selects another output folder. The node checks cover native enemy coverage, corridor-sized player bodies, finite/shared enemy geometry, reduced-motion rest poses and wing winding. The historical benchmark numbers above have not been rerun for this model pass.
 
 [Front views of all enemies](screenshots/creatures-front.png) · [Back views of all enemies](screenshots/creatures-back.png) · [Player front views](screenshots/heroes-front.png) · [Player back views](screenshots/heroes-back.png) · [In the caves](screenshots/characters-desktop.png) · [On a phone](screenshots/characters-mobile.png)
+
+### Blade review — October 9, 2026
+
+All eight classes and 66 creatures were reviewed from front, back and gameplay views. The Adventurer and Rogue starting dagger now uses one closed, faceted blade that narrows continuously to a single point. The two old rectangular tip pieces are removed, its glow is lower so the bevels remain visible, and its trail endpoint matches the blade. Hobgoblin, orc, enemy elf and xvart swords use the same pointed geometry instead of flat-ended boxes. Sword variants also taper their thickness toward the point and close their bases without collapsed tip triangles. The affected class and creature portraits were regenerated; class equipment, animation and geometry budgets remain intact.
+
+Validation: 21 model, cast, motion and stability unit checks; eight browser checks covering all classes, all creatures, blade variants, swapping, combat and reduced motion; production build. `node scripts/visual-swords.mjs` now includes the actual starting grips, a six-character blade review and an Adventurer close-up, as well as all seven blade variants and desktop/mobile combat. `SWORD_OUTPUT` selects a capture folder.
+
+[Adventurer blade close-up](screenshots/adventurer-blade.png) · [Affected characters](screenshots/blade-tip-review.png)
 
 Creature info cards use cached transparent portraits rendered from the same exact-ID rigs in `src/creatures.js`, with Balanced cave lighting. All 66 portraits live in `public/art/creatures/`; run `TEST_URL=http://localhost:5173 node scripts/render-creature-portraits.mjs` after changing creature appearance. Cards load these local images without starting an additional WebGL renderer. Hidden creatures and unidentified mimics retain their existing visibility rules. `tests/monster-hover-card.spec.js` checks complete portrait coverage, transparency, distinct species images and card visibility.
 

@@ -476,6 +476,10 @@ export class World {
     this.solidTiles = new Set();
     this.heroBounds = new THREE.Box3();
     this.boundsCorner = new THREE.Vector3();
+    this.cutawayRay = new THREE.Raycaster();
+    this.cutawayHits = [];
+    this.cutawayTarget = new THREE.Vector3();
+    this.cutawayDirection = new THREE.Vector3();
     this.yawFrom = 0;
     this.yawTo = 0;
     this.yawEase = false;
@@ -756,6 +760,7 @@ export class World {
       },
       buildings: () => (this.cutawayBuildings || []).map(mesh => ({
         tile: {...mesh.userData.tile}, opacity: mesh.userData.opacity ?? 1,
+        obscuresHero: !!mesh.userData.obscuresHero,
         depthWrite: (mesh.userData.buildingParts || []).every(child => child.material.depthWrite),
         parts: (mesh.userData.buildingParts || []).map(child => ({
           part: child.userData.buildingPart, visible: child.visible,
@@ -1839,10 +1844,12 @@ export class World {
         if (t.store && ![54, 55, 56].includes(t.id)) {
           g.userData.building = true;
           g.userData.buildingParts = [];
+          g.userData.buildingOccluders = [];
           g.traverse((object) => {
             if (!object.isMesh) return;
             g.userData.buildingParts.push(object);
             if (object.userData.buildingPart === "base") return;
+            g.userData.buildingOccluders.push(object);
             object.material = object.material.clone();
             object.material.transparent = false;
             object.material.depthWrite = true;
@@ -2438,35 +2445,43 @@ export class World {
     this.animating = false;
     this.scheduleFrame();
   }
+  buildingObscuresHero(mesh) {
+    const dx = mesh.position.x - this.player.position.x, dz = mesh.position.z - this.player.position.z;
+    const wasHidden = mesh.userData.obscuresHero;
+    if (dx * dx + dz * dz >= (wasHidden ? 18 : 16)) return false;
+    mesh.updateWorldMatrix(true, true);
+    const right = this.camera.matrixWorld.elements;
+    // Trace the torso and head against the actual structure, excluding signs
+    // and the foundation. Hidden meshes still participate so they can restore.
+    // A small side margin keeps a fading building stable at its silhouette.
+    for (let sample = 0; sample < (wasHidden ? 6 : 2); sample++) {
+      const margin = sample < 2 ? 0 : sample < 4 ? -.04 : .04;
+      this.cutawayTarget.copy(this.player.position);
+      this.cutawayTarget.y += sample % 2 ? .95 : .55;
+      this.cutawayTarget.x += right[0] * margin;
+      this.cutawayTarget.z += right[2] * margin;
+      this.cutawayDirection.copy(this.cutawayTarget).sub(this.camera.position);
+      const distance = this.cutawayDirection.length();
+      if (distance < .03) continue;
+      this.cutawayRay.set(this.camera.position, this.cutawayDirection.divideScalar(distance));
+      this.cutawayRay.far = distance - .03;
+      this.cutawayHits.length = 0;
+      this.cutawayRay.intersectObjects(mesh.userData.buildingOccluders, false, this.cutawayHits);
+      if (this.cutawayHits.length) return true;
+    }
+    return false;
+  }
   updateCutaways(dt) {
     if (!this.state) return;
     let shadowChanged = false;
-    const toward = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
-    const heroPoint = this.project(this.player.position.clone().add(new THREE.Vector3(0, .6, 0)));
     for (const mesh of this.cutawayBuildings || []) {
-      const dx = mesh.position.x - this.player.position.x, dz = mesh.position.z - this.player.position.z;
-      let obscures = false;
-      const wasHidden = mesh.userData.obscuresHero;
-      if (dx * dx + dz * dz < (wasHidden ? 18 : 16) && dx * toward.x + dz * toward.z > -.6) {
-        const bounds = mesh.userData.bounds || (mesh.userData.bounds = new THREE.Box3().setFromObject(mesh));
-        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-        for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
-          const point = this.project(new THREE.Vector3(x, y, z));
-          left = Math.min(left, point.x); right = Math.max(right, point.x);
-          top = Math.min(top, point.y); bottom = Math.max(bottom, point.y);
-        }
-        const margin = wasHidden ? 6 : 0;
-        obscures = heroPoint.x > left - margin && heroPoint.x < right + margin && heroPoint.y > top - margin && heroPoint.y < bottom + margin;
-      }
+      const obscures = this.buildingObscuresHero(mesh);
       mesh.userData.obscuresHero = obscures;
       let minimumOpacity = 1;
       for (const object of mesh.userData.buildingParts || []) {
         const material = object.material;
         if (!material.userData.cutaway) continue;
-        const part = object.userData.buildingPart;
-        const facing = part === 'front' ? toward.z : part === 'back' ? -toward.z :
-          part === 'right' ? toward.x : part === 'left' ? -toward.x : 1;
-        const target = obscures && facing > .05 ? 0 : 1;
+        const target = obscures ? 0 : 1;
         let opacity = material.opacity;
         opacity += (target - opacity) * (this.reduced ? 1 : 1 - Math.exp(-dt * 22));
         if (Math.abs(target - opacity) < .005) opacity = target;
