@@ -4,6 +4,10 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.73 — Shorter Play navigation
+
+- The main navigation uses “Play” as its game link label
+
 ## 1.3.72 — Windows version on the download card
 
 - The Windows download card shows the version of the available desktop release beside its portable-build details

@@ -20,7 +20,7 @@ export const renderSiteHeader = ({ variant = "", current = "" } = {}) => {
       <nav class="site-nav" aria-label="Main">
         <a class="text-link" href="/about/"${currentAttr(current, "about")}>About</a>
         <a class="text-link" href="/changelog/"${currentAttr(current, "changelog")}>What’s New</a>
-        <a class="nav-cta" href="/play/">Play free <span aria-hidden="true">↗</span></a>
+        <a class="nav-cta" href="/play/">Play <span aria-hidden="true">↗</span></a>
         <a
           class="nav-cta nav-cta--secondary web-only"
           href="/downloads/Ularn.windows.exe"
