@@ -16,10 +16,10 @@ const downloadSources = ["index.html", "play/index.html", "public/about/index.ht
 test("product versions agree while download links follow the last completed Windows release", () => {
   const version = checkStampedVersion();
   assert.equal(version, APP_VERSION);
-  assert.equal(DOWNLOAD_FILENAME, "Ularn.windows.exe");
+  assert.equal(DOWNLOAD_FILENAME, `Ularn-${version}.windows.exe`);
   assert.equal(VERSIONED_DOWNLOAD_FILENAME, `Ularn-${version}.windows.exe`);
-  assert.equal(DOWNLOAD_RELEASE_URL, `https://github.com/helloivanco/ularn3d/releases/latest/download/${DOWNLOAD_FILENAME}`);
-  assert.equal(CHECKSUM_RELEASE_URL, "https://github.com/helloivanco/ularn3d/releases/latest/download/Ularn.windows.exe.sha256");
+  assert.equal(DOWNLOAD_RELEASE_URL, "/api/windows-download");
+  assert.equal(CHECKSUM_RELEASE_URL, "/api/windows-download?file=checksum");
   assert.notEqual(version, "1.0.0");
   assert.notEqual(version, "1.1.0");
   assert.notEqual(version, "1.2.0");
@@ -48,9 +48,7 @@ test("play page and field guide stamp version from package.json placeholders", (
     }
     assert.doesNotMatch(html, /Ularn-1\.\d+\.\d+\.windows\.exe/);
   }
-  for (const file of downloadSources) {
-    assert.match(readStampedPage(file), /__DOWNLOAD_FILENAME__/);
-  }
+  for (const file of downloadSources) assert.doesNotMatch(readStampedPage(file), /download="[^"]+"/);
   const home = readStampedPage("index.html");
   assert.match(home, /"softwareVersion": "__APP_VERSION__"/);
   assert.match(home, /class="footer-version"[^>]*>\s*<a href="\/changelog\/"[^>]*>v__APP_VERSION__/);
@@ -88,6 +86,7 @@ test("Electron artifact names read package.json version", () => {
   const yaml = readFileSync("desktop/electron-builder.yml", "utf8");
   assert.match(yaml, /artifactName: Ularn-\$\{version\}-windows-\$\{arch\}\.\$\{ext\}/);
   assert.match(yaml, /artifactName: Ularn-\$\{version\}-windows-\$\{arch\}-setup\.exe/);
+  assert.match(yaml, /portable:\s+artifactName: Ularn-\$\{version\}\.windows\.exe/);
   assert.match(yaml, /^\s*- package\.json$/m);
 });
 

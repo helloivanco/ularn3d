@@ -30,7 +30,7 @@ win:
   # the game's icon and metadata without requiring Wine on macOS.
   signExecutable: false
 portable:
-  artifactName: Ularn.windows.exe
+  artifactName: Ularn-${version}.windows.exe
   requestExecutionLevel: user
 nsis:
   artifactName: Ularn-${version}-windows-${arch}-setup.exe

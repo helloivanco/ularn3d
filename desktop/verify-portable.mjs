@@ -9,9 +9,10 @@ import { promisify } from "node:util";
 import asar from "@electron/asar";
 import { getPath7za } from "app-builder-lib/out/toolsets/7zip.js";
 import { toArchivePath, toPosixPath } from "./asar-path.mjs";
+import { APP_VERSION, DOWNLOAD_FILENAME } from "../scripts/app-version.mjs";
 
 const run = promisify(execFile);
-const executable = path.resolve(process.argv[2] || "release/Ularn.windows.exe");
+const executable = path.resolve(process.argv[2] || path.join("release", DOWNLOAD_FILENAME));
 const unpacked = path.resolve("release/win-unpacked");
 const temporary = await mkdtemp(path.join(tmpdir(), "ularn-portable-check-"));
 const sevenZip = process.env.ELECTRON_BUILDER_7ZIP_PATH || await getPath7za();
@@ -54,6 +55,8 @@ try {
   const archives = payloadFiles.filter((file) => file.endsWith(`${path.sep}resources${path.sep}app.asar`));
   assert.equal(archives.length, 1, "Portable executable must contain the complete game archive");
   const appRoot = path.dirname(path.dirname(archives[0]));
+  const bundledPackage = JSON.parse(asar.extractFile(archives[0], toArchivePath("package.json")));
+  assert.equal(bundledPackage.version, APP_VERSION, "Portable filename and bundled product version must agree");
   const expected = await filesIn(unpacked);
   for (const source of expected) {
     const relative = path.relative(unpacked, source);

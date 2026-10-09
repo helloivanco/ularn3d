@@ -13,6 +13,8 @@ on:
       - '.github/workflows/windows-desktop.yml'
       - 'scripts/publish-windows-release.mjs'
       - 'scripts/app-version.mjs'
+      - 'api/windows-download.js'
+      - 'tests/windows*'
 
 permissions:
   contents: write
@@ -28,7 +30,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node --test tests/windows-release.unit.mjs tests/windows-downloads.unit.mjs
+      - run: node --test tests/windows-release.unit.mjs tests/windows-downloads.unit.mjs tests/windows-download-route.unit.mjs
       - run: npm run test:desktop
       - run: npm run desktop:package:win
         env:

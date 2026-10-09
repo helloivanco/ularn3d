@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.70 — Stable heroes and matching creature cards
+
+- Heroes stop flickering at diagonal corridor corners; decorative ground rings no longer trigger wall corrections
+- All 66 creature info cards show portraits rendered from their actual 3D models
+- Windows builds and downloads include their release version in the executable filename, including when the latest ready desktop build is older than the website
+
 ## 1.3.69 — Reliable Windows downloads
 
 - Windows download and checksum links follow the last completed desktop release while the next build is being prepared

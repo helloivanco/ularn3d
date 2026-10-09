@@ -45,30 +45,17 @@
           "value": "public, max-age=0, must-revalidate"
         }
       ]
-    },
-    {
-      "source": "/downloads/Ularn.windows.exe",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/vnd.microsoft.portable-executable"
-        },
-        {
-          "key": "Content-Disposition",
-          "value": "attachment; filename=\"Ularn.windows.exe\""
-        }
-      ]
     }
   ],
   "redirects": [
     {
       "source": "/downloads/SHA256SUMS.txt",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/latest/download/Ularn.windows.exe.sha256",
+      "destination": "/api/windows-download?file=checksum",
       "permanent": false
     },
     {
       "source": "/downloads/Ularn.windows.exe",
-      "destination": "https://github.com/helloivanco/ularn3d/releases/latest/download/Ularn.windows.exe",
+      "destination": "/api/windows-download",
       "permanent": false
     },
     {

@@ -79,6 +79,8 @@ Run `node scripts/visual-characters.mjs` against the development server to regen
 
 [Front views of all enemies](screenshots/creatures-front.png) · [Back views of all enemies](screenshots/creatures-back.png) · [Player front views](screenshots/heroes-front.png) · [Player back views](screenshots/heroes-back.png) · [In the caves](screenshots/characters-desktop.png) · [On a phone](screenshots/characters-mobile.png)
 
+Creature info cards use cached transparent portraits rendered from the same exact-ID rigs in `src/creatures.js`, with Balanced cave lighting. All 66 portraits live in `public/art/creatures/`; run `TEST_URL=http://localhost:5173 node scripts/render-creature-portraits.mjs` after changing creature appearance. Cards load these local images without starting an additional WebGL renderer. Hidden creatures and unidentified mimics retain their existing visibility rules. `tests/monster-hover-card.spec.js` checks complete portrait coverage, transparency, distinct species images and card visibility.
+
 ## Graphics boost and latency in 1.3.64
 
 Stone, grass, wood and roof generation now use the same logical coordinates at 128/512 pixels, aligning color, normal and roughness detail instead of cropping different patterns. Shared wall vertices bake a restrained vertical shade gradient so even unlit caves have depth. Existing player/enemy contact fans feather to transparent at their edges. These changes retain terrain maps, topology, instancing, geometry budgets and the existing render passes; textures remain cached and are never regenerated while walking. The shared world renderer applies them to solo and online views.

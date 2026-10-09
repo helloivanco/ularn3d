@@ -1,5 +1,3 @@
-import { monsterArtPath } from "./monster-art.js";
-
 // Original notes for Ularn's own monster list. Keyed by the id in
 // public/engine/monsterdata.js. Not copied from any Monster Manual.
 export const MONSTER_DESCRIPTIONS = Object.freeze({
@@ -77,11 +75,11 @@ export const MONSTER_DESCRIPTIONS = Object.freeze({
 export const monsterCardInfo = (monster) => {
   if (!monster || monster.known !== true) return null;
   const description = MONSTER_DESCRIPTIONS[monster.id];
-  const art = monsterArtPath(monster.id);
-  if (!description || !art || !monster.name) return null;
+  if (!description || !monster.name) return null;
   return {
     name: monster.name,
     description,
-    art,
+    // Rendered from the same exact-ID creature model shown in the dungeon.
+    art: `/art/creatures/${monster.id}.webp`,
   };
 };

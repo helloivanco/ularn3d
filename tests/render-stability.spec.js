@@ -103,3 +103,57 @@ test("repeated damage highlights health without restarting a whole-scene flash",
   await page.clock.runFor(260);
   expect(await page.evaluate(() => document.body.classList.contains("damage"))).toBe(false);
 });
+
+test("a diagonal hero stays still across rendered frames at a corridor corner", async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    localStorage.setItem("ularn3d.quality", "balanced");
+    localStorage.setItem("ularn3d.audio.v1", JSON.stringify({ enabled: false }));
+  });
+  await page.route("**/src/world.js*", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace(
+      "this.scene = new THREE.Scene();", "window.__stabilityWorld = this; this.scene = new THREE.Scene();") });
+  });
+  await page.goto("/play/"); await expect(page.locator("#loading")).toBeHidden();
+  await page.locator("#begin").click();
+  await page.evaluate(() => {
+    newcavelevel(1); player.x = 10; player.y = 10;
+    for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) {
+      setItem(x, y, OEMPTY); setMonster(x, y, null); setKnow(x, y, KNOWALL);
+    }
+    for (const [x, y] of [[9, 9], [10, 9], [10, 11]]) setItem(x, y, OWALL);
+    paint();
+  });
+  await page.clock.pauseAt(new Date(Date.now() + 60000));
+  await page.evaluate(() => {
+    const world = window.__stabilityWorld;
+    world.snapFollow(); world.player.rotation.y = Math.PI / 4; world.yawEase = false;
+    window.heroRenderPositions = [];
+    const render = world.renderer.render.bind(world.renderer);
+    world.renderer.render = (...args) => {
+      heroRenderPositions.push(world.player.position.toArray());
+      return render(...args);
+    };
+    // Keep drawing the settled pose to check the output over time.
+    world.cameraLive = true; world.invalidate();
+  });
+  await page.clock.runFor(1200);
+  const result = await page.evaluate(() => {
+    const world = window.__stabilityWorld;
+    world.cameraLive = false;
+    return { positions: heroRenderPositions, tile: [player.x, player.y], hitsRock: world.bodyHitsRock() };
+  });
+  expect(result.positions.length).toBeGreaterThan(45);
+  for (let axis = 0; axis < 3; axis++) {
+    const values = result.positions.map(position => position[axis]);
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThan(1e-7);
+  }
+  expect(result.tile).toEqual([10, 10]); expect(result.hitsRock).toBe(false);
+  await page.clock.runFor(400);
+  const settledFrames = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
+  await page.clock.runFor(400);
+  expect(await page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBe(settledFrames);
+  await page.keyboard.press("ArrowRight"); await page.clock.runFor(160);
+  expect(await page.evaluate(() => ularnGraphics.metrics().heroPosition)).toEqual([11, 0, 10]);
+});
