@@ -2,8 +2,10 @@ import { getSupabase } from "./config.js";
 import { openRoomChannel } from "./channel.js";
 import { beginRun, markReady, syncRoom, sendRoomAction, submitScore, finishRoom, touchRoom } from "./rooms.js";
 
-const productVersion = () => document.querySelector('.site-version')?.textContent?.trim().replace(/^v/, '') ||
-  JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent || '{}').softwareVersion || '1.3.75';
+const productVersion = () => {
+  const schema = JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent || '{}');
+  return schema.softwareVersion || schema.mainEntity?.softwareVersion || 'unknown';
+};
 
 /** The server orders and identifies actions. Every browser follows the same log. */
 export const createLiveRoom = ({ self, roomId, onRoster, onChat, onStatus, onStarted, onScore, onClaimed, onEnded }) => {
