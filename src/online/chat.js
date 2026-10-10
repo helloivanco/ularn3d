@@ -67,16 +67,18 @@ export const createChatLog = ({ now = () => Date.now(), persist } = {}) => {
       if (persist) {
         const saved = await persist(message);
         if (saved && saved.ok === false) return saved;
+        if (saved?.id) message.id = saved.id;
       }
-      messages.push(message);
+      if (!message.id || !messages.some((row) => row.id === message.id)) messages.push(message);
       unread = 0;
       return { ok: true, message };
     },
     receive: (message) => {
-      if (!message || muted.has(message.userId)) return;
-      if (message.id && messages.some((row) => row.id === message.id)) return;
+      if (!message || muted.has(message.userId)) return false;
+      if (message.id && messages.some((row) => row.id === message.id)) return false;
       messages.push(message);
       if (message.channel !== channel) unread += 1;
+      return true;
     },
     mute: (userId) => muted.add(userId),
     typing: () => typing,

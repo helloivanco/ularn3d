@@ -1,42 +1,14 @@
-import { ROOM_EVENTS } from "./protocol.js";
-
-const PING_MS = 15000;
-
-export const openRoomChannel = (supabase, { roomId, userId, role, onEvent, onPresence, onStatus }) => {
-  const topic = `room:${roomId}`;
-  const channel = supabase.channel(topic, {
-    config: { private: true, broadcast: { self: false }, presence: { key: userId } },
-  });
-  for (const event of ROOM_EVENTS) {
-    channel.on("broadcast", { event }, (message) => {
-      onEvent?.(event, message.payload ?? {});
-    });
+/** Notifications come from protected database rows, never from peer broadcasts. */
+export const openRoomChannel = (supabase, { roomId, onAction, onChange, onStatus }) => {
+  const channel = supabase.channel(`room:${roomId}`, { config: { private: true } });
+  channel.on('postgres_changes', {
+    event: 'INSERT', schema: 'public', table: 'room_actions', filter: `room_id=eq.${roomId}`,
+  }, payload => onAction?.(payload.new));
+  for (const table of ['room_members', 'chat_messages']) {
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table, filter: `room_id=eq.${roomId}`,
+    }, () => onChange?.());
   }
-  channel.on("presence", { event: "sync" }, () => {
-    onPresence?.(channel.presenceState());
-  });
-  let pingTimer = null;
-  channel.subscribe((status) => {
-    onStatus?.(status);
-    if (status !== "SUBSCRIBED") return;
-    channel.track({ userId, role, connected: true });
-    pingTimer = setInterval(() => {
-      channel.track({ userId, role, connected: true });
-      if (role === "spectator") return;
-      channel.send({ type: "broadcast", event: "ping", payload: { userId, at: Date.now() } });
-    }, PING_MS);
-  });
-
-  return {
-    topic,
-    send: (event, payload) => {
-      if (event === "action" && role === "spectator") return false;
-      channel.send({ type: "broadcast", event, payload });
-      return true;
-    },
-    close: () => {
-      clearInterval(pingTimer);
-      supabase.removeChannel(channel);
-    },
-  };
+  channel.subscribe(onStatus);
+  return { close: () => supabase.removeChannel(channel) };
 };

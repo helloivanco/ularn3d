@@ -6,6 +6,7 @@ dist/
 .vercel/
 test-results/
 playwright-report/
+.verification/
 release/
 public/engine/game.js
 public/engine/score-config.js

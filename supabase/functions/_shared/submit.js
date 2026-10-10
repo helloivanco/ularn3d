@@ -76,7 +76,7 @@ export const handleSubmit = async ({
   if (typeof replay !== "function") {
     return { status: "rejected", verified: false, reason: "replay_unavailable" };
   }
-  const played = await replay({ seed: run.seed, log, mode: run.mode });
+  const played = await replay({ seed: run.seed, log, mode: run.mode, config: run.game_config });
   if (!played?.ok) return { status: "rejected", verified: false, reason: played?.reason || "replay_failed" };
   if (run.snapshotChecksum && played.checksum !== run.snapshotChecksum) {
     return { status: "rejected", verified: false, reason: "checksum_mismatch" };

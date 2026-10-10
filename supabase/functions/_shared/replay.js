@@ -23,6 +23,7 @@ export const replayFinishedRun = async ({
   seed,
   log,
   mode,
+  config = null,
   clock = Date.now,
   budgetMs = REPLAY_CPU_BUDGET_MS,
   onBoot = null,
@@ -39,8 +40,11 @@ export const replayFinishedRun = async ({
   }
   try {
     if (typeof onBoot === "function") onBoot();
-    api = bootEngine({ seed: Number(seed), skipPaint: true });
-    if (mode === "coop") {
+    const first = config?.version === 2 ? config.players?.[0] : null;
+    api = bootEngine({ seed: Number(seed), skipPaint: true, name: first?.name, character: first?.character, difficulty: config?.difficulty || 0 });
+    if (mode === "coop" && first) {
+      api.beginRoomParty(config.players);
+    } else if (mode === "coop") {
       api.enablePartyOfOne();
       api.addAdventurer("Bea");
     }
@@ -53,10 +57,17 @@ export const replayFinishedRun = async ({
   for (let seq = 0; seq < log.length; seq++) {
     if (overBudget()) return { ok: false, reason: "replay_cpu_cap" };
     const row = log[seq];
+    if (mode === "coop" && config?.version === 2) {
+      if (!row || !Number.isInteger(row.actor) || !['key', 'join', 'leave', 'resume', 'remove'].includes(row.kind) ||
+          (row.kind === 'key' && (typeof row.input !== 'string' || row.input.length > 32))) return { ok: false, reason: 'bad_log' };
+      try { api.applyRoomAction(row); }
+      catch { return { ok: false, reason: 'replay_failed' }; }
+      continue;
+    }
     const action = actionOf(row);
     if (!action || action.length > 32) return { ok: false, reason: "bad_log" };
     const actor = mode === "coop" && row && Number.isInteger(row.actor) ? row.actor : 0;
-    if (actor !== 0 && typeof api.activateAdventurer === "function" && !api.activateAdventurer(actor)) {
+    if (mode === "coop" && typeof api.activateAdventurer === "function" && !api.activateAdventurer(actor)) {
       return { ok: false, reason: "bad_log" };
     }
     try {

@@ -10,7 +10,7 @@ export const createSpectatorView = (players = []) => {
   let index = 0;
   let freeCamera = false;
   let roster = players || [];
-  const cast = () => roster.filter((player) => player.role !== "spectator");
+  const cast = () => roster.filter((player) => player.role !== "spectator" && player.connected !== false && player.alive !== false);
 
   const followed = () => {
     const people = cast();
@@ -27,6 +27,11 @@ export const createSpectatorView = (players = []) => {
       if (found < 0) return followed();
       index = found;
       freeCamera = false;
+      return followed();
+    },
+    followSlot: (slot) => {
+      const found = cast().findIndex((player) => player.slot === slot);
+      if (found >= 0) { index = found; freeCamera = false; }
       return followed();
     },
     next: () => {

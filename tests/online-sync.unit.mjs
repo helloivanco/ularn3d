@@ -55,31 +55,22 @@ test("actions dedupe, reorder, and never apply a spectator", () => {
   assert.equal(player.turn(), host.turn());
 });
 
-test("a private room channel rejects spectator actions", () => {
-  const sent = [];
+test("room notifications cannot accept peer broadcasts as game actions", () => {
+  const bindings = [], seen = [];
   let removed = false;
   const channel = {
-    on() { return channel; },
-    subscribe(callback) {
-      callback("SUBSCRIBED");
-      return channel;
-    },
-    track() {},
-    send(message) { sent.push(message); },
-    presenceState() { return {}; },
+    on(type, options, callback) { bindings.push({ type, options, callback }); return channel; },
+    subscribe(callback) { callback?.("SUBSCRIBED"); return channel; },
   };
   const supabase = {
-    channel(topic, options) {
-      assert.equal(topic, "room:room-1");
-      assert.equal(options.config.private, true);
-      assert.equal(options.config.presence.key, "watch");
-      return channel;
-    },
+    channel(topic, options) { assert.equal(topic, "room:room-1"); assert.equal(options.config.private, true); return channel; },
     removeChannel() { removed = true; },
   };
-  const room = openRoomChannel(supabase, { roomId: "room-1", userId: "watch", role: "spectator" });
-  assert.equal(room.send("action", { seq: 1 }), false);
-  assert.equal(sent.length, 0);
+  const room = openRoomChannel(supabase, { roomId: "room-1", onAction: row => seen.push(row) });
+  assert.equal(bindings.some(binding => binding.type === "broadcast"), false);
+  assert.equal(room.send, undefined);
+  bindings.find(binding => binding.options.table === "room_actions").callback({ new: { seq: 1, actor: 1 } });
+  assert.deepEqual(seen, [{ seq: 1, actor: 1 }]);
   room.close();
   assert.equal(removed, true);
 });

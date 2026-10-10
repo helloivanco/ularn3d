@@ -76,6 +76,12 @@ Solo play works offline without an account. Completed eligible scores also sync 
 
 ## Online play
 
+Multiplayer in the browser supports 2–4 adventurers plus spectators. Choose **Multiplayer → Host a room**, select your calling, and copy the invite link. Each player selects **Ready to play**, then the host selects **Start expedition**. Every player controls their own character, inventory, and explored map. Late joiners start a fresh adventurer in town and catch up to the shared expedition.
+
+The **Room** button shows the code and members, with host controls to remove a member or transfer hosting. **Leave room** is always available in the lobby and the top bar during play, including for spectators. It shows exit progress and returns to the welcome screen even if the connection fails; an active teammate inherits hosting. Leaving clears automatic reconnection, while reloading during play restores the room. A disconnected place is held for two minutes. Spectators can follow living players and chat without sending gameplay commands. Room progress syncs through a server-ordered action log and does not overwrite a solo save.
+
+Chat has role-appropriate channels, **Quick send** presets, delivery/error feedback, and a minimized unread counter. Presets send once and preserve any typed draft. Player input, room starts, membership changes, and chat are checked on the server; browsers do not trust peer broadcasts. Online score verification uses the recorded server log and character configuration, within the existing verifier's 1,200-action/CPU limits.
+
 Online rooms, chat, and the verified leaderboard are optional. The game loads the Supabase client only after you open Multiplayer, Watch, Chat, or Leaderboard, or after a finished run is submitted. If those values are missing or the service cannot be reached, those menus say “Online unavailable” and solo play is unchanged.
 
 Copy `.env.example` to `.env` before `npm run dev` or `npm run build`:

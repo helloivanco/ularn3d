@@ -28,8 +28,14 @@ const decodeBundle = async (b64) => {
 const bundledEngineSource = async () => {
   try {
     let b64 = "";
+    const parts = [
+      () => import("./engine-part-0.js"), () => import("./engine-part-1.js"),
+      () => import("./engine-part-2.js"), () => import("./engine-part-3.js"),
+      () => import("./engine-part-4.js"), () => import("./engine-part-5.js"),
+      () => import("./engine-part-6.js"), () => import("./engine-part-7.js"),
+    ];
     for (let i = 0; i < ENGINE_PART_COUNT; i++) {
-      const mod = await import(`./engine-part-${i}.js`);
+      const mod = await parts[i]();
       b64 += mod.PART || "";
     }
     return await decodeBundle(b64);
@@ -82,7 +88,7 @@ export const ensureVm = async () => {
 };
 
 /** Hash of the bundled engine-source.js. A changed bundle is refused by the unit test. */
-export const ENGINE_SOURCE_SHA256 = "e42b08bca95351d78fca0f995f8327ea737b5c844df984c6fcd411e5ff839fe3";
+export const ENGINE_SOURCE_SHA256 = "701ec4809447322943f0d345ed199d8550e6182c93bed663328acc3e2c890e3e";
 
 let cachedSource = null;
 

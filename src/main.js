@@ -87,7 +87,7 @@ function activateAudio() {
 syncAudioControls();
 
 let route = [], travelRevision = 0;
-const movementAllowed = () => !!state && state.maze && !state.over && !state.prompt && !state.busy && !graphicsLost && !document.hidden && !document.querySelector("dialog[open]");
+const movementAllowed = () => !!state && state.maze && !state.over && !state.prompt && !state.busy && !state.roomBlocked && !graphicsLost && !document.hidden && !document.querySelector("dialog[open]");
 const held = new HeldMovement((key) => sendCommand(key), movementAllowed);
 const heldKeys = new Set();
 const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map"), dialog: $("map-dialog"), viewport: $("map-viewport"), travel: (tile) => travel(tile), stop: () => stopTravel(),
@@ -405,6 +405,7 @@ try {
     '<div style="max-width:440px;padding:30px;text-align:center">3D graphics could not start.<p style="font:14px Arial;line-height:1.7">Enable hardware acceleration in your browser, then reload. You can also play the complete classic edition below.</p><a style="color:#d7bc83;font:14px Arial" href="/engine/larn_local.html?ularn=true">Open classic Ularn →</a></div>';
 }
 async function start(resume) {
+  if (window.ularnOnline?.inRoom?.()) { window.ularnOnline.openRoom(); return; }
   activateAudio();
   $("begin").disabled = true;
   $("continue").disabled = true;
@@ -512,6 +513,12 @@ function update() {
     ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
     : next;
   world?.update(state);
+  if (window.ularnOnline?.inMatch?.()) {
+    document.querySelectorAll('#hud [data-key]').forEach(button => { button.disabled = !!state.roomBlocked; });
+    $("auto-loot").disabled = !!state.roomBlocked;
+    const auraToggle = document.querySelector('#party-hud .aura-toggle');
+    if (auraToggle) auraToggle.disabled = !!state.roomBlocked;
+  }
   if (state.moves !== hostTurnSeen) {
     hostTurnSeen = state.moves;
     window.ularnOnline?.hostBeat?.();
@@ -546,6 +553,9 @@ function update() {
     partyNow.map((member) => `${member.slot}:${member.name}:${member.hp}:${member.dungeon}`).join(","),
     state.multiplayer ? "mp" : "solo",
     state.aura ? "aura" : "no-aura",
+    state.autoLoot,
+    state.roomBlocked,
+    window.ularnOnline?.spectating?.(),
   ].join("|");
   if (hudKey !== hudSignature) {
     hudSignature = hudKey;
@@ -568,10 +578,12 @@ function update() {
         const ratio = member.hpmax ? Math.max(0, Math.min(1, member.hp / member.hpmax)) : 0;
         card.innerHTML = `<strong></strong><div class="meter"><i></i></div><span></span>`;
         card.querySelector("strong").textContent = member.name || "Ally";
-        card.tabIndex = 0;
-        card.setAttribute("role", "button");
-        card.setAttribute("aria-label", `Follow ${member.name || "ally"}`);
-        const handleFollow = () => window.ularnOnline?.follow?.(member.name);
+        if (window.ularnOnline?.spectating?.()) {
+          card.tabIndex = 0;
+          card.setAttribute("role", "button");
+          card.setAttribute("aria-label", `Follow ${member.name || "ally"}`);
+        }
+        const handleFollow = () => window.ularnOnline?.followMember?.(member.slot);
         card.addEventListener("click", handleFollow);
         card.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") handleFollow();
@@ -587,6 +599,7 @@ function update() {
         toggle.className = "aura-toggle";
         toggle.textContent = auraNow.label;
         toggle.setAttribute("aria-pressed", String(auraNow.overlay));
+        toggle.disabled = !!state.roomBlocked;
         toggle.addEventListener("click", () => {
           if (window.ularnOnline?.acceptsInput && !window.ularnOnline.acceptsInput()) return;
           window.ularnOnline?.requestAura?.(!auraNow.overlay);
@@ -663,7 +676,7 @@ function update() {
   const hasActions =
     $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
   $("interaction").hidden =
-    !hasActions || (!state.prompt && state.maze && !state.over);
+    !hasActions || (state.roomBlocked && !state.over) || (!state.prompt && state.maze && !state.over);
   // Keep native command buttons inside the scrollable game panel.
   // After death the expedition modal owns the tray even while mazeMode is still true.
   const trayParent =
@@ -761,9 +774,8 @@ function sendCommand(key, shift = false) {
   if (world) world.lastInputAt=performance.now();
   if (document.activeElement?.id === "chat-input") return;
   if (window.ularnOnline?.inMatch?.()) {
-    if (window.ularnOnline.acceptsInput?.() === false) return;
-    window.ularnOnline.sendInput?.(shift && key.length === 1 ? key.toUpperCase() : key);
-    return;
+    if (window.ularnOnline.acceptsInput?.() === false && !state?.over) return;
+    return window.ularnOnline.sendInput?.(shift && key.length === 1 ? key.toUpperCase() : key);
   }
   if (!state || graphicsLost) return;
   engine.key(key, shift);
@@ -805,12 +817,12 @@ const keyMap = {
 window.addEventListener("keydown", (event) => {
   if (event.target?.id === "chat-input") return;
   if (window.ularnOnline?.blocksGameKeys?.()) return;
-  if (event.key === "Tab" && window.ularnOnline?.spectating?.()) {
+  if (event.key === "Tab" && window.ularnOnline?.spectating?.() && !event.target.closest('input,textarea,select,button,a,[role="button"]') && !document.querySelector('dialog[open]')) {
     event.preventDefault();
     window.ularnOnline.cycleFollow();
     return;
   }
-  if (window.ularnOnline?.acceptsInput?.() === false && !event.target.matches("input, textarea")) {
+  if (window.ularnOnline?.acceptsInput?.() === false && !state?.over && !event.target.closest("input, textarea, select, button, a") && event.key !== "Escape") {
     event.preventDefault();
     return;
   }
@@ -853,6 +865,7 @@ window.addEventListener("keydown", (event) => {
 });
 const dirs = DIRECTIONS;
 function travel(tile) {
+  if (window.ularnOnline?.inMatch?.() && !window.ularnOnline.acceptsInput()) return;
   stopTravel();
   if (
     !state ||
@@ -894,7 +907,7 @@ function travel(tile) {
   setRoute([{ x: state.x, y: state.y }, ...path]);
   const initialLevel = state.level;
   let hp = state.hp;
-  const step = () => {
+  const step = async () => {
     walking = null;
     if (
       token !== travelRevision ||
@@ -926,7 +939,7 @@ function travel(tile) {
     const cell = state.tiles.find((cell) => cell.x === next.x && cell.y === next.y);
     if (!cell || cell.wall || cell.closed || isHostile(cell) || (cell.hazard && (cell.x !== tile.x || cell.y !== tile.y))) { stopTravel(); return; }
     const before = `${state.x},${state.y}`;
-    sendCommand(path.shift().key);
+    await sendCommand(path.shift().key);
     if (token !== travelRevision) return;
     if (before === `${state.x},${state.y}`) { stopTravel(); return; }
     if (state.x !== next.x || state.y !== next.y) { toast("Your route changed. Travel stopped."); stopTravel(); return; }
@@ -991,6 +1004,7 @@ $("save").addEventListener("click", () =>
   ),
 );
 $("save-exit").addEventListener("click", () => {
+  if (window.ularnOnline?.inRoom?.()) { window.ularnOnline.leave(); return; }
   if (engine.save()) location.reload();
   else
     $("pause-status").textContent =

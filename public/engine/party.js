@@ -105,10 +105,10 @@ function captureSlot(slot, name) {
   return {
     slot: slot,
     name: name || logname,
-    role: slot === 0 ? "host" : "player",
+    role: ADVENTURERS[slot]?.role || (slot === 0 ? "host" : "player"),
     alive: !!(player && player.HP > 0),
     ghost: !!(player && player.HP <= 0),
-    connected: true,
+    connected: ADVENTURERS[slot]?.connected !== false,
     player: player,
     level: level,
     gtime: gtime,
@@ -226,7 +226,7 @@ function occupyTownFloor(preferred) {
     let taken = false;
     for (let s = 0; s < ADVENTURERS.length; s++) {
       const other = ADVENTURERS[s];
-      if (other && other.player && other.level === 0 && other.player.x === x && other.player.y === y && other.alive) {
+      if (other && other.connected !== false && other.player && other.level === 0 && other.player.x === x && other.player.y === y && other.alive) {
         taken = true;
       }
     }
@@ -239,12 +239,12 @@ function occupyTownFloor(preferred) {
  * Fresh adventurer at the town entrance. Uses the same class setup as a
  * new solo hero. Call only after the shared dungeon already exists.
  */
-function addAdventurer(name, characterClass) {
+function addAdventurer(name, characterClass, targetSlot) {
   if (!PARTY_ON) enablePartyOfOne();
-  if (ADVENTURERS.length >= PARTY_LIMIT) return null;
+  const slot = Number.isInteger(targetSlot) ? targetSlot : ADVENTURERS.length;
+  if (slot < 0 || slot >= PARTY_LIMIT || slot > ADVENTURERS.length) return null;
   ADVENTURERS[ACTIVE_SLOT] = captureSlot(ACTIVE_SLOT, ADVENTURERS[ACTIVE_SLOT].name);
   const previous = ACTIVE_SLOT;
-  const slot = ADVENTURERS.length;
   player = new Player();
   logname = String(name || "Ally").slice(0, 24);
   const picked = characterClass || "Adventurer";
@@ -270,6 +270,7 @@ function addAdventurer(name, characterClass) {
   LOG = Array(LOG_SIZE).fill(" ");
   const created = captureSlot(slot, logname);
   created.role = "player";
+  created.connected = true;
   created.know = snapshotKnow();
   for (let depth = 0; depth < created.know.length; depth++) {
     const columns = created.know[depth];
@@ -283,7 +284,7 @@ function addAdventurer(name, characterClass) {
     created.player.x = spot.x;
     created.player.y = spot.y;
   }
-  ADVENTURERS.push(created);
+  ADVENTURERS[slot] = created;
   applySlot(ADVENTURERS[previous]);
   showcell(player.x, player.y);
   return slot;
@@ -318,6 +319,7 @@ function adventurerSummaries() {
       slot: slot.slot,
       name: slot.name,
       role: slot.role,
+      connected: slot.connected,
       alive: slot.slot === ACTIVE_SLOT ? !!(player && player.HP > 0) : slot.alive,
       ghost: slot.ghost,
       x: slot.slot === ACTIVE_SLOT && player ? player.x : slot.player.x,
@@ -340,7 +342,7 @@ function allyAt(x, y) {
   if (!PARTY_ON || ADVENTURERS.length < 2) return null;
   for (let i = 0; i < ADVENTURERS.length; i++) {
     const other = ADVENTURERS[i];
-    if (!other || i === ACTIVE_SLOT || !other.alive || !other.player) continue;
+    if (!other || i === ACTIVE_SLOT || !other.alive || other.connected === false || !other.player) continue;
     if (other.level === level && other.player.x === x && other.player.y === y) return other;
   }
   return null;
@@ -452,7 +454,8 @@ function capturePartyState(seen) {
       return {
         slot: slot.slot,
         name: slot.name,
-        role: slot.role,
+      role: slot.role,
+      connected: slot.connected,
         alive: live ? !!(player && player.HP > 0) : slot.alive,
         ghost: live ? !!(player && player.HP <= 0) : slot.ghost,
         level: live ? level : slot.level,
@@ -464,4 +467,95 @@ function capturePartyState(seen) {
       };
     }),
   };
+}
+
+/* Authenticated room log. The database supplies the actor; UI selection is only a view. */
+var ROOM_SESSION_ON = false;
+var ROOM_APPLYING = false;
+var ROOM_ACTORS = [];
+var ROOM_AUTO_LOOT = [];
+var ROOM_PROMPT_ACTOR = null;
+var ROOM_VIEW_ACTOR = null;
+
+function beginRoomParty(people) {
+  ROOM_SESSION_ON = true;
+  ROOM_ACTORS = [];
+  ROOM_AUTO_LOOT = [];
+  ROOM_PROMPT_ACTOR = null;
+  enablePartyOfOne();
+  for (let i = 0; i < people.length; i++) {
+    const person = people[i];
+    const slot = i === 0 ? 0 : addAdventurer(person.name, person.character);
+    ROOM_ACTORS[person.slot] = slot;
+    ROOM_AUTO_LOOT[person.slot] = false;
+  }
+  overridePref('auto_pickup', false);
+}
+
+function roomCanAct(actor) {
+  const index = ROOM_ACTORS[actor];
+  const slot = index == null ? null : ADVENTURERS[index];
+  const alive = index === ACTIVE_SLOT ? player && player.HP > 0 : slot && slot.player.HP > 0;
+  return !!slot && slot.connected !== false && !!alive &&
+    (ROOM_PROMPT_ACTOR == null || ROOM_PROMPT_ACTOR === actor) && !GAMEOVER;
+}
+
+function applyRoomAction(row) {
+  const actor = row.actor;
+  let index = ROOM_ACTORS[actor];
+  if (row.kind === 'join') {
+    if (index == null) index = addAdventurer(row.name, row.character_class);
+    else addAdventurer(row.name, row.character_class, index);
+    ROOM_ACTORS[actor] = index;
+    ROOM_AUTO_LOOT[actor] = false;
+    return true;
+  }
+  if (index == null || !ADVENTURERS[index]) return false;
+  if (row.kind === 'resume') {
+    ADVENTURERS[index].connected = true;
+    return true;
+  }
+  if (row.kind === 'leave' || row.kind === 'remove') {
+    ADVENTURERS[index].connected = false;
+    if (ROOM_PROMPT_ACTOR === actor) {
+      activateAdventurer(index);
+      ROOM_APPLYING = true;
+      try { mousetrap(null, 'escape'); } finally { ROOM_APPLYING = false; }
+      ROOM_PROMPT_ACTOR = null;
+    }
+    if (row.kind === 'remove') {
+      ADVENTURERS[index].alive = false;
+      ADVENTURERS[index].ghost = true;
+      ADVENTURERS[index].player.HP = 0;
+      if (!ADVENTURERS.some(slot => slot && slot.player.HP > 0)) GAMEOVER = true;
+    }
+    return true;
+  }
+  if (row.kind !== 'key' || !roomCanAct(actor)) return false;
+  activateAdventurer(index);
+  overridePref('auto_pickup', !!ROOM_AUTO_LOOT[actor]);
+  ROOM_APPLYING = true;
+  try {
+    const input = row.input;
+    if (input === 'S') {
+      updateLog('Room progress syncs automatically. Use the room code to return.');
+    } else if (input === 'x' && !blocking_callback) {
+      updateLog('Choose a destination on the map to travel in a room.');
+    } else if (input === 'loot:on' || input === 'loot:off' || input === '@') {
+      ROOM_AUTO_LOOT[actor] = input === '@' ? !ROOM_AUTO_LOOT[actor] : input === 'loot:on';
+      overridePref('auto_pickup', ROOM_AUTO_LOOT[actor]);
+    } else if (input === 'aura:on' || input === 'aura:off') {
+      hostSetCooperationAura(input === 'aura:on', { role: 'player' });
+    } else if (input.startsWith('open:')) {
+      mousetrap(null, 'o');
+      if (blocking_callback === getdirectioninput) mousetrap(null, input.slice(5));
+    } else if (input.startsWith('text:')) {
+      KEYBOARD_INPUT = input.slice(5);
+      mousetrap(null, 'return');
+    } else {
+      mousetrap(null, input);
+    }
+  } finally { ROOM_APPLYING = false; }
+  ROOM_PROMPT_ACTOR = blocking_callback || !mazeMode ? actor : null;
+  return true;
 }

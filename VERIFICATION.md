@@ -1,5 +1,18 @@
 # Verification — September 17, 2026
 
+## Multiplayer implementation verification — 10 October 2026
+
+Verified preview: [ularn-3d-2cs53iic8-hellos-projects-dbb58047.vercel.app](https://ularn-3d-2cs53iic8-hellos-projects-dbb58047.vercel.app), deployment `dpl_EE8vDCPka6GNJXvwaND4QZ296R49`, READY. Production frontend was not promoted. Preview protection remained enabled; automated browser access used an origin-scoped short-lived Vercel token.
+
+- Five independent live browser contexts ran four differently named/classed adventurers and a spectator. All five reached the same action sequence and checksum. Verified private database notifications, separate character control, prompt ownership, invite joining, late spectator entry, reload, offline recovery, spectator chat, host transfer, member removal, and leaving. No page exceptions occurred.
+- Exit controls are visible in the lobby, game top bar, and game menu for players and spectators. Eleven focused browser checks and nine room/engine unit checks passed, including desktop, 390px and 320px phones, 568px landscape, host inheritance, exit progress, failed/stalled exit requests, repeated exit clicks, pending-heartbeat ordering, and clearing saved reconnection and invite parameters. Exit waits for active room work before leaving, with a 2.5-second fallback when the service is unavailable.
+- The real service permission check passed 28 assertions: passwords, room capacity, server readiness, host-only starts, spectator denial, immutable action/role tables, stranger isolation, retry deduplication, kicked-user access denial, host inheritance, and manual rejoin with a replayable resume event.
+- The updated deployed `submit-score` function verified a recorded co-op ending while ignoring a forged client log and score. Its JWT verification remained enabled. The generated test score was removed afterward.
+- Native party/replay checks cover four distinct inventories/classes, interleaved actions, prompt release, late join/replaced seats, personal auto-loot, permanent removal, and the Edge script sandbox. The bounded score verifier still has its existing 1,200-action/CPU limits.
+- New database performance advisories for the run foreign key and realtime identity initialization were resolved. Existing private rate-limit tables and unused-index informational notices were not treated as multiplayer failures. Guest authentication is intentional; authenticated membership guards remain required.
+- This is focused end-to-end and regression evidence, not an exhaustive proof over every random roguelike expedition. Browser checks use Chrome on this host; the Windows offline application was not repackaged in this work.
+
+
 Production: https://ularn-3d.vercel.app
 
 ## Lemming artwork and landmark clarity

@@ -4,6 +4,14 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.78 — Multiplayer rooms ready to play
+
+- Room creation and joining show progress; clear ready controls let the host start when everyone is ready
+- Each adventurer controls their own character, inventory and explored map; spectators can follow and chat
+- Room permissions, shared actions, reconnecting and host transfers are checked by the server
+- Chat quick sends preserve typed drafts, show delivery feedback and count unread messages when minimized
+- Leave room is visible in the lobby and during play, and returns to the welcome screen
+
 ## 1.3.77 — Running spends a turn
 
 - Holding Shift, or a capital direction key, runs until a wall, a fight, or an object, and each open step spends a turn
