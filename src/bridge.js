@@ -123,95 +123,15 @@ function readAutoLoot3D() {
 const monsterPresentation3D = new WeakMap();
 let nextMonsterID3D = 1;
 
-// Lemmings are small nuisances in this edition. Keep the classic scripts intact,
-// preserve existing saved swarms, and limit only new placements on each floor.
-const MAX_LEMMINGS_3D = 4;
+// Lemmings stay one to a floor, on the tiles classic stocking already chose.
+// Solo 3D no longer adds a second population or skips the engine cap.
+// Contact stays harmless, and one dagger swing still clears the creature.
 const localBalance3D = () => ULARN && !PARTY_ON && !ENGINE_HOST?.singleStream;
-const placedLemmings3D = new WeakSet();
-let movingMonster3D = null;
-function lemmingLimitReached3D() {
-  let count = 0;
-  for (const column of LEVELS[level]?.monsters || [])
-    for (const monster of column)
-      if (monster?.matches(LEMMING) && ++count >= MAX_LEMMINGS_3D) return true;
-  return false;
-}
-const originalSetMonsterBalance3D = setMonster;
-setMonster = function (x, y, monster, placement, moving) {
-  let localLemming = false;
-  if (localBalance3D()) {
-    const previous = inBounds(x, y) ? monsterAt(x, y) : null;
-    if (previous?.matches(LEMMING)) placedLemmings3D.add(previous);
-    const species = typeof monster === "number" ? monster : monster?.arg;
-    if (species === LEMMING) {
-      localLemming = true;
-      if (isGenocided(LEMMING) && !placedLemmings3D.has(monster)) return null;
-      // mmove's 2% birth must not replenish the swarm. Moving the original
-      // creature is still allowed, including old saves above the new cap.
-      if (movingMonster3D?.matches(LEMMING) && monster !== movingMonster3D)
-        return null;
-      const replacing = (!placement || placement === OVERWRITE) && previous?.matches(LEMMING);
-      if (!replacing && !placedLemmings3D.has(monster) && lemmingLimitReached3D())
-        return null;
-    }
-  }
-  // The native engine caps verified/classic runs at one. Solo 3D placements
-  // have already passed the local cap above; retain its terrain checks while
-  // bypassing only that native population limit.
-  const result = originalSetMonsterBalance3D(x, y, monster, placement, moving || localLemming);
-  if (localBalance3D() && result?.matches(LEMMING)) placedLemmings3D.add(result);
-  return result;
-};
-const originalThinLemmingsBalance3D = thinLemmings;
-thinLemmings = function () {
-  if (!localBalance3D()) return originalThinLemmingsBalance3D();
-};
 const originalFillMonsterBalance3D = fillmonst;
 fillmonst = function (species, awake) {
-  if (localBalance3D() && (species === LEMMING || species?.arg === LEMMING) &&
-    (isGenocided(LEMMING) || lemmingLimitReached3D()))
+  if (localBalance3D() && (species === LEMMING || species?.arg === LEMMING) && isGenocided(LEMMING))
     return null;
   return originalFillMonsterBalance3D(species, awake);
-};
-
-function hasCaveRats3D() {
-  return LEVELS[level]?.monsters.some((column) => column.some((monster) => monster?.matches(LEMMING)));
-}
-function spawnCaveRat3D() {
-  if (!player || !localBalance3D() || level < 1 || level > DBOTTOM || GAMEOVER || DEBUG_NO_MONSTERS ||
-    player.TIMESTOP || isGenocided(LEMMING) || lemmingLimitReached3D()) return null;
-  const nearby = [], distant = [];
-  for (let x = 1; x < MAXX - 1; x++) for (let y = 1; y < MAXY - 1; y++) {
-    const distance = Math.max(Math.abs(x - player.x), Math.abs(y - player.y));
-    // Stay clear of the hero, occupied squares, loot, doors, stairs and traps.
-    if (distance < 3 || monsterAt(x, y) || !itemAt(x, y).matches(OEMPTY)) continue;
-    (distance <= 7 ? nearby : distant).push({ x, y });
-  }
-  const candidates = nearby.length ? nearby : distant;
-  if (!candidates.length) return null;
-  const { x, y } = candidates[rnd(candidates.length) - 1];
-  return setMonster(x, y, LEMMING);
-}
-const originalNewCaveLevelBalance3D = newcavelevel;
-newcavelevel = function (depth) {
-  const fresh = !LEVELS[depth];
-  const result = originalNewCaveLevelBalance3D(depth);
-  if (localBalance3D() && fresh && !hasCaveRats3D()) spawnCaveRat3D();
-  return result;
-};
-const originalRandomMonstersBalance3D = randmonst;
-let lastCaveRatTurn3D = -1;
-randmonst = function () {
-  const result = originalRandomMonstersBalance3D();
-  const turn = player?.MOVESMADE;
-  if (!player || !localBalance3D() || level < 1 || level > DBOTTOM || GAMEOVER || player.TIMESTOP ||
-    DEBUG_NO_MONSTERS || isGenocided(LEMMING) || lemmingLimitReached3D() ||
-    !turn || turn % 24 !== 0 || lastCaveRatTurn3D === turn) return result;
-  lastCaveRatTurn3D = turn;
-  // Refill a cleared floor; otherwise add occasional wildlife without swarms.
-  // The saved turn count supplies the cadence, so reloads do not reset it.
-  if (!hasCaveRats3D() || rnd(100) <= 60) spawnCaveRat3D();
-  return result;
 };
 
 // Harmless lemmings must not set the engine's "under attack" interruption flag
@@ -268,13 +188,7 @@ mmove = function (sx, sy, dx, dy) {
       x: Math.sign(dx - sx),
       y: Math.sign(dy - sy),
     };
-  const previous = movingMonster3D;
-  movingMonster3D = monster;
-  try {
-    return originalMonsterMove3D(sx, sy, dx, dy);
-  } finally {
-    movingMonster3D = previous;
-  }
+  return originalMonsterMove3D(sx, sy, dx, dy);
 };
 
 function plainText3D(value) {

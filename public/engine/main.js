@@ -689,7 +689,8 @@ function run(dir) {
   while (i == 1) {
     i = moveplayer(dir);
     if (i > 0) {
-      moveworld(false); // don't advance time when running
+      // Ularn regen() inside run() spends a turn on every open step.
+      moveworld();
     }
     if (hitflag == 1) {
       i = 0;
@@ -698,6 +699,12 @@ function run(dir) {
       showcell(player.x, player.y);
     }
   }
+  // A wall sets nomove, and mainloop returns before it clears MOVED_WORLD.
+  // Leave that flag set only when a monster already struck on the last step,
+  // so the strike is not a second monster turn. Anything else — the attack
+  // or object that stopped the run, or the wall itself — must not swallow
+  // the next command's turn.
+  if (nomove == NOMOVE || hitflag != 1) MOVED_WORLD = false;
 }
 
 

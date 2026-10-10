@@ -92,8 +92,12 @@ function setNumberCallback(func, allowAsterisk, maxNumLength) {
 
 
 function shouldRun(e, key) {
-  // var run = key.indexOf('shift+') >= 0 || key.match(/[YKUHLBJN]/);
-  return e ? e.shift : false || key.match(/[YKUHLBJN]/);
+  // Capital YKUHLBJN is Ularn's run. Shift does the same from the 3D client.
+  // The event must not hide the capital: `e ? e.shift : …` dropped YKUHLBJN
+  // whenever the 3D key path passed an event, which it always does.
+  const shifted = !!(e && e.shift);
+  const text = typeof key === "string" ? key : "";
+  return shifted || /^[YKUHLBJN]$/.test(text);
 }
 
 

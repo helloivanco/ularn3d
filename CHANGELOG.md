@@ -4,6 +4,17 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.77 — Running spends a turn
+
+- Holding Shift, or a capital direction key, runs until a wall, a fight, or an object, and each open step spends a turn
+- Solo floors still keep one lemming, the classic monster window, and no floating eye on floor 1
+
+## 1.3.76 — Solo monsters on the classic floor
+
+- Solo floors stock monsters on the same tiles as 1.3.39, then keep a single lemming
+- Solo monster turns use the classic window again, not the multiplayer aura
+- Floor 1 still has no floating eye, and the starting dagger still kills the one lemming
+
 ## 1.3.75 — A cleaner footer
 
 - Footer branding, copyright, version and links align on desktop and stack cleanly on smaller screens
