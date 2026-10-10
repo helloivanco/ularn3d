@@ -14,7 +14,7 @@ const started = "2026-10-04T00:00:00.000Z";
 const later = Date.parse(started) + 60_000;
 const roomId = "room-1";
 
-const memory = ({ run, hostUserId = null, member = null, already = 0, profile = { display_name: "Ada" } }) => {
+const memory = ({ run, hostUserId = null, member = null, already = 0, profile = { display_name: "Ada" }, gameConfig = null, actions = [] }) => {
   const submits = Array.from({ length: already }, () => ({ user_id: "seed" }));
   const updates = [];
   const inserts = [];
@@ -22,6 +22,8 @@ const memory = ({ run, hostUserId = null, member = null, already = 0, profile = 
     const api = {
       select() { return api; },
       eq() { return api; },
+      order() { return api; },
+      range(start, end) { return Promise.resolve({ data: Array.isArray(data) ? data.slice(start, end + 1) : data }); },
       update(patch) {
         updates.push(patch);
         return api;
@@ -40,7 +42,8 @@ const memory = ({ run, hostUserId = null, member = null, already = 0, profile = 
     inserts,
     from(table) {
       if (table === "runs") return chain(run);
-      if (table === "rooms") return chain(hostUserId ? { host_user_id: hostUserId } : null);
+      if (table === "rooms") return chain(hostUserId ? { host_user_id: hostUserId, game_config: gameConfig, action_seq: actions.length } : null);
+      if (table === "room_actions") return chain(actions);
       if (table === "room_members") return chain(member);
       if (table === "profiles") return chain(profile);
       if (table === "scores") return chain(null);
@@ -357,4 +360,17 @@ test("a replay that runs past the CPU budget is refused without failing a short 
   const quick = await replayFinishedRun({ seed: 2, log, mode: "solo" });
   assert.equal(quick.ok, true);
   assert.equal(quick.turns, 4);
+});
+
+test('new multiplayer scores use the server log and recorded character configuration', async () => {
+  const config = { version: 2, difficulty: 1, players: [{ slot: 0, name: 'Ada', character: 'Adventurer' }, { slot: 1, name: 'Bea', character: 'Wizard' }] };
+  const actions = [{ seq: 1, actor: 0, kind: 'key', input: '.' }, { seq: 2, actor: 1, kind: 'key', input: '.' }];
+  const run = { id: 'verified-room-run', user_id: 'ada', mode: 'coop', status: 'started', room_id: roomId, seed: 2, party_size: 2, started_at: started };
+  const admin = memory({ run, hostUserId: 'ada', member: hostMember, gameConfig: config, actions });
+  let seen;
+  const result = await acceptScore({ admin, callerId: 'ada', body: { run_id: run.id, log: [{ actor: 1, action: 'forged' }] }, now: later,
+    replay: async input => { seen = input; return { ok: true, score: 7, turns: 2 }; } });
+  assert.equal(result.decision.verified, true);
+  assert.deepEqual(seen.log, actions);
+  assert.deepEqual(seen.config, config);
 });

@@ -1,391 +1,208 @@
 import { getSupabase } from "./config.js";
 import { openRoomChannel } from "./channel.js";
-import { createHostLoop, createHostSession, createPlayer, createReplica } from "./protocol.js";
-import { beginRun, claimAbandonedHost, markReady, recentChat, submitScore, touchRoom } from "./rooms.js";
-import { chooseHeir } from "./reliability.js";
+import { beginRun, markReady, syncRoom, sendRoomAction, submitScore, finishRoom, touchRoom } from "./rooms.js";
 
-const compress = (text) =>
-  typeof LZString !== "undefined" ? LZString.compressToUTF16(text) : text;
+const productVersion = () => document.querySelector('.site-version')?.textContent?.trim().replace(/^v/, '') ||
+  JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent || '{}').softwareVersion || '1.3.75';
 
-const decompress = (text) =>
-  typeof LZString !== "undefined" ? LZString.decompressFromUTF16(text) : text;
-
-const productVersion = () => {
-  const raw = document.querySelector('script[type="application/ld+json"]')?.textContent || "";
-  const fromPage = raw.match(/"softwareVersion"\s*:\s*"(\d+\.\d+\.\d+)"/);
-  if (fromPage) return fromPage[1];
-  const text = document.querySelector(".site-version")?.textContent?.replace(/^v/, "").trim() || "";
-  return /^\d+\.\d+\.\d+$/.test(text) ? text : "1.3.42";
-};
-
-const captureEngine = () => (typeof captureGameState === "function" ? captureGameState() : null);
-
-const checksumEngine = (engine) =>
-  engine && typeof checksumGameState === "function" ? checksumGameState(engine) : "";
-
-/**
- * One private room channel for presence, chat, and the host's turn log.
- * The host runs the world. Everyone else replays that log and checks the
- * host's captured checksum.
- */
-export const createLiveRoom = ({ self, roomId, onRoster, onChat, onStatus, onStarted, onScore, onClaimed }) => {
+/** The server orders and identifies actions. Every browser follows the same log. */
+export const createLiveRoom = ({ self, roomId, onRoster, onChat, onStatus, onStarted, onScore, onClaimed, onEnded }) => {
   let channel = null;
-  let hostSession = null;
-  let hostLoop = null;
-  let player = null;
-  let replica = null;
-  let members = [];
+  let timer = null;
+  let notificationTimer = null;
+  let closed = false;
   let started = false;
   let booted = false;
-  let finished = false;
-  let runId = null;
-  let seed = null;
-  let difficulty = 0;
-  let appliedInputs = 0;
-  let pollTimer = null;
-  let retryTimer = null;
-  let closed = false;
+  let healthy = true;
   let ready = false;
-  const played = [];
-  const queued = [];
-  const chain = { current: Promise.resolve() };
+  let members = [];
+  let room = null;
+  let seq = 0;
+  let syncing = null;
+  let processing = Promise.resolve();
+  let sending = Promise.resolve();
+  let queuedMovement = 0;
+  let queuedCommands = 0;
+  let submitting = false;
+  let notificationStatus = 'CONNECTING';
+  let checksumSeq = -1;
+  let cachedChecksum = null;
+  let reportedDepth = -1;
+  const waiting = new Map();
+  const log = [];
 
-  const publish = () => {
-    if (!hostSession || !channel) return;
-    for (const message of hostSession.takeOutbound()) channel.send(message.event, message.payload);
-  };
-
-  const bootWorld = async ({ seed: nextSeed, name, difficulty: nextDifficulty }) => {
-    if (booted) return { ok: true };
-    seed = Number(nextSeed);
-    difficulty = Number(nextDifficulty) || 0;
-    if (typeof window.ularn?.start !== "function") return { ok: false, error: "unavailable" };
-    await window.ularn.start({
-      name: name || self.name || "Adventurer",
-      character: "Adventurer",
-      difficulty,
-      seed,
-    });
-    booted = true;
-    started = true;
-    onStarted?.();
-    return { ok: true };
-  };
-
-  const playAction = (action) => {
-    if (action === "aura:on" || action === "aura:off") {
-      window.ularn?.setAura?.(action === "aura:on", { role: "host" });
-      return;
-    }
-    window.ularn?.key?.(action);
-  };
-
-  const replayThrough = (inputs) => {
-    const rows = inputs || [];
-    for (let index = appliedInputs; index < rows.length; index++) {
-      const action = rows[index]?.action;
-      if (action) playAction(action);
-    }
-    appliedInputs = rows.length;
-  };
-
-  const applyState = (payload) => {
-    if (!replica) {
-      replica = createReplica({
-        checksum: (state) => checksumEngine(state?.engine),
-        apply: (base, diff) => ({
-          engine: typeof applyDiff === "function" ? applyDiff(base?.engine, diff?.engine) : base?.engine,
-          inputs: (base?.inputs || []).concat(diff?.inputs || []),
-        }),
-        decompress,
-      });
-    }
-    replica.receive("state", payload);
-    const state = replica.state();
-    replayThrough(state?.inputs);
-    const local = checksumEngine(captureEngine());
-    const remote = checksumEngine(state?.engine);
-    if (local && remote && local !== remote) {
-      channel?.send("snapshot", { request: true, userId: self.userId });
-      onStatus?.("The game fell out of step. Asking the host for the world again.");
-    }
-    if (window.ularn?.snapshot?.()?.over) finish();
-    window.dispatchEvent(new Event("ularn:update"));
-  };
-
-  const enqueueState = (payload) => {
-    chain.current = chain.current.then(async () => {
-      if (closed) return;
-      if (!booted) {
-        queued.push(payload);
-        return;
+  const canAct = () => !closed && healthy && started && !room?.finished && self.role !== 'spectator' &&
+    !!window.ularn?.roomCanAct?.(self.slot);
+  const follow = actor => window.ularn?.roomView?.(actor);
+  const drain = () => {
+    processing = processing.then(() => {
+      if (!booted || closed) return;
+      while (waiting.has(seq + 1)) {
+        const row = waiting.get(seq + 1);
+        waiting.delete(seq + 1);
+        window.ularn.applyRoomAction(row);
+        seq = Number(row.seq);
+        log.push(row);
       }
-      if (self.role === "host") return;
-      applyState(payload);
-    }).catch(() => onStatus?.("Online unavailable"));
-  };
-
-  const flushQueued = () => {
-    const waiting = queued.splice(0, queued.length);
-    for (const payload of waiting) applyState(payload);
-  };
-
-  const finish = async () => {
-    if (finished || self.role !== "host" || !runId) return;
-    finished = true;
-    try {
-      const result = await submitScore({
-        runId,
-        log: played.map((row) => ({ actor: row.actor, action: row.action })),
-      });
-      onScore?.(result);
-    } catch {
-      onScore?.({ ok: false, verified: false, reason: "unavailable" });
-    }
-  };
-
-  const makeSession = () => {
-    hostSession = createHostSession({
-      userId: self.userId,
-      applyInput: (input, from) => {
-        const action = String(input);
-        playAction(action);
-        played.push({
-          actor: Number.isInteger(from?.slot) ? from.slot : 0,
-          action,
-        });
-        if (window.ularn?.snapshot?.()?.over) finish();
-      },
-      capture: () => ({
-        engine: captureEngine(),
-        inputs: played.slice(),
-      }),
-      diff: (before, after) => ({
-        engine: typeof diffState === "function" ? diffState(before?.engine, after?.engine) : { same: true },
-        inputs: (after?.inputs || []).slice(before?.inputs?.length || 0),
-      }),
-      checksum: (state) => checksumEngine(state?.engine) || checksumEngine(captureEngine()),
-      compress,
-      decompress,
-    });
-    hostLoop?.stop();
-    hostLoop = createHostLoop(hostSession, {
-      members: () => members.filter((member) => member.role !== "spectator"),
-      now: () => Date.now(),
-    });
-    hostLoop.start();
-  };
-
-  const onEvent = (event, payload) => {
-    if (event === "chat") {
-      onChat?.(payload);
-      return;
-    }
-    if (event === "ack") {
-      player?.ack(payload);
-      return;
-    }
-    if (event === "snapshot" && payload?.begin) {
-      chain.current = chain.current.then(async () => {
-        if (self.role === "host" || booted) return;
-        runId = payload.runId;
-        await bootWorld(payload);
-        flushQueued();
-      }).catch(() => onStatus?.("Online unavailable"));
-      return;
-    }
-    if (event === "snapshot" && payload?.request && self.role === "host") {
-      hostSession?.snapshot();
-      publish();
-      return;
-    }
-    if (event === "state") {
-      enqueueState(payload);
-      return;
-    }
-    if (event === "action" && self.role === "host") {
-      const member = members.find((person) => person.userId === payload.userId);
-      const from = member && member.role !== "spectator"
-        ? member
-        : { userId: payload.userId, role: "spectator", slot: null };
-      hostSession?.receive(from, "action", payload);
-      publish();
-    }
-  };
-
-  const refresh = async () => {
-    if (closed) return;
-    const loaded = await loadRoster(roomId);
-    if (!loaded.ok) {
-      onStatus?.("Online unavailable");
-      return;
-    }
-    members = loaded.members;
-    const mine = members.find((member) => member.userId === self.userId);
-    if (mine) {
-      ready = !!mine.ready;
-      if (mine.role === "host" && self.role !== "host" && started) {
-        self.role = "host";
-        played.length = 0;
-        for (const row of replica?.state()?.inputs || []) played.push(row);
-        makeSession();
-        hostSession.snapshot();
-        publish();
-        onClaimed?.();
-      } else if (mine.role) {
-        self.role = mine.role;
+      const owner = window.ularn?.roomPromptActor?.();
+      if (owner != null && owner !== self.slot && self.role !== 'spectator') {
+        const person = members.find(member => member.slot === owner);
+        onStatus?.(`${person?.name || 'Another player'} is choosing an action. You can chat while waiting.`);
+      } else if (healthy) onStatus?.('');
+      if (!submitting && self.role === 'host' && room?.run_id && window.ularn?.snapshot?.()?.over) {
+        submitting = true;
+        onScore?.({ pending: true });
+        finishRoom(roomId).then(() => submitScore({ runId: room.run_id, log })).then(onScore).catch(() => onScore?.({ verified: false, reason: 'unavailable' }));
       }
-    }
-    onRoster?.(members, loaded.room);
-    const history = await recentChat(roomId);
-    if (Array.isArray(history) && history.length) onChat?.(history, true);
-    if (self.role === "host") {
-      const depth = window.ularn?.snapshot?.()?.level;
-      await touchRoom(roomId, Number.isInteger(depth) ? depth : null);
-    } else if (mine && self.role !== "spectator") {
-      const heir = chooseHeir(members, Date.now());
-      if (heir?.userId === self.userId) {
-        const claimed = await claimAbandonedHost(roomId);
-        if (claimed?.ok) await refresh();
-      }
-    }
+    });
+    return processing;
   };
-
-  const open = async () => {
-    const supabase = await getSupabase();
-    if (!supabase) return { ok: false, error: "unavailable" };
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) return { ok: false, error: "unavailable" };
-    if (supabase.realtime?.setAuth) await supabase.realtime.setAuth(token);
-    player = createPlayer({ userId: self.userId, role: self.role });
-    let subscribed = false;
-    channel = openRoomChannel(supabase, {
-      roomId,
-      userId: self.userId,
-      role: self.role,
-      onEvent,
-      onStatus: (status) => {
-        if (status === "SUBSCRIBED") subscribed = true;
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          onStatus?.("Online unavailable");
+  const accept = rows => {
+    for (const row of rows || []) {
+      const n = Number(row?.seq);
+      if (row?.room_id !== roomId || !Number.isSafeInteger(n) || n <= seq) continue;
+      waiting.set(n, row);
+    }
+    return drain();
+  };
+  const refresh = () => {
+    if (closed) return Promise.resolve({ ok: false, error: 'closed' });
+    if (syncing) return syncing;
+    syncing = (async () => {
+      let result;
+      do {
+        result = await syncRoom(roomId, seq);
+        if (closed) return { ok: false, error: 'closed' };
+        if (!result?.ok) {
+          healthy = false;
+          if (['not_member', 'room_not_found', 'expired'].includes(result?.error)) {
+            close();
+            onEnded?.(result.error);
+          } else onStatus?.('Reconnecting… Your room and character are saved.');
+          return result;
         }
-      },
-    });
-    const startedAt = Date.now();
-    while (!subscribed && Date.now() - startedAt < 8000) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (!subscribed) return { ok: false, error: "unavailable" };
-    await refresh();
-    pollTimer = setInterval(refresh, 2000);
-    retryTimer = setInterval(() => {
-      if (closed || self.role === "host" || !started) return;
-      for (const payload of player.retry()) channel?.send("action", payload);
-    }, 1000);
-    return { ok: true };
+        healthy = true;
+        room = result.room;
+        members = result.members;
+        const mine = members.find(member => member.userId === self.userId);
+        if (!mine || mine.banned) { close(); onEnded?.('not_member'); return { ok: false, error: 'not_member' }; }
+        const becameHost = self.role !== 'host' && mine.role === 'host';
+        self.role = mine.role;
+        self.slot = mine.slot;
+        ready = !!mine.ready;
+        onRoster?.(members, room);
+        onChat?.(result.chat || [], true);
+        if (becameHost) onClaimed?.();
+        if (!booted && room.status === 'playing') {
+          const config = room.game_config;
+          if (config?.version !== 2 || !config.players?.length) return { ok: false, error: 'old_room' };
+          onStatus?.('Joining the expedition…');
+          const view = self.role === 'spectator' ? config.players[0].slot : self.slot;
+          await window.ularn.beginRoom({ seed: room.seed, config, viewActor: view });
+          booted = true;
+        }
+        await accept(result.actions);
+      } while (booted && Number(room.action_seq) > seq && result.actions?.length);
+      if (booted && !started && seq === Number(room.action_seq)) {
+        started = true;
+        onStarted?.();
+      }
+      if (booted && self.role === 'host') {
+        const depth = Math.max(0, ...window.ularn.party().map(person => person.dungeon));
+        if (depth > reportedDepth) { reportedDepth = depth; touchRoom(roomId, depth); }
+      }
+      return { ok: true };
+    })().catch(() => {
+      healthy = false;
+      onStatus?.('Reconnecting… Your room and character are saved.');
+      return { ok: false, error: 'unavailable' };
+    }).finally(() => { syncing = null; });
+    return syncing;
   };
-
+  const changed = () => {
+    if (closed || notificationTimer) return;
+    notificationTimer = setTimeout(() => { notificationTimer = null; refresh(); }, 80);
+  };
+  const close = () => {
+    closed = true;
+    clearInterval(timer);
+    clearTimeout(notificationTimer);
+    channel?.close();
+    return Promise.allSettled([syncing, sending]);
+  };
   return {
-    open,
+    open: async () => {
+      const supabase = await getSupabase();
+      if (!supabase) return { ok: false, error: 'unavailable' };
+      const loaded = await refresh();
+      if (!loaded?.ok) return loaded;
+      const session = await supabase.auth.getSession();
+      if (supabase.realtime?.setAuth) await supabase.realtime.setAuth(session.data.session?.access_token);
+      channel = openRoomChannel(supabase, {
+        roomId,
+        onAction: row => { accept([row]); if (Number(row.seq) > seq + 1) changed(); },
+        onChange: changed,
+        onStatus: status => { notificationStatus = status; if (status === 'SUBSCRIBED') changed(); },
+      });
+      timer = setInterval(refresh, 1000);
+      return { ok: true };
+    },
     refresh,
     ready: () => ready,
     started: () => started,
     members: () => members,
+    room: () => room,
+    canAct,
+    follow,
     toggleReady: async () => {
-      if (self.role === "spectator") return { ok: false, error: "spectator" };
-      ready = !ready;
-      const result = await markReady(roomId, ready);
-      if (!result?.ok) ready = !ready;
+      if (self.role === 'spectator' || started) return { ok: false, error: 'not_player' };
+      const result = await markReady(roomId, !ready);
       await refresh();
       return result;
     },
     start: async () => {
-      if (self.role !== "host") return { ok: false, error: "not_host" };
-      const run = await beginRun({ mode: "coop", roomId, engineVersion: productVersion() });
-      if (!run?.ok) return run;
-      runId = run.run_id;
-      const world = await bootWorld({
-        seed: run.seed,
-        name: self.name,
-        difficulty: Number(document.querySelector("#difficulty")?.value || 0),
-      });
-      if (!world.ok) return world;
-      makeSession();
-      started = true;
-      channel?.send("snapshot", {
-        begin: true,
-        seed,
-        runId,
-        difficulty,
-        name: self.name,
-      });
-      hostSession.snapshot();
-      publish();
-      return { ok: true, seed, runId };
+      const result = await beginRun({ mode: 'coop', roomId, engineVersion: productVersion(), difficulty: Number(document.querySelector('#difficulty')?.value || 0) });
+      if (result?.ok) await refresh();
+      return result;
     },
-    sendInput: (input) => {
-      if (!started || self.role === "spectator") return false;
-      const payload = player.nextAction(input);
-      payload.slot = self.slot ?? 0;
-      payload.role = self.role;
-      if (self.role === "host") {
-        hostSession.receive(
-          { userId: self.userId, role: "host", slot: self.slot ?? 0 },
-          "action",
-          payload,
-        );
-        publish();
-        return true;
-      }
-      return channel?.send("action", payload) !== false;
+    sendInput: input => {
+      const view = window.ularn?.snapshot?.();
+      const movement = !view?.prompt && !queuedCommands && /^(up|down|left|right|home|end|pageup|pagedown|[hjklbyunHJKLBYUN])$/.test(String(input));
+      if (movement && queuedMovement) return Promise.resolve({ ok: false, error: 'pending' });
+      if (queuedCommands >= 32) return Promise.resolve({ ok: false, error: 'pending' });
+      if (movement) queuedMovement += 1;
+      else queuedCommands += 1;
+      const requestId = crypto.randomUUID();
+      const task = async () => {
+        if (window.ularn?.snapshot?.()?.over && ["return", "space", "escape", "z"].includes(input)) return { ok: window.ularn.roomEndKey(input) };
+        if (!canAct()) return { ok: false, error: 'busy' };
+        let result;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (closed) return { ok: false, error: 'closed' };
+          result = await sendRoomAction(roomId, requestId, String(input));
+          if (result?.ok || result?.error !== 'unavailable') break;
+          await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+        }
+        if (result?.ok) {
+          await accept([result.action]);
+          if (Number(result.action.seq) > seq) await refresh();
+        } else {
+          onStatus?.(result?.error === 'rate_limited' ? 'Please slow down for a moment.' : 'That action could not be sent. Reconnecting…');
+          await refresh();
+        }
+        return result;
+      };
+      const result = sending.then(task, task).finally(() => { if (movement) queuedMovement -= 1; else queuedCommands -= 1; });
+      sending = result.catch(() => {});
+      return result;
     },
-    say: (message) => channel?.send("chat", message),
-    beat: () => (hostLoop ? hostLoop.beat() : []),
-    close: () => {
-      closed = true;
-      clearInterval(pollTimer);
-      clearInterval(retryTimer);
-      hostLoop?.stop();
-      channel?.close();
-    },
-  };
-};
-
-const loadRoster = async (roomId) => {
-  const supabase = await getSupabase();
-  if (!supabase) return { ok: false, error: "unavailable" };
-  const members = await supabase
-    .from("room_members")
-    .select("user_id, role, slot, ready, connected, banned, last_seen, joined_at, left_at")
-    .eq("room_id", roomId);
-  if (members.error) return { ok: false, error: "unavailable" };
-  const room = await supabase
-    .from("rooms")
-    .select("id, join_code, status, seed, host_user_id")
-    .eq("id", roomId)
-    .maybeSingle();
-  if (room.error) return { ok: false, error: "unavailable" };
-  const ids = (members.data || []).map((row) => row.user_id);
-  const profiles = ids.length
-    ? await supabase.from("profiles").select("user_id, display_name").in("user_id", ids)
-    : { data: [] };
-  const names = new Map((profiles.data || []).map((row) => [row.user_id, row.display_name]));
-  return {
-    ok: true,
-    room: room.data,
-    members: (members.data || []).map((row) => ({
-      userId: row.user_id,
-      name: names.get(row.user_id) || "Player",
-      role: row.role,
-      slot: row.slot,
-      ready: !!row.ready,
-      connected: !!row.connected,
-      banned: !!row.banned,
-      lastSeen: row.last_seen ? Date.parse(row.last_seen) : Date.now(),
-      joinedAt: row.joined_at ? Date.parse(row.joined_at) : 0,
-      leftAt: row.left_at ? Date.parse(row.left_at) : null,
-    })),
+    diagnostics: () => ({ seq, role: self.role, slot: self.slot, healthy, started, notifications: notificationStatus,
+      get checksum() {
+        if (checksumSeq !== seq) { cachedChecksum = window.ularn?.roomChecksum?.(); checksumSeq = seq; }
+        return cachedChecksum;
+      },
+    }),
+    close,
   };
 };
 

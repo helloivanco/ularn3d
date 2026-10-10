@@ -35,3 +35,4 @@ policy = "oneshot"
 
 [functions.submit-score]
 verify_jwt = true
+entrypoint = "./functions/submit-score/index.js"

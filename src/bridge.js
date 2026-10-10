@@ -78,12 +78,18 @@ window.addEventListener("ularn:graphics-restored", () => {
 });
 const originalInput3D = mousetrap;
 mousetrap = function (event, key) {
+  if (ROOM_APPLYING) return originalInput3D(event, key);
   if (
     graphicsPaused3D ||
     document.hidden ||
     document.querySelector("dialog[open]")
   )
     return false;
+  if (ROOM_SESSION_ON) {
+    const input = KEYBOARD_INPUT && ["return", "enter", ENTER].includes(key) ? `text:${KEYBOARD_INPUT}` : event?.shift && key.length === 1 ? key.toUpperCase() : key;
+    window.ularnOnline?.sendInput?.(input);
+    return false;
+  }
   if (key === "S" && mazeMode && !blocking_callback && !GAMEOVER) {
     updateLog(
       window.ularn.save()
@@ -681,7 +687,9 @@ window.ularn = {
   },
   party() {
     if (typeof adventurerSummaries !== "function") return [];
-    return adventurerSummaries();
+    const people = adventurerSummaries();
+    if (!ROOM_SESSION_ON) return people;
+    return people.filter(person => person.connected !== false).map(person => ({ ...person, slot: ROOM_ACTORS.findIndex(slot => slot === person.slot) }));
   },
   fog(name) {
     if (typeof adventurerSeen !== "function") return null;
@@ -703,6 +711,10 @@ window.ularn = {
     return encounterGroups(this.party().filter((member) => member.alive));
   },
   setAutoLoot(enabled) {
+    if (ROOM_SESSION_ON && !ROOM_APPLYING) {
+      window.ularnOnline?.sendInput?.(enabled ? "loot:on" : "loot:off");
+      return !!enabled;
+    }
     const value = !!enabled;
     overridePref("auto_pickup", value);
     try {
@@ -746,7 +758,7 @@ window.ularn = {
     loadPreferences();
     overridePref("no_intro", true);
     overridePref("side_inventory", false);
-    const autoLoot = readAutoLoot3D();
+    const autoLoot = ROOM_SESSION_ON ? false : readAutoLoot3D();
     overridePref("auto_pickup", autoLoot);
     initHelpPages();
     initialized3D = true;
@@ -876,6 +888,7 @@ window.ularn = {
     mousetrap({ shift, preventDefault() {} }, key);
   },
   openToward(direction) {
+    if (ROOM_SESSION_ON) return window.ularnOnline?.sendInput?.(`open:${direction}`);
     this.key("o");
     // A confused hero or a chest underfoot can resolve Open without asking for
     // a direction. Never turn the follow-up into an unrelated movement command.
@@ -886,6 +899,7 @@ window.ularn = {
       this.key(direction);
   },
   save() {
+    if (ROOM_SESSION_ON) return false;
     if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping)
       return false;
     clearTimeout(saveTimer3D); saveTimer3D = null; invalidatePendingSaves3D();
@@ -1113,3 +1127,62 @@ window.ularn = {
   },
 };
 window.addEventListener("pagehide", () => window.ularn.save());
+
+// Room simulation stays on the last authenticated actor. Rendering temporarily
+// selects this browser's adventurer, then restores the simulation actor.
+const roomSnapshot3D = window.ularn.snapshot.bind(window.ularn);
+window.ularn.snapshot = function () {
+  if (!ROOM_SESSION_ON) return roomSnapshot3D();
+  const canonical = ACTIVE_SLOT;
+  const partyWon = GAMEOVER && !!player?.winner;
+  const view = ROOM_ACTORS[ROOM_VIEW_ACTOR];
+  if (view != null && view !== canonical) activateAdventurer(view);
+  try {
+    const state = roomSnapshot3D();
+    if (state) state.autoLoot = !!ROOM_AUTO_LOOT[ROOM_VIEW_ACTOR];
+    if (state && GAMEOVER) state.winner = partyWon;
+    if (state && (ROOM_PROMPT_ACTOR !== ROOM_VIEW_ACTOR || window.ularnOnline?.spectating?.())) {
+      state.prompt = false;
+      state.maze = !GAMEOVER;
+      state.aimAssist = false;
+    }
+    if (state) state.roomBlocked = !window.ularnOnline?.acceptsInput?.();
+    return state;
+  } finally {
+    if (ACTIVE_SLOT !== canonical) activateAdventurer(canonical);
+  }
+};
+window.ularn.beginRoom = async function ({ seed, config, viewActor }) {
+  if (initialized3D && !ROOM_SESSION_ON) throw new Error('Finish the current expedition before joining a room.');
+  ROOM_SESSION_ON = true;
+  const first = config.players[0];
+  await this.start({ name: first.name, character: first.character, difficulty: config.difficulty, seed });
+  beginRoomParty(config.players);
+  ROOM_VIEW_ACTOR = viewActor;
+  window.dispatchEvent(new Event('ularn:update'));
+};
+window.ularn.applyRoomAction = function (row) {
+  const accepted = applyRoomAction(row);
+  window.dispatchEvent(new Event('ularn:update'));
+  return accepted;
+};
+window.ularn.roomView = function (actor) {
+  ROOM_VIEW_ACTOR = actor;
+  window.dispatchEvent(new Event('ularn:update'));
+};
+window.ularn.roomCanAct = roomCanAct;
+window.ularn.roomPromptActor = () => ROOM_PROMPT_ACTOR;
+window.ularn.roomChecksum = () => checksumGameState(captureGameState());
+window.ularn.roomEndKey = function (key) {
+  if (!GAMEOVER || !["return", "space", "escape", "z"].includes(key)) return false;
+  ROOM_APPLYING = true;
+  try { originalInput3D(null, key); return true; }
+  finally { ROOM_APPLYING = false; }
+};
+window.ularn.fogActor = function (actor) {
+  const index = ROOM_ACTORS[actor];
+  if (index == null) return [];
+  if (index === ACTIVE_SLOT) return seenCells(LEVELS[level]?.know);
+  const slot = ADVENTURERS[index];
+  return seenCells(slot?.know?.[slot.level]);
+};

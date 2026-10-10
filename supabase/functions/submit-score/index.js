@@ -19,7 +19,7 @@ import {
   handleSubmit,
   rejectionUpdatesRun,
 } from "../_shared/submit.js";
-import { replayFinishedRun } from "../_shared/replay.js";
+import { replayFinishedRun, MAX_REPLAY_TURNS } from "../_shared/replay.js";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -107,8 +107,10 @@ export const acceptScore = async ({
   const run = loaded?.data ?? null;
   let hostUserId = null;
   let member = null;
+  let recordedRoom = null;
   if (run?.mode === "coop" && run.room_id) {
-    const room = await admin.from("rooms").select("host_user_id").eq("id", run.room_id).maybeSingle();
+    const room = await admin.from("rooms").select("host_user_id,game_config,action_seq").eq("id", run.room_id).maybeSingle();
+    recordedRoom = room?.data ?? null;
     hostUserId = room?.data?.host_user_id ?? null;
     const seated = await admin
       .from("room_members")
@@ -120,6 +122,19 @@ export const acceptScore = async ({
   }
   const isHost = callerIsCurrentHost({ callerId, hostUserId, member });
   const allowed = callerMaySubmit({ run, callerId, isHost });
+  let log = body?.log;
+  if (allowed && run?.status === "started" && recordedRoom?.game_config?.version === 2) {
+    const count = Number(recordedRoom.action_seq);
+    if (count > MAX_REPLAY_TURNS) return { decision: { status: "rejected", verified: false, reason: "replay_cpu_cap" }, updateRun: false, isHost };
+    log = [];
+    for (let offset = 0; offset < count; offset += 1000) {
+      const rows = await admin.from("room_actions").select("*").eq("room_id", run.room_id).order("seq", { ascending: true }).range(offset, Math.min(offset + 999, count - 1));
+      if (rows.error || !Array.isArray(rows.data)) return { decision: { status: "rejected", verified: false, reason: "unavailable" }, updateRun: false, isHost };
+      log.push(...rows.data);
+    }
+    if (log.length !== count) return { decision: { status: "rejected", verified: false, reason: "unavailable" }, updateRun: false, isHost };
+    run.game_config = recordedRoom.game_config;
+  }
   let recentSubmits = 0;
   if (allowed && run?.status === "started") {
     const noted = await admin.rpc("note_score_submit", {
@@ -137,7 +152,7 @@ export const acceptScore = async ({
   }
   const decision = await handleSubmit({
     run,
-    log: body?.log,
+    log,
     now,
     callerId,
     isHost,

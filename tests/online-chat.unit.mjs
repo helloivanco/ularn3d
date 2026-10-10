@@ -49,6 +49,14 @@ test("join keeps the newest 50 chat rows", () => {
   assert.equal(visible[0].name, "Ada");
 });
 
+test("a saved message is not duplicated when its broadcast arrives", async () => {
+  const chat = createChatLog({ persist: async () => ({ ok: true, id: "saved-message" }) });
+  const sent = await chat.post({ body: "Follow me", userId: "ada", name: "Ada" });
+  assert.equal(sent.message.id, "saved-message");
+  assert.equal(chat.receive(sent.message), false);
+  assert.equal(chat.visible().length, 1);
+});
+
 test("emoji stays in the message and inserts at the cursor", async () => {
   const chat = createChatLog();
   for (const emoji of CHAT_EMOJI) {
