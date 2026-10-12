@@ -14,9 +14,10 @@ test.afterEach(() => expect(errors).toEqual([]));
 test("bottom HUD, symbol map, pinned inventory, and loot shortcut stay in sync", async ({ page }) => {
   await expect(page.locator(".quest-panel, .map-legend")).toHaveCount(0);
   const map = await page.locator("#minimap").boundingBox();
-  expect(map.width).toBeGreaterThan(280);
-  expect(map.width).toBeLessThan(360);
-  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", "27");
+  expect(map.width).toBeGreaterThan(260);
+  expect(map.width).toBeLessThan(760);
+  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", "20");
+  await expect(page.locator("#minimap")).toHaveAttribute("data-rows", "20");
   await page.locator("#map-expand").click();
   await expect(page.locator("#map-dialog")).toBeVisible();
   await page.getByRole("button", {name:"Close explored map"}).click();

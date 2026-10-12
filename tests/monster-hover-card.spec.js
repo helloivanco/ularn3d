@@ -77,7 +77,7 @@ test("monster hover card respects visibility and leaves items on the label", asy
     setMonster(12, 6, createMonster(GNOME));
     setMonster(10, 6, createMonster(KOBOLD));
     setMonster(14, 10, createMonster(INVISIBLESTALKER));
-    setMonster(6, 6, createMonster(MIMIC));
+    setMonster(14, 6, createMonster(MIMIC));
     setItem(8, 10, createGold(40));
     setMazeMode(true);
     paint();
@@ -93,8 +93,8 @@ test("monster hover card respects visibility and leaves items on the label", asy
           known: at(12, 6)?.monster?.known ?? null,
           stalker: at(14, 10)?.monster ? "visible" : null,
           floor: at(14, 10)?.name ?? null,
-          mimic: at(6, 6)?.monster?.name ?? null,
-          mimicKnown: at(6, 6)?.monster?.known ?? null,
+          mimic: at(14, 6)?.monster?.name ?? null,
+          mimicKnown: at(14, 6)?.monster?.known ?? null,
           gold: at(8, 10)?.name ?? null,
         };
       }),
@@ -147,7 +147,7 @@ test("monster hover card respects visibility and leaves items on the label", asy
 
   await test.step("the kobold card matches the 3D creature in the example", async () => {
     const kobold = await page.evaluate(() => ularnGraphics.creatures().find(monster => monster.tile.x === 10 && monster.tile.y === 6));
-    expect(kobold).toMatchObject({ species: 5, model: "kobold", presentation: "model" });
+    expect(kobold).toMatchObject({ species: 5, presentation: "sprite" });
     await moveTo(10, 6);
     const card = page.locator("#monster-card");
     await expect(card).toBeVisible();
@@ -165,11 +165,11 @@ test("monster hover card respects visibility and leaves items on the label", asy
 
   await test.step("unidentified mimic keeps the plain name", async () => {
     const disguise = await page.evaluate(() => {
-      const monster = ularn.snapshot().tiles.find((tile) => tile.x === 6 && tile.y === 6).monster;
+      const monster = ularn.snapshot().tiles.find((tile) => tile.x === 14 && tile.y === 6).monster;
       return monster.name;
     });
     expect(disguise.toLowerCase()).not.toBe("mimic");
-    await moveTo(6, 6);
+    await moveTo(14, 6);
     await expect(page.locator("#monster-card")).toBeHidden();
     await expect(page.locator("#tile-label")).toHaveText(disguise);
     await expect(page.locator("#tile-label")).not.toContainText(/wearing some other shape/i);

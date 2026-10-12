@@ -16,7 +16,7 @@ import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from ".
 import { CombatEffects } from "./combat-effects.js";
 import { StaticTiles } from "./static-world.js";
 import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
-import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
+import { creatureMetrics, releaseCreatureResources } from "./creatures.js";
 import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } from "./graphics-utils.js";
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
 import { TorchLighting, stabilizeShadow } from "./lighting.js";
@@ -203,7 +203,7 @@ export class World {
     this.paused = false;
     this.disposed = false;
     this.events = new AbortController();
-    this.quality = "auto";
+    this.quality = "balanced";
     try {
       this.quality = localStorage.getItem("ularn3d.quality") || this.quality;
     } catch {}
@@ -1206,8 +1206,14 @@ export class World {
   // is an explicit Cinematic choice, avoiding a large automatic cost cliff.
   cinematicRendering() { return this.quality === "cinematic"; }
   qualityPixelRatio() {
-    const cap=this.cinematicRendering()?1.5:this.quality==="auto"?[.65,.75,1][this.effectiveTier]:.75;
-    return Math.min(devicePixelRatio,cap);
+    // 1.3.39 balanced filled at 0.75. Auto may drop to 0.65 under load, and it
+    // does not climb to a full pixel — that fill rate is what made Windows lag.
+    const cap = this.cinematicRendering()
+      ? 1.5
+      : this.quality === "auto"
+        ? [0.65, 0.75, 0.75][this.effectiveTier] ?? 0.75
+        : 0.75;
+    return Math.min(globalThis.devicePixelRatio || 1, cap);
   }
   applyGpuQuality() {
     const cinematic = this.cinematicRendering();
@@ -1363,9 +1369,9 @@ export class World {
   }
   setViewportRect(rect) {
     this.viewportRect = { ...rect };
-    this.camera.setViewOffset(innerWidth, innerHeight,
-      innerWidth / 2 - (rect.left + rect.right) / 2,
-      innerHeight / 2 - (rect.top + rect.bottom) / 2, innerWidth, innerHeight);
+    // 1.3.39 looked at the hero through the middle of the window. A later
+    // view offset slid that point into the gap beside the map.
+    this.camera.clearViewOffset();
     this.invalidate();
   }
   setRoute(points = []) {
@@ -1924,12 +1930,13 @@ export class World {
         actor = null;
       }
       if (!actor) {
+        // Balanced and Auto use the 1.3.39 sprite. The all-species lit rigs
+        // were the extra meshes on the Windows build. Cinematic keeps the
+        // five crafted models; everyone else stays a sprite there too.
         const mesh =
-          creature(monster) ||
-          createCreatureModel(monster) ||
+          (this.cinematicRendering() && createCreatureModel(monster)) ||
           monsterSprite(monster, () => this.invalidate()) ||
           monsterModel(monster);
-        if (mesh.userData.model) { mesh.userData.presentation="model"; mesh.userData.modelKey=mesh.userData.model; }
         mesh.position.set(tile.x, 0, tile.y);
         mesh.traverse((object) => {
           if (!object.isMesh) return;
@@ -1954,8 +1961,7 @@ export class World {
       }
       actor.mesh.userData.uid = uid;
       actor.mesh.userData.tile = { x: tile.x, y: tile.y };
-      if (actor.mesh.userData.model) faceCreature(actor.mesh, monster.facing);
-      else faceMonster(actor.mesh, monster.facing, this.camera);
+      faceMonster(actor.mesh, monster.facing, this.camera);
     }
     for (const [uid, actor] of this.monsters)
       if (!creatures.has(uid)) {
@@ -2391,10 +2397,7 @@ export class World {
           : base;
       }
       if (moving) this.hasMotion = true;
-      if (mesh.userData.model) {
-        if (animateCreature(mesh, now, moving, this.reduced)) this.hasMotion = true;
-      }
-      else if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
+      if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
     }
     if (camTurned) {
       for (const art of this.billboards) faceItem(art, this.camera);
@@ -2425,7 +2428,7 @@ export class World {
       this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
     }
     if (this.state?.level === 0) this.updateCutaways(Math.min(elapsed, .1));
-    this.applyPixelGrid();
+    if (this.cinematicRendering()) this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) this.composer.render(dt);
       else this.renderer.render(this.scene, this.camera);

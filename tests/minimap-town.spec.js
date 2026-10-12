@@ -30,8 +30,8 @@ test("the compact map follows the player and Expand shows the entire floor", asy
   await start(page);
   const town = await page.evaluate(mapView);
   expect(town.overflow === "visible" || town.overflow === "hidden").toBeTruthy();
-  expect(town.cols).toBeGreaterThanOrEqual(18);
-  expect(town.rows).toBe(13);
+  expect(town.cols).toBe(20);
+  expect(town.rows).toBe(20);
   expect(town.cell).toBeGreaterThanOrEqual(11);
   const afterWalk = await page.evaluate(() => {
     const origin = { x: player.x, y: player.y };
@@ -85,11 +85,9 @@ test("the compact map follows the player and Expand shows the entire floor", asy
       size: { width: MAXX, height: MAXY },
     };
   });
-  expect(dungeon.first.cols).toBeLessThan(dungeon.size.width);
-  expect(dungeon.first.rows).toBeLessThan(dungeon.size.height);
+  expect(dungeon.first).toMatchObject({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height });
   expect(dungeon.first.cell).toBeGreaterThanOrEqual(11);
-  expect(dungeon.after.x0).toBeGreaterThan(dungeon.first.x0);
-  expect(dungeon.after.y0).toBeGreaterThan(dungeon.first.y0);
+  expect(dungeon.after).toMatchObject({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height });
   await page.locator("#map-expand").click();
   const expanded = await page.locator("#expanded-map").evaluate(map => ({
     x0: +map.dataset.x0, y0: +map.dataset.y0, cols: +map.dataset.cols, rows: +map.dataset.rows,

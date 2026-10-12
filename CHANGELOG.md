@@ -4,6 +4,13 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.79 — The 1.3.39 view, map, and pace
+
+- The hero sits in the middle of the view again, the same camera angle as 1.3.39
+- The on-screen map shows the full dungeon (and the town plaza) at the 1.3.39 size
+- Floor 1 still stocks only lemming, gnome, hobgoblin, jackal, and kobold, with one easy lemming
+- The Windows-style view uses the 1.3.39 sprite monsters, with fog, bloom, and shadows off
+
 ## 1.3.78 — Multiplayer rooms ready to play
 
 - Room creation and joining show progress; clear ready controls let the host start when everyone is ready

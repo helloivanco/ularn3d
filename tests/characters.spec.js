@@ -25,7 +25,8 @@ test("all 66 enemy models load in the live world, including the loot goblin", as
   });
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.creatures().map(monster=>monster.species).sort((a,b)=>a-b)))
     .toEqual(Array.from({length:66},(_,i)=>i+1));
-  expect(await page.evaluate(()=>ularnGraphics.creatures().find(monster=>monster.species===66).model)).toBe("loot-goblin");
+  const cast = await page.evaluate(() => ularnGraphics.creatures().map((monster) => monster.presentation));
+  expect(cast.every((presentation) => presentation === "sprite")).toBe(true);
   for(let i=0;i<10;i++)await page.locator("#zoom-out").click();
   await page.screenshot({path:"test-results/full-cast-in-game.png"});
   expect(errors).toEqual([]);

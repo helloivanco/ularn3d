@@ -462,14 +462,11 @@
 .chat-tabs .acting { color: #f3d48a; }
 
 
-/* The local map stays legible while the expanded map owns floor planning. */
-.playing { --map-width: min(340px, calc(100vw - 24px)); }
-.playing .map-panel { width: var(--map-width); }
-.playing #minimap { aspect-ratio: 27 / 13; }
-.map-stack { position: absolute; top: 64px; left: 18px; width: var(--map-width); display: flex; flex-direction: column; gap: 12px; max-height: calc(100dvh - var(--dock-height) - 88px); pointer-events: none; }
+/* Expanded planning stays in the dialog. The corner map is the full 1.3.39 floor. */
+.map-stack { position: absolute; top: 64px; left: 18px; width: max-content; max-width: var(--map-width); display: flex; flex-direction: column; gap: 12px; max-height: calc(100dvh - var(--dock-height) - 88px); pointer-events: none; }
 .map-stack > * { pointer-events: auto; }
 .playing .map-stack .camera-tools { position: fixed; top: 64px; right: 18px; left: auto; }
-.playing .map-stack .map-panel { position: relative; inset: auto; width: 100%; flex-shrink: 0; }
+.playing .map-stack .map-panel { position: relative; inset: auto; width: max-content; max-width: 100%; flex-shrink: 0; }
 .playing .map-stack #inventory-panel { position: relative; inset: auto; width: min(238px, calc(100vw - 164px)); height: auto; max-height: none; min-height: 0; flex-shrink: 1; overflow: hidden; }
 #map-expand { font-size: 9px; letter-spacing: 0; padding: 4px 7px; white-space: nowrap; }
 .playing .map-panel .panel-heading { letter-spacing: .8px; font-size: 7px; }
@@ -493,20 +490,17 @@
 .audio-settings input[type=range] { width: 100%; accent-color: var(--gold); cursor: pointer; }
 .audio-settings .audio-track { font: italic 12px Georgia; color: #c6b78d; margin: 4px 0 0; }
 #audio-status { margin: 0; font-size: 11px; color: #c6b78d; line-height: 1.5; }
-@media (max-height: 599px) { .playing #minimap { aspect-ratio: 27 / 7; } }
 @media (max-width: 700px) {
-  .playing { --map-width: min(330px, calc(100vw - 24px)); }
   .playing .camera-tools { top: calc(var(--map-bottom, 260px) + 12px); }
   .playing #effects-panel { top: calc(var(--map-bottom, 260px) + 52px); }
   .map-stack { top: 60px; left: 12px; width: calc(100vw - 24px); display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: auto minmax(0,1fr); }
-  .playing .map-stack .map-panel { grid-area: 1 / 1 / 2 / 3; width: var(--map-width); }
+  .playing .map-stack .map-panel { grid-area: 1 / 1 / 2 / 3; width: max-content; max-width: 100%; }
   .playing .map-stack #inventory-panel { grid-area: 2 / 1; width: 100%; max-width: 238px; }
   .playing .map-stack .camera-tools { position: static; grid-area: 2 / 2; justify-self: end; align-self: start; }
   #map-dialog { padding: 16px; }
   #map-dialog p { font-size: 11px; }
 }
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
-  .playing { --map-width: min(300px, 40vw); }
   .playing .camera-tools { top: 50px; }
   .map-stack { top: 48px; left: 12px; width: var(--map-width); display: flex; max-height: calc(100dvh - var(--dock-height) - 64px); }
   .playing .map-stack .camera-tools { position: fixed; top: 50px; right: 12px; }
@@ -518,8 +512,8 @@
   #map-viewport { height: 45dvh; }
 }
 
-/* Fit the compact map canvas inside the stack, including narrow phones. */
-.playing .map-stack #minimap { width:100%; height:auto; max-width:100%; }
+/* The canvas sets its own 1.3.39 pixel size. Do not scale that bitmap down. */
+.playing .map-stack #minimap { width: auto; height: auto; max-width: none; }
 @media (max-width:700px) {
   .playing .map-stack .camera-tools { z-index:7; position:relative; inset:auto; align-self:start; }
   .playing .map-stack #inventory-panel { z-index:1; }
