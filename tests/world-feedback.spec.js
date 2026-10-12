@@ -547,7 +547,9 @@ test("context recovery releases off-scene creature resources and full disposal c
     window.fixtureWorld = new World(document.querySelector("#fixture"), () => {}, () => {});
     fixtureWorld.update(snapshot);
     window.creatureDisposals = 0;
-    window.cachedGeometry = fixtureWorld.monsters.values().next().value.mesh.getObjectByName("core").children[0].geometry;
+    // Balanced play uses the shared sprite plane. Context loss still disposes
+    // that geometry after the actor has left the scene.
+    window.cachedGeometry = fixtureWorld.monsters.values().next().value.mesh.getObjectByName("monster-art").geometry;
     cachedGeometry.addEventListener("dispose", () => creatureDisposals++);
   }, state);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(1);
@@ -569,7 +571,7 @@ test("context recovery releases off-scene creature resources and full disposal c
     });
     await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(before);
     expect(await page.evaluate(() => {
-      return fixtureWorld.monsters.values().next().value.mesh.getObjectByName("core").children[0].geometry === cachedGeometry;
+      return fixtureWorld.monsters.values().next().value.mesh.getObjectByName("monster-art").geometry === cachedGeometry;
     })).toBe(true);
   }
   expect(await page.evaluate(() => {
