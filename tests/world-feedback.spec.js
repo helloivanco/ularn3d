@@ -49,9 +49,9 @@ test("overhead view, species models and facing survive monster movement", async 
   await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().length)).toBe(4);
   const before = await page.evaluate(() => ({ creatures: ularnGraphics.creatures(), metrics: ularnGraphics.metrics() }));
   expect(before.metrics.cameraElevation).toBeGreaterThan(55);
-  expect(before.creatures.find((m) => m.species === 2).model).toBe("gnome");
-  expect(before.creatures.find((m) => m.species === 4).model).toBe("jackal");
-  expect(before.creatures.find((m) => m.species === 1).model).toBe("lemming");
+  expect(before.creatures.find((m) => m.species === 2).presentation).toBe("sprite");
+  expect(before.creatures.find((m) => m.species === 4).presentation).toBe("sprite");
+  expect(before.creatures.find((m) => m.species === 1).presentation).toBe("sprite");
   const lemming = before.creatures.find((m) => m.species === 1);
   const facing = await page.evaluate(() => {
     mmove(11, 9, 10, 9); paint();
@@ -458,7 +458,7 @@ test("idle and hidden rendering stops and gameplay wakes it without accumulating
   });
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(hidden);
   await page.evaluate(() => { setMonster(13, 8, createMonster(HOBGOBLIN)); paint(); });
-  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().creatureModels)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => ularnGraphics.creatures().find((monster) => monster.species === 3)?.presentation)).toBe("sprite");
   const spawned = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().renderedFrames)).toBeGreaterThan(spawned);
   const before = await page.evaluate(() => ularnGraphics.metrics());

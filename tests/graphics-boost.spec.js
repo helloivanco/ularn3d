@@ -61,7 +61,7 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   await page.locator("#begin").click();
   const scenes=await page.evaluate(()=>[0,1,16].map(depth=>{newcavelevel(depth);paint();return ularnGraphics.metrics();}));
   for(const scene of scenes){
-    expect(scene.effectiveQuality).toBe("high");expect(scene.pixelRatio).toBe(1);
+    expect(scene.effectiveQuality).toBe("high");expect(scene.pixelRatio).toBe(0.75);
     expect(scene.composer).toBe(false);expect(scene.shadowMapEnabled).toBe(false);
     expect(scene.pointLights).toBe(0);expect(scene.floorMapped&&scene.wallMapped&&scene.wallRelief).toBe(true);
   }

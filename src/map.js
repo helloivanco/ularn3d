@@ -1,6 +1,36 @@
 const CELL = 16;
 const symbol = (tile) => tile.monster?.symbol || ({ 5: "<", 13: ">" })[tile.id] || tile.symbol || (tile.wall ? "#" : ".");
 
+/** 1.3.39 compact map: the whole floor, or the town plaza with its one-tile margin. */
+export const compactMapExtent = (state, town = null) => {
+  if (state?.level === 0 && town) {
+    const x = Math.max(0, town.x0 - 1);
+    const y = Math.max(0, town.y0 - 1);
+    return {
+      x,
+      y,
+      cols: Math.min(state.width - x, town.x1 - x + 2),
+      rows: Math.min(state.height - y, town.y1 - y + 2),
+    };
+  }
+  return { x: 0, y: 0, cols: state.width, rows: state.height };
+};
+
+/** Same cell fit as 1.3.39: up to 684×280 on a desktop, smaller cells on a phone. */
+export const compactMapCell = (cols, rows, width = globalThis.innerWidth, height = globalThis.innerHeight) => {
+  const short = height <= 500 && width > height;
+  const compact = width <= 700 || short;
+  const maxW = compact
+    ? Math.min(width - 28, short ? Math.floor(width * 0.62) : width - 28)
+    : Math.min(Math.floor(width * 0.56), 684);
+  const reserved = short ? 198 : compact ? 412 : 250;
+  const maxH = compact
+    ? Math.max(24, Math.min(Math.floor(height * 0.34), height - reserved))
+    : Math.min(height - 250, 280);
+  const cell = Math.max(1, Math.min(Math.floor(maxW / cols), Math.floor(maxH / rows)));
+  return { cell, cssWidth: cols * cell, cssHeight: rows * cell };
+};
+
 export class GameMap {
   constructor({ compact, expanded, dialog, viewport, travel, stop, glyph = symbol,
     color = tile => tile.monster ? "#ffac8f" : tile.store ? "#b7d9b3" : "#e0cba2",
@@ -71,32 +101,47 @@ export class GameMap {
       else { ctx.fillStyle = "#53736a"; ctx.fillRect(x + 7, y + 7, 2, 2); }
     }
   }
-  overlay(ctx, originX = 0, originY = 0) {
-    ctx.fillStyle = "#f4d692";
-    ctx.fillRect((this.state.x - originX) * CELL, (this.state.y - originY) * CELL, CELL, CELL);
-    ctx.fillStyle = "#18272a"; ctx.font = "bold 14px ui-monospace, monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("@", (this.state.x - originX + .5) * CELL, (this.state.y - originY + .5) * CELL);
+  overlay(ctx, originX = 0, originY = 0, cell = CELL) {
+    const paint = (x, y, fill, glyph, ink) => {
+      ctx.fillStyle = fill;
+      ctx.fillRect((x - originX) * cell, (y - originY) * cell, cell, cell);
+      if (!glyph) return;
+      ctx.fillStyle = ink;
+      ctx.font = `bold ${Math.max(6, Math.round(cell * 0.8))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(glyph, (x - originX + 0.5) * cell, (y - originY + 0.5) * cell);
+    };
+    paint(this.state.x, this.state.y, "#f4d692", "@", "#18272a");
     for (const ally of this.party || []) {
       if (ally.x === this.state.x && ally.y === this.state.y) continue;
-      const x = (ally.x - originX) * CELL, y = (ally.y - originY) * CELL;
-      ctx.fillStyle = "#9fd7c8"; ctx.fillRect(x, y, CELL, CELL);
-      ctx.fillStyle = "#132325";
-      ctx.fillText(String(ally.name || "A").slice(0, 1), x + CELL / 2, y + CELL / 2);
+      paint(ally.x, ally.y, "#9fd7c8", String(ally.name || "A").slice(0, 1), "#132325");
     }
     ctx.strokeStyle = "#f3d48a";
     for (const ping of this.markers || [])
-      ctx.strokeRect((ping.x - originX) * CELL + 1, (ping.y - originY) * CELL + 1, CELL - 2, CELL - 2);
+      ctx.strokeRect((ping.x - originX) * cell + 1, (ping.y - originY) * cell + 1, cell - 2, cell - 2);
   }
   drawCompact() {
-    const cols = Math.min(27, this.state.width), rows = Math.min(innerHeight < 600 ? 7 : 13, this.state.height);
-    const x = Math.max(0, Math.min(this.state.width - cols, this.state.x - Math.floor(cols / 2)));
-    const y = Math.max(0, Math.min(this.state.height - rows, this.state.y - Math.floor(rows / 2)));
+    const town = this.state.level === 0 && typeof townBounds === "function" ? townBounds() : null;
+    const { x, y, cols, rows } = compactMapExtent(this.state, town);
+    const { cell, cssWidth, cssHeight } = compactMapCell(cols, rows);
+    const dpr = Math.min(1.25, globalThis.devicePixelRatio || 1);
     const canvas = this.compact;
-    if (canvas.width !== cols * CELL || canvas.height !== rows * CELL) { canvas.width = cols * CELL; canvas.height = rows * CELL; }
+    const nextWidth = Math.round(cssWidth * dpr);
+    const nextHeight = Math.round(cssHeight * dpr);
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+    }
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
     Object.assign(canvas.dataset, { originX: String(x), originY: String(y), columns: String(cols), rows: String(rows), cols: String(cols), x0: String(x), y0: String(y) });
-    const ctx = canvas.getContext("2d"); ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(this.layer, x * CELL, y * CELL, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-    this.overlay(ctx, x, y);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+    ctx.drawImage(this.layer, x * CELL, y * CELL, cols * CELL, rows * CELL, 0, 0, cssWidth, cssHeight);
+    this.overlay(ctx, x, y, cell);
   }
   drawExpanded() {
     const canvas = this.expanded;

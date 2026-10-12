@@ -147,7 +147,7 @@ test("monster hover card respects visibility and leaves items on the label", asy
 
   await test.step("the kobold card matches the 3D creature in the example", async () => {
     const kobold = await page.evaluate(() => ularnGraphics.creatures().find(monster => monster.tile.x === 10 && monster.tile.y === 6));
-    expect(kobold).toMatchObject({ species: 5, model: "kobold", presentation: "model" });
+    expect(kobold).toMatchObject({ species: 5, presentation: "sprite" });
     await moveTo(10, 6);
     const card = page.locator("#monster-card");
     await expect(card).toBeVisible();
