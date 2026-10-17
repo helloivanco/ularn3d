@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.79 — Smoother walking
+
+- Holding a direction or following a clicked route glides at an even speed from tile to tile instead of pausing on every step. The camera moves just as smoothly. A turn is still one move
+- The first step of a hold flows straight into the second, and letting go eases to a stop on your tile
+- Creatures chasing you move at the same steady pace, and a fast creature's double step glides instead of jumping
+- Rotate, zoom and recenter ease into place, and the view slides instead of jumping when the effects panel appears
+- Fewer hitches while walking: the turn counter, journal, autosave and camera settings do less work on each step, and Auto changes resolution only when you stop
+- Wall rats stay put while you explore, and Cinematic shadows follow the hero smoothly
+
 ## 1.3.78 — Multiplayer rooms ready to play
 
 - Room creation and joining show progress; clear ready controls let the host start when everyone is ready

@@ -134,6 +134,10 @@ test("camera starts north; zoom prefs survive beginExpeditionCamera", async ({ p
 
   await page.locator("#zoom-out").click();
   await page.locator("#zoom-out").click();
+  await expect.poll(() => page.evaluate(() => {
+    const offset = ularnGraphics.metrics().cameraOffset;
+    return Math.hypot(offset[0], offset[2]) > 10 && JSON.parse(localStorage.getItem("ularn3d.camera") || "{}").radius > 10;
+  })).toBe(true);
   const zoomed = await page.evaluate(() => {
     const m = ularnGraphics.metrics();
     return {
@@ -148,8 +152,8 @@ test("camera starts north; zoom prefs survive beginExpeditionCamera", async ({ p
   expect(prefs.radius).toBeGreaterThan(10);
 
   await page.locator("#rotate-left").click();
-  const turned = await page.evaluate(() => ularnGraphics.metrics());
-  expect(Math.abs(turned.cameraOffset[0])).toBeGreaterThan(0.5);
+  // The orbit eases over a few frames.
+  await expect.poll(() => page.evaluate(() => Math.abs(ularnGraphics.metrics().cameraOffset[0]))).toBeGreaterThan(0.5);
 
   const afterReset = await page.evaluate(() => {
     ularnGraphics.beginExpeditionCamera();
