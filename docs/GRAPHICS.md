@@ -4,14 +4,16 @@ The 3D edition uses species-indexed creature rigs, class-specific heroes, separa
 
 ## Graphics settings
 
-| Setting | Resolution cap | Shadows | Nearby torch lights | Effects |
-| --- | --- | --- | --- | --- |
-| Auto · low tier | 0.65 pixel ratio | Off | Off | None |
-| Auto · starting / Balanced | 0.75 pixel ratio | Off | Off | None |
-| Auto · high tier | 1.0 pixel ratio | Off | Off | None |
-| Cinematic | 1.5 pixel ratio | 2048 | Up to four in town | Bloom, ambient occlusion and SMAA |
+| Setting | Resolution cap | Antialiasing | Shadows | Nearby torch lights | Effects |
+| --- | --- | --- | --- | --- | --- |
+| Auto · low tier | 0.65 pixel ratio | MSAA | Off | Off | None |
+| Auto · starting tier / Balanced | 0.75 pixel ratio | MSAA (Auto) / none (Balanced) | Off | Off | None |
+| Auto · high tier | 1.0 pixel ratio | MSAA | Off | Off | None |
+| Auto · sharp tier (screens above 1×) | 1.5 pixel ratio, or the screen's density if lower | MSAA | Off | Off | None |
+| Auto · native tier (screens above 1.5×) | 2.0 pixel ratio, or the screen's density if lower | MSAA | Off | Off | None |
+| Cinematic | 1.5 pixel ratio | SMAA | 2048 | Up to four in town | Bloom, ambient occlusion and SMAA |
 
-Resolution never exceeds the device pixel ratio. All settings target 60 FPS during gameplay. Auto lowers quality after two seconds with active frame p95 above 20 ms and raises it gradually after ten seconds below 19 ms; idle time contributes no headroom. Long active stalls remain visible to the controller even though animation integration clamps its timestep. Auto spends headroom on sharper native-resolution rendering, with the expensive effects stack reserved for explicit Cinematic selection. Auto and Balanced stop settled scenes, Cinematic idles at 12 FPS, and native game panels and dialogs use reduced background rendering. Hidden windows suspend rendering. Reduced motion snaps locomotion and disables decorative motion.
+Resolution never exceeds the device pixel ratio, and Auto never exceeds 2×. A 1× screen therefore tops out at the high tier; a Retina screen can reach native resolution. MSAA is a context flag chosen at page load: Auto and Cinematic request it, Balanced does not, and switching into Auto from Balanced gains it after a reload. All settings target 60 FPS during gameplay. Auto lowers quality after two seconds with active frame p95 above 20 ms and raises it one tier after five seconds below 19 ms; idle time contributes no headroom. The tier it reaches is remembered on the device (`ularn3d.autoTier`), clamped to the current screen, and a change waits until the hero and camera have settled. Long active stalls remain visible to the controller even though animation integration clamps its timestep. Auto spends headroom on sharper native-resolution rendering, with the expensive effects stack reserved for explicit Cinematic selection. Auto and Balanced stop settled scenes, Cinematic idles at 12 FPS, and native game panels and dialogs use reduced background rendering. Hidden windows suspend rendering. Reduced motion snaps locomotion and disables decorative motion.
 
 The first held direction is immediate, with a 220 ms initial delay and 140 ms repeat interval. Repeats keep to that ideal timeline, so engine time does not stretch each step, and a stall restarts the timeline rather than sending a burst. Release, focus loss, menus, prompts, graphics loss, and level transitions cancel it. Timers never catch up missed turns. Click travel uses the same cadence, rechecks each step, stops on displacement or danger, without drawing route lines or destination markers. The compact symbol map follows the hero; Expand provides full-floor pan/zoom planning.
 
@@ -93,7 +95,7 @@ Creature info cards use cached transparent portraits rendered from the same exac
 
 ## Graphics boost and latency in 1.3.64
 
-Stone, grass, wood and roof generation now use the same logical coordinates at 128/512 pixels, aligning color, normal and roughness detail instead of cropping different patterns. Shared wall vertices bake a restrained vertical shade gradient so even unlit caves have depth. Existing player/enemy contact fans feather to transparent at their edges. These changes retain terrain maps, topology, instancing, geometry budgets and the existing render passes; textures remain cached and are never regenerated while walking. The shared world renderer applies them to solo and online views.
+Stone, grass, wood and roof generation now use the same logical coordinates at 128/512 pixels, aligning color, normal and roughness detail instead of cropping different patterns. Normal and roughness data textures are written bottom row first, matching the flipped canvas color maps, so relief lines up with the painted mortar; walls and caps use relief maps on the same shifted phase as their color courses. Shared wall vertices bake a restrained vertical shade gradient, plus a fixed south-west key (west and south faces lighter, east and north darker), so even unlit caves have depth at corners and corridors. The cave footprint slab is unlit in the background color, so the explored floor floats in the dark without a lit seam across the view. Floor-loot illustrations use trilinear mipmaps; their transparent pixels borrow neighboring colors so edges do not darken as they shrink. Only nearest-filtered creature sprites snap to drawing-buffer pixels; the 3D hero and loot art move smoothly with the floor. Cinematic ambient occlusion samples within about a tile (kernel radius 1.2 world units) at genuinely half resolution, and follows the current projection when the framing slides. Existing player/enemy contact fans feather to transparent at their edges. These changes retain terrain maps, topology, instancing, geometry budgets and the existing render passes; textures remain cached and are never regenerated while walking. The shared world renderer applies them to solo and online views.
 
 Paired production builds were measured on October 8, 2026 in hardware Chrome on the Apple M2 Pro. Baseline commit `fec1f0a` and the graphics boost ran identical seeded scene hashes and engine action outcomes, with music and native combat enabled, using 96 directional inputs at 140 ms intervals per scene. The phone case emulates a 390 × 844, DPR 2 layout on this Mac; it does not measure phone hardware. Other scenes use 1440 × 1000, DPR 1.
 

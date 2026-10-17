@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { HeldMovement } from "../src/navigation.js";
 import { CREATURES, creature } from "../src/creatures.js";
 import { mapClick } from "./map-helper.js";
-import { World } from "../src/world.js";
+import { World, autoTierLimit } from "../src/world.js";
 import { WALK_SETTLE_MS, walkProgress } from "../src/hero-animation.js";
 import { GameMap } from "../src/map.js";
 
@@ -82,9 +82,16 @@ test("adaptive graphics waits for sustained active overload and recovers gradual
   feed(1000, 35); expect(changes).toEqual([]);
   feed(1200, 35); expect(changes).toEqual([0]);
   now += 60000; expect(renderer.autoTier).toBe(0); // Suspension contributes no observations.
-  feed(6000, 16); expect(changes).toEqual([0]);
-  feed(4500, 16); expect(changes).toEqual([0, 1]);
-  renderer.quality = "cinematic"; feed(5000, 40); expect(changes).toEqual([0, 1]);
+  feed(4000, 16); expect(changes).toEqual([0]);
+  feed(1500, 16); expect(changes).toEqual([0, 1]);
+  // A 1× screen tops out at native resolution; it never supersamples.
+  feed(5500, 16); expect(changes).toEqual([0, 1, 2]);
+  feed(12000, 16); expect(changes).toEqual([0, 1, 2]);
+  renderer.quality = "cinematic"; feed(5000, 40); expect(changes).toEqual([0, 1, 2]);
+});
+
+test("Auto reaches native resolution on dense screens and never above 2x", () => {
+  expect([1, 1.25, 1.5, 2, 3].map((ratio) => autoTierLimit(ratio))).toEqual([2, 3, 3, 4, 4]);
 });
 
 test("keyboard hold cadence, browser repeat, reversal, release and prompts are safe", async ({ page }) => {

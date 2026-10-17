@@ -206,6 +206,39 @@ export function stripPaleSpriteBackground(imageData, sat = 30, lumaMin = 168, al
   return imageData;
 }
 
+/**
+ * Copy neighboring item colors into fully transparent pixels (alpha stays 0).
+ * Mipmaps average color and alpha separately, so transparent black would
+ * otherwise darken every edge as the 256 px art shrinks to tile size.
+ */
+export function bleedTransparentEdges(imageData, passes = 6) {
+  const { data, width: w, height: h } = imageData;
+  let filled = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) filled[i] = data[i * 4 + 3] > 0 ? 1 : 0;
+  for (let pass = 0; pass < passes; pass++) {
+    const next = filled.slice();
+    let changed = false;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (filled[i]) continue;
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if ((!dx && !dy) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (!filled[j]) continue;
+        r += data[j * 4]; g += data[j * 4 + 1]; b += data[j * 4 + 2]; count++;
+      }
+      if (!count) continue;
+      data[i * 4] = r / count; data[i * 4 + 1] = g / count; data[i * 4 + 2] = b / count;
+      next[i] = 1; changed = true;
+    }
+    filled = next;
+    if (!changed) break;
+  }
+  return imageData;
+}
+
 function stripLoadedTexture(texture) {
   const image = texture.image;
   if (!image || texture.userData.stripped || !image.width) return;
@@ -216,6 +249,7 @@ function stripLoadedTexture(texture) {
   ctx.drawImage(image, 0, 0);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   stripPaleSpriteBackground(imageData);
+  bleedTransparentEdges(imageData);
   ctx.putImageData(imageData, 0, 0);
   texture.image = canvas;
   texture.userData.stripped = true;
@@ -232,10 +266,12 @@ export function itemSprite(tile, invalidate = () => {}) {
       invalidate();
     });
     texture.colorSpace = THREE.SRGBColorSpace;
-    // Nearest, no mips: scaling a sprite up must not bilinear-blur the art.
-    texture.magFilter = texture.minFilter = THREE.NearestFilter;
-    texture.generateMipmaps = false;
-    texture.anisotropy = 1;
+    // The 256 px illustrations are drawn at roughly 30–90 px. Trilinear mips
+    // keep them clean while minified; nearest sampling shimmered and stair-stepped.
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 2;
     textures.set(path, texture);
     materials.set(
       path,

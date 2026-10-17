@@ -4,6 +4,16 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.80 — Sharper picture
+
+- Auto graphics renders at full resolution on Retina and other high-density screens when your computer has room, and keeps edges smooth with antialiasing at every level. Slower machines still step down
+- Auto remembers how sharp your computer can go, so later sessions start there instead of climbing again
+- Loot on the floor is drawn smoothly at every zoom instead of shimmering, without dark fringes
+- Cave walls are shaded a little lighter on one side and darker on the other, so corners and corridors read with more depth while caves stay evenly lit
+- Stone relief lines up with the painted mortar in town and on buildings
+- The dark around explored cave floors no longer shows a seam
+- Cinematic ambient occlusion shades the base of walls and objects instead of darkening large areas, and costs less to draw
+
 ## 1.3.79 — Smoother walking
 
 - Holding a direction or following a clicked route glides at an even speed from tile to tile instead of pausing on every step. The camera moves just as smoothly. A turn is still one move

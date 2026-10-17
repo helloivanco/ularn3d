@@ -85,6 +85,22 @@ const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
+/*
+ * Auto spends headroom on resolution, from below native up to the screen's
+ * own density (Retina included), never above 2×. Tiers above the screen's
+ * density are skipped. The reached tier is remembered on this device.
+ */
+const AUTO_TIER_KEY = "ularn3d.autoTier";
+const AUTO_CAPS = [0.65, 0.75, 1, 1.5, 2];
+const AUTO_LABELS = ["low", "balanced", "high", "sharp", "native"];
+export const autoTierLimit = (ratio = globalThis.devicePixelRatio || 1) => ratio > 1.5 + 1e-6 ? 4 : ratio > 1 + 1e-6 ? 3 : 2;
+const readAutoTier = () => {
+  try {
+    const stored = localStorage.getItem(AUTO_TIER_KEY);
+    const tier = stored == null ? NaN : Number(stored);
+    return Number.isInteger(tier) && tier >= 0 ? Math.min(tier, autoTierLimit()) : 1;
+  } catch { return 1; }
+};
 const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y) => {
   const horiz = Math.max(5, Math.min(46, radius));
   const y = Math.max(4, Math.min(40, elevationY));
@@ -208,7 +224,7 @@ export class World {
       this.longTaskObserver = new PerformanceObserver((list) => { this.longTasks += list.getEntries().length; });
       this.longTaskObserver.observe({ type: "longtask" });
     } catch { this.longTaskObserver = null; }
-    this.autoTier = 1; this.qualityChangedAt = performance.now();
+    this.autoTier = readAutoTier(); this.qualityChangedAt = performance.now();
     this.monsters = new Map();
     this.tick = 0;
     this.lastPlayer = null;
@@ -238,10 +254,12 @@ export class World {
       180,
     );
     this.camera.position.set(13, 17, 19);
+    // MSAA is a context-creation flag. Balanced skips it: fill-rate on the web
+    // is its hitch. Auto keeps it at every tier, so edges stay clean while
+    // resolution adapts; switching into Auto from Balanced takes effect on reload.
+    this.msaa = this.quality !== "balanced";
     this.renderer = new THREE.WebGLRenderer({
-      // MSAA is a context-creation flag. Balanced skips it: fill-rate on the
-      // web is the hitch, and Cinematic's higher pixel ratio plus bloom covers edges.
-      antialias: this.quality === "cinematic",
+      antialias: this.msaa,
       powerPreference: "high-performance",
       stencil: false,
       failIfMajorPerformanceCaveat: false,
@@ -630,7 +648,7 @@ export class World {
         lights: this.scene.children.filter((o) => o.isLight && o.visible && o.intensity > 0).length,
         environment: !!this.scene.environment,
         shadowMap: this.sun.shadow.mapSize.x,
-        antialias: this.quality === "cinematic",
+        antialias: this.msaa,
         bloom: !!(this.bloom && this.bloom.enabled && this.composer),
         composer: !!this.composer,
         ambient: this.ambient.intensity,
@@ -641,7 +659,7 @@ export class World {
         frameMs: this.frameMs || 0,
         renderedFrames: this.renderedFrames,
         frameLimit: this.frameLimit(),
-        effectiveQuality: ["low", "balanced", "high"][this.effectiveTier],
+        effectiveQuality: AUTO_LABELS[this.effectiveTier], autoTierLimit: autoTierLimit(),
         activeFrameP95: percentile(this.frameSamples), renderP95: percentile(this.renderSamples),
         inputLatencyP95: percentile(this.inputSamples), updateP95: percentile(this.updateSamples),
         longTasks: this.longTasks, stepJitter: stepJitter(this.heroSpeeds), heroSpeeds: this.heroSpeeds.map((v) => Math.round(v * 100) / 100),
@@ -676,7 +694,7 @@ export class World {
         shadowUpdates: this.shadowUpdates,
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
         torchReassignments:this.lighting.reassignments,
-        antialiasing:this.cinematicRendering() ? "SMAA" : "none",
+        antialiasing:this.cinematicRendering() ? "SMAA" : this.msaa ? "MSAA" : "none",
         wallRelief:!!this.walls.geometry.getAttribute("color"),
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
@@ -1203,7 +1221,11 @@ export class World {
       1.45,
     );
     this.ao = new SSAOPass(this.scene, this.camera, width / 2, height / 2);
-    this.ao.kernelRadius=8; this.ao.minDistance=.001; this.ao.maxDistance=.12;
+    // Contact shading at tile scale (world units), not an 8-tile smear.
+    this.ao.kernelRadius=1.2; this.ao.minDistance=.0005; this.ao.maxDistance=.01;
+    // The composer sizes every pass at full resolution; AO stays at half.
+    const aoSize = this.ao.setSize.bind(this.ao);
+    this.ao.setSize = (w, h) => aoSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
     this.composer.addPass(this.ao);
     this.composer.addPass(this.bloom);
     this.antialias=new SMAAPass(); this.composer.addPass(this.antialias);
@@ -1248,7 +1270,7 @@ export class World {
   // is an explicit Cinematic choice, avoiding a large automatic cost cliff.
   cinematicRendering() { return this.quality === "cinematic"; }
   qualityPixelRatio() {
-    const cap=this.cinematicRendering()?1.5:this.quality==="auto"?[.65,.75,1][this.effectiveTier]:.75;
+    const cap=this.cinematicRendering()?1.5:this.quality==="auto"?AUTO_CAPS[Math.min(this.effectiveTier, autoTierLimit())]:.75;
     return Math.min(devicePixelRatio,cap);
   }
   applyGpuQuality() {
@@ -1395,8 +1417,9 @@ export class World {
     this.overBudgetMs = p95 > 20 ? (this.overBudgetMs || 0) + frameMs : 0;
     this.headroomMs = p95 < 19 ? (this.headroomMs || 0) + frameMs : 0;
     if (this.overBudgetMs > 2000 && this.autoTier > 0) this.autoTier--;
-    else if (this.headroomMs > 10000 && this.autoTier < 2) this.autoTier++;
+    else if (this.headroomMs > 5000 && this.autoTier < autoTierLimit()) this.autoTier++;
     else return;
+    try { localStorage.setItem(AUTO_TIER_KEY, String(this.autoTier)); } catch {}
     this.qualityChangedAt = now; this.overBudgetMs = this.headroomMs = 0;
     this.frameSamples.length = 0; this.applyQualityWhenSettled();
   }
@@ -1658,6 +1681,9 @@ export class World {
         // recast a 57×20 box into the shadow map on every cutaway step.
         slab.castShadow = false;
         slab.receiveShadow = false;
+        // Unlit in the background color: the explored floor sits in the dark
+        // without a lit footprint edge drawing a hard seam across the view.
+        slab.material = matBasic(this.scene.background.getHex());
       } else {
         const base = groundSlab(-0.715);
         block(
@@ -2481,12 +2507,12 @@ export class World {
     this.renderer.getDrawingBufferSize(this.drawSize);
     if (this.drawSize.x < 1 || this.drawSize.y < 1) return;
     this.camera.updateMatrixWorld();
-    if (this.player?.visible) this.rememberPixel(this.player);
+    // Only nearest-filtered pixel-art sprites benefit. The 3D hero and the
+    // mipmapped item art would jitter against the smoothly scrolling floor.
     for (const { mesh } of this.monsters.values()) {
       const art = mesh.userData.artwork;
       if (art) this.rememberPixel(art);
     }
-    for (const art of this.billboards) this.rememberPixel(art);
   }
   restorePixelGrid() {
     for (let i = 0; i < this.pixelCount; i++) {
@@ -2645,7 +2671,14 @@ export class World {
     if (this.qualityPending) this.applyQualityWhenSettled();
     this.applyPixelGrid();
     try {
-      if (this.composer && this.cinematicRendering()) this.composer.render(dt);
+      if (this.composer && this.cinematicRendering()) {
+        if (this.ao?.enabled) {
+          // Framing slides (view offset) change the projection between resizes.
+          this.ao.ssaoMaterial.uniforms.cameraProjectionMatrix.value.copy(this.camera.projectionMatrix);
+          this.ao.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value.copy(this.camera.projectionMatrixInverse);
+        }
+        this.composer.render(dt);
+      }
       else this.renderer.render(this.scene, this.camera);
     } finally {
       this.restorePixelGrid();
