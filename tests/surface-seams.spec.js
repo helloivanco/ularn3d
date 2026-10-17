@@ -42,7 +42,8 @@ test("town and dungeon bases meet floor bottoms without overlapping edge faces",
     return [0,1,16].map(depth=>{
       newcavelevel(depth);paint();
       const world=window.__surfaceWorld;
-      const slab=world.terrain.children.find(mesh=>mesh.isMesh&&mesh.material.color.getHex()===(depth===0?0x70806e:depth>15?0x22191a:0x101d24));
+      // Cave slabs are unlit in the background color, so find them by name.
+      const slab=world.terrain.children.find(mesh=>mesh.isMesh&&(depth===0?mesh.material.color.getHex()===0x70806e:mesh.name==='cave-slab'));
       const base=new THREE.Box3().setFromObject(slab);
       const floor=world.floor.count?world.floor:world.grassFloor;
       const matrix=new THREE.Matrix4();floor.getMatrixAt(0,matrix);

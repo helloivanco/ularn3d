@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stripPaleSpriteBackground } from "../src/item-art.js";
+import { bleedTransparentEdges, stripPaleSpriteBackground } from "../src/item-art.js";
 
 const rgba = (data, i, r, g, b, a) => {
   data[i * 4] = r;
@@ -30,4 +30,14 @@ test("already transparent corners stay a no-op for clean artifact art", () => {
   assert.equal(image.data[3], 0);
   assert.equal(image.data[5 * 4 + 3], 255);
   assert.equal(image.data[5 * 4], 200);
+});
+
+test("transparent pixels borrow neighboring item color but stay transparent", () => {
+  const image = { data: new Uint8ClampedArray(5 * 5 * 4), width: 5, height: 5 };
+  rgba(image.data, 12, 200, 120, 40, 255);
+  bleedTransparentEdges(image);
+  for (let i = 0; i < 25; i++) {
+    assert.equal(image.data[i * 4 + 3], i === 12 ? 255 : 0, `alpha ${i}`);
+    assert.deepEqual([...image.data.slice(i * 4, i * 4 + 3)], [200, 120, 40], `color ${i}`);
+  }
 });

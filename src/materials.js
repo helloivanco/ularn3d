@@ -183,10 +183,13 @@ function surfaceDetails(kind, resolution=512) {
     const i = (((y + height) % height) * width + ((x + width) % width)) * 4;
     return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 765;
   };
+  // The color map is a CanvasTexture (flipY), so canvas row 0 is the top of
+  // the texture. Data textures upload bottom row first: write rows flipped so
+  // relief lines up with the painted mortar, and point +green up the texture.
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const i = (y * width + x) * 4;
+    const i = ((height - 1 - y) * width + x) * 4;
     const dx = (luminance(x - 2, y) - luminance(x + 2, y)) * 1.6;
-    const dy = (luminance(x, y - 2) - luminance(x, y + 2)) * 1.6;
+    const dy = (luminance(x, y + 2) - luminance(x, y - 2)) * 1.6;
     const length = Math.hypot(dx, dy, 1);
     normals[i] = (dx / length * .5 + .5) * 255;
     normals[i + 1] = (dy / length * .5 + .5) * 255;
@@ -247,11 +250,27 @@ export function matBasic(color, extra = {}) {
     materials.set(key, new THREE.MeshBasicMaterial({ color, ...extra }));
   return materials.get(key);
 }
+/** Relief maps on the same phase as a shifted color map (wall courses). */
+function alignedDetails(kind, map) {
+  const base = surfaceDetails(kind);
+  if (!map || (!map.offset.x && !map.offset.y)) return base;
+  const key = `${kind}@${map.offset.x},${map.offset.y}`;
+  if (!details.has(key)) {
+    const shift = (source) => {
+      const copy = source.clone();
+      copy.offset.copy(map.offset);
+      copy.needsUpdate = true;
+      return copy;
+    };
+    details.set(key, { normalMap: shift(base.normalMap), roughnessMap: shift(base.roughnessMap) });
+  }
+  return details.get(key);
+}
 export function surface(kind, color, extra = {}) {
   const map = texture(kind);
   return mat(color, {
     map,
-    ...surfaceDetails(kind),
+    ...alignedDetails(kind, extra.map),
     normalScale: new THREE.Vector2(kind === "grass" ? .2 : .45, kind === "grass" ? .2 : .45),
     roughness: kind === "roof" ? 0.85 : 0.88,
     ...extra,

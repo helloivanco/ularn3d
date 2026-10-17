@@ -33,15 +33,12 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   const errors=[];
   page.on("pageerror",error=>errors.push(error.message));
   page.on("console",message=>{if(message.type()==="error")errors.push(message.text());});
+  // Exercise the actual app renderer at the high Auto tier (remembered from an
+  // earlier session) without waiting for GPU headroom in a software-rendered test.
   await page.addInitScript(()=>{
     localStorage.setItem("ularn3d.quality","auto");
+    localStorage.setItem("ularn3d.autoTier","2");
     localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));
-  });
-  // Exercise the actual app renderer at the high Auto tier without waiting
-  // for ten seconds of GPU headroom in a software-rendered functional test.
-  await page.route("**/src/world.js*",async route=>{
-    const response=await route.fetch(),body=await response.text();
-    await route.fulfill({response,body:body.replace("this.autoTier = 1;","this.autoTier = 2;")});
   });
   await page.goto("/play/");await expect(page.locator("#loading")).toBeHidden();
   const maps=await page.evaluate(async()=>{
@@ -61,7 +58,7 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   await page.locator("#begin").click();
   const scenes=await page.evaluate(()=>[0,1,16].map(depth=>{newcavelevel(depth);paint();return ularnGraphics.metrics();}));
   for(const scene of scenes){
-    expect(scene.effectiveQuality).toBe("high");expect(scene.pixelRatio).toBe(1);
+    expect(scene.effectiveQuality).toBe("high");expect(scene.pixelRatio).toBe(1);expect(scene.antialiasing).toBe("MSAA");
     expect(scene.composer).toBe(false);expect(scene.shadowMapEnabled).toBe(false);
     expect(scene.pointLights).toBe(0);expect(scene.floorMapped&&scene.wallMapped&&scene.wallRelief).toBe(true);
   }
@@ -74,4 +71,23 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   await page.locator("#resume-game").click();
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().composer)).toBe(false);
   expect(errors).toEqual([]);
+});
+
+test("Auto on a 2x screen climbs to native resolution with MSAA and no Cinematic work", async ({browser}) => {
+  const context=await browser.newContext({deviceScaleFactor:2,viewport:{width:1280,height:800}});
+  const page=await context.newPage();
+  await page.addInitScript(()=>{
+    localStorage.setItem("ularn3d.quality","auto");
+    // A remembered tier above this screen's density is clamped to it.
+    localStorage.setItem("ularn3d.autoTier","9");
+    localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));
+  });
+  await page.goto("/play/");await expect(page.locator("#loading")).toBeHidden();
+  await page.locator("#begin").click();
+  const scene=await page.evaluate(()=>{newcavelevel(1);paint();return ularnGraphics.metrics();});
+  expect(scene.autoTierLimit).toBe(4);
+  expect(scene.effectiveQuality).toBe("native");expect(scene.pixelRatio).toBe(2);
+  expect(scene.antialiasing).toBe("MSAA");
+  expect(scene.composer).toBe(false);expect(scene.shadowMapEnabled).toBe(false);expect(scene.pointLights).toBe(0);
+  await context.close();
 });

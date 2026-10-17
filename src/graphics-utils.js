@@ -3,12 +3,20 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 const mergedMaterials = new Map();
 
+/*
+ * Side faces also take a fixed key light from the south-west, where the sun
+ * sits: west and south faces read lighter, east and north darker. Corners and
+ * corridors gain depth while unlit caves stay evenly lit.
+ */
+const faceLight = (x, z) => 0.93 + Math.max(-1, Math.min(1, -x * 0.7 + z * 0.45)) * 0.07;
+
 /** Static wall depth, including unlit caves, with the existing vertices/pass. */
 export function bakeWallRelief(geometry) {
   const position=geometry.getAttribute("position"), normal=geometry.getAttribute("normal");
   const colors=new Float32Array(position.count*3);
   for(let i=0;i<position.count;i++) {
-    const y=normal.getY(i), shade=y>.5?1:y<-.5?.64:.72+(position.getY(i)+.5)*.22;
+    const y=normal.getY(i);
+    const shade=y>.5?1:y<-.5?.64:(.72+(position.getY(i)+.5)*.22)*faceLight(normal.getX(i),normal.getZ(i));
     colors.set([shade,shade,shade],i*3);
   }
   geometry.setAttribute("color",new THREE.BufferAttribute(colors,3));
