@@ -57,19 +57,32 @@ import {
   pushOutOfWalls,
   STEP_MS,
   STEP_CONTACT,
-  stepEase,
+  StepGlide,
+  stepCurve,
   stepPose,
   stepRoute,
   SWING_MS,
 } from "./hero-motion.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
+/** Spread of per-frame hero speed in the middle of a walk (0 is perfectly even). */
+const stepJitter = (speeds) => {
+  const middle = speeds.slice(Math.floor(speeds.length * 0.2), Math.ceil(speeds.length * 0.8));
+  if (middle.length < 6) return 0;
+  const mean = middle.reduce((a, b) => a + b, 0) / middle.length;
+  if (mean <= 0) return 0;
+  const variance = middle.reduce((a, b) => a + (b - mean) ** 2, 0) / middle.length;
+  return Math.round(Math.sqrt(variance) / mean * 1000) / 1000;
+};
+const routeLength = (route) => {
+  let length = 0;
+  for (let i = 1; i < route.length; i++) length += Math.hypot(route[i].x - route[i - 1].x, route[i].z - route[i - 1].z);
+  return length;
+};
 const FLOOR_LIMIT = 40 * 32;
 /* North-aligned default: pure +Z offset looks toward game north (−Z / −map Y). */
 const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
-/* One stride crosses the tile. The turn is still one action; only the view and body move. */
-const FOLLOW_MS = STEP_MS;
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
 const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y) => {
@@ -91,13 +104,15 @@ const readCameraPrefs = () => {
     return null;
   }
 };
+let writtenCameraPrefs = "";
 const writeCameraPrefs = (offset) => {
   try {
     const radius = Math.hypot(offset.x, offset.z);
-    localStorage.setItem(
-      CAMERA_PREF_KEY,
-      JSON.stringify({ radius, elevation: offset.y }),
-    );
+    const value = JSON.stringify({ radius, elevation: offset.y });
+    // Every turn captures the camera; storage is touched only when zoom or tilt changed.
+    if (value === writtenCameraPrefs) return;
+    localStorage.setItem(CAMERA_PREF_KEY, value);
+    writtenCameraPrefs = value;
   } catch {}
 };
 function destroy(group) {
@@ -187,6 +202,12 @@ export class World {
     this.objects = new Map();
     this.tileIndex = new Map();
     this.frameSamples = []; this.renderSamples = []; this.inputSamples = []; this.updateSamples = [];
+    // Hero speed per frame during the latest walk: a stop-go glide shows up as dips.
+    this.heroSpeeds = []; this.heroLast = new THREE.Vector3(); this.longTasks = 0;
+    try {
+      this.longTaskObserver = new PerformanceObserver((list) => { this.longTasks += list.getEntries().length; });
+      this.longTaskObserver.observe({ type: "longtask" });
+    } catch { this.longTaskObserver = null; }
     this.autoTier = 1; this.qualityChangedAt = performance.now();
     this.monsters = new Map();
     this.tick = 0;
@@ -471,6 +492,18 @@ export class World {
     this.followMs = 0;
     this.followHeld = true;
     this.followRoute = null;
+    // Velocity-continuous tile crossings: a held run cruises between plants.
+    this.glide = new StepGlide();
+    this.stepDir = new THREE.Vector2();
+    this.stepLength = 0;
+    this.stepCruised = false;
+    this.stepFar = false;
+    this.runActive = false;
+    this.runNextAt = 0;
+    this.stepLate = 4;
+    this.stepInterval = STEP_MS;
+    this.lastStepAt = 0;
+    this.stepStartedAt = 0;
     this.stepHome = null;
     this.stepDest = null;
     this.solidTiles = new Set();
@@ -575,6 +608,7 @@ export class World {
       if (!this.animating) this.invalidate();
     });
     this.controls.addEventListener("start", () => {
+      this.cameraTween = null;
       this.cameraLive = true;
       this.invalidate();
     });
@@ -610,6 +644,8 @@ export class World {
         effectiveQuality: ["low", "balanced", "high"][this.effectiveTier],
         activeFrameP95: percentile(this.frameSamples), renderP95: percentile(this.renderSamples),
         inputLatencyP95: percentile(this.inputSamples), updateP95: percentile(this.updateSamples),
+        longTasks: this.longTasks, stepJitter: stepJitter(this.heroSpeeds), heroSpeeds: this.heroSpeeds.map((v) => Math.round(v * 100) / 100),
+        cameraSettling: !!(this.cameraTween || this.viewEasing),
         terrainRebuilds: this.grid.rebuilds, staticChunks: this.staticTiles.chunks.size,
         routePoints: this.routePointCount, routeVisible: false,
         heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect,
@@ -737,7 +773,7 @@ export class World {
       heroMotion: () => {
         const now = performance.now();
         const swing = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
-        const step = this.followLive() ? (now - this.followStart) / this.followMs : 1;
+        const step = this.followLive() ? this.glide.progress(now) : 1;
         return {
           style: this.attackStyle || "punch",
           armed: (this.heroWeapon?.children?.length || 0) > 0,
@@ -822,9 +858,9 @@ export class World {
     const fps = this.frameLimit() || 12;
     const delay = live ? 0 : Math.max(0, 1000 / fps - (performance.now() - this.lastTime));
     const kick = () => {
-      this.frameRequest = requestAnimationFrame(() => {
+      this.frameRequest = requestAnimationFrame((frameTime) => {
         this.frameRequest = null;
-        this.animate();
+        this.animate(frameTime);
       });
     };
     if (delay > 0) {
@@ -944,6 +980,11 @@ export class World {
     return box;
   }
   ensureSolid() {
+    // Solid cells change only with the known structure, not on every step.
+    const rev = this.state?.structureRev;
+    const key = rev == null ? null : `${this.level}|${rev}|${this.wallLayout}|${this.wallCells.length}`;
+    if (key !== null && key === this.solidKey) return;
+    this.solidKey = key;
     const set = this.solidTiles;
     set.clear();
     for (const tile of this.wallCells) set.add(`${tile.x},${tile.y}`);
@@ -1085,7 +1126,8 @@ export class World {
     const stepping = this.followLive();
     const swinging = swingT >= 0 && swingT < 1;
     const casting = castT >= 0 && castT < 1;
-    const stepTime = stepping ? Math.min(1,(now-this.followStart)/this.followMs) : 1;
+    // Stride by distance covered, so feet do not slide when a crossing is stretched.
+    const stepTime = stepping ? this.glide.progress(now) : 1;
     const rawStep = blendStep(stepping ? this.stepPoseFrom : null,
       stepPose(stepTime,!!this.stepLeadRight,(this.heroWeapon?.children.length || 0)>0),stepTime);
     const step = stepping ? this.fitStride(rawStep) : rawStep;
@@ -1319,10 +1361,12 @@ export class World {
   }
   syncPlayerLight() {
     const enabled=this.cinematicRendering() && this.state?.level===0;
-    if (!enabled) { this.disablePointLights(); return; }
+    if (!enabled) { this.disablePointLights(); this.lightKey = null; return; }
     this.playerLight.visible=true; this.playerLight.intensity=3.5;
     this.torchLights.forEach((light,index)=>{light.visible=index<4;});
-    if(this.playerTarget)this.lighting.assign(this.lamps,this.playerTarget,4);
+    // Torch choice depends only on the hero's tile and the lamp set.
+    const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${this.lampRev}` : null;
+    if (key && key !== this.lightKey) { this.lightKey = key; this.lighting.assign(this.lamps,this.playerTarget,4); }
   }
   setQuality(value, persist = true) {
     this.quality = ["auto", "cinematic", "balanced"].includes(value)
@@ -1354,7 +1398,13 @@ export class World {
     else if (this.headroomMs > 10000 && this.autoTier < 2) this.autoTier++;
     else return;
     this.qualityChangedAt = now; this.overBudgetMs = this.headroomMs = 0;
-    this.frameSamples.length = 0; this.applyQuality();
+    this.frameSamples.length = 0; this.applyQualityWhenSettled();
+  }
+  applyQualityWhenSettled() {
+    // A resize mid-step is a long frame and a visible pop; wait for the plant.
+    if (this.followLive() || this.cameraLive) { this.qualityPending = true; return; }
+    this.qualityPending = false;
+    this.applyQuality();
   }
   project(position) {
     this.camera.updateMatrixWorld();
@@ -1363,10 +1413,30 @@ export class World {
   }
   setViewportRect(rect) {
     this.viewportRect = { ...rect };
-    this.camera.setViewOffset(innerWidth, innerHeight,
-      innerWidth / 2 - (rect.left + rect.right) / 2,
-      innerHeight / 2 - (rect.top + rect.bottom) / 2, innerWidth, innerHeight);
+    const x = innerWidth / 2 - (rect.left + rect.right) / 2, y = innerHeight / 2 - (rect.top + rect.bottom) / 2;
+    const resized = this.viewSize?.width !== innerWidth || this.viewSize?.height !== innerHeight;
+    this.viewSize = { width: innerWidth, height: innerHeight };
+    this.viewTarget = { x, y };
+    // A window resize reframes at once; a panel opening (effects rail, HUD)
+    // slides the framing over a few frames instead of jumping sideways.
+    if (resized || !this.viewOffset || this.reduced || !this.state) {
+      this.viewOffset = { x, y };
+      this.applyViewOffset();
+    } else this.viewEasing = true;
     this.invalidate();
+  }
+  applyViewOffset() {
+    this.camera.setViewOffset(innerWidth, innerHeight, this.viewOffset.x, this.viewOffset.y, innerWidth, innerHeight);
+  }
+  stepViewOffset(dt) {
+    if (!this.viewEasing) return;
+    const blend = 1 - Math.exp(-dt / 0.05), view = this.viewOffset, target = this.viewTarget;
+    view.x += (target.x - view.x) * blend;
+    view.y += (target.y - view.y) * blend;
+    if (Math.abs(target.x - view.x) < 0.5 && Math.abs(target.y - view.y) < 0.5) {
+      view.x = target.x; view.y = target.y; this.viewEasing = false;
+    }
+    this.applyViewOffset();
   }
   setRoute(points = []) {
     // Preserve read-only travel diagnostics without drawing guidance lines.
@@ -1496,6 +1566,7 @@ export class World {
       this.heldCameraOffset && this.heldCameraOffset.lengthSq() > 1
         ? this.heldCameraOffset.clone()
         : GAME_CAMERA.clone();
+    this.cameraTween = null;
     const damping = this.controls.enableDamping;
     this.controls.enableDamping = false;
     this.controls.update();
@@ -1522,7 +1593,11 @@ export class World {
     return this.heldCameraOffset.clone();
   }
   update(state) {
-    const updateStarted = performance.now();
+    const started = performance.now();
+    try { this.applyUpdate(state); }
+    finally { sample(this.updateSamples, performance.now() - started); }
+  }
+  applyUpdate(state) {
     const old = this.state;
     if (old && this.level != null) this.captureCamera();
     this.state = state;
@@ -1544,7 +1619,7 @@ export class World {
       this.monsters.clear();
       this.effects.clear();
       this.ambientRats?.clear();
-      this.lamps = [];
+      this.lamps = []; this.lampRev = (this.lampRev || 0) + 1;
       this.wallHeightAt.length = 0;
       this.wallView = null;
       this.wallLayoutKey = null;
@@ -1721,7 +1796,7 @@ export class World {
     this.staticKey = staticKey;
     this.structureKey = structureKey;
     this.wallCells = [];
-    this.lamps.length = 0;
+    this.lamps.length = 0; this.lampRev = (this.lampRev || 0) + 1;
     const rebuildFloors = isNew || this.floorHash !== floorHash;
     this.floorHash = floorHash;
     let rubbleIndex = 0;
@@ -1940,18 +2015,13 @@ export class World {
           mesh,
           species: monster.id,
           target: new THREE.Vector3(tile.x, 0, tile.y),
-          start: new THREE.Vector3(tile.x, 0, tile.y), movedAt: performance.now() - 100,
+          start: new THREE.Vector3(tile.x, 0, tile.y), movedAt: 0,
+          glide: new StepGlide(), dir: new THREE.Vector2(), length: 0, chained: false,
         };
         this.monsters.set(uid, actor);
         this.actors.add(mesh);
       }
-      if (actor.target.x !== tile.x || actor.target.z !== tile.y) {
-        actor.start.copy(actor.mesh.position); actor.movedAt = performance.now();
-        if (Math.max(Math.abs(actor.target.x - tile.x), Math.abs(actor.target.z - tile.y)) > 1) {
-          actor.start.set(tile.x, 0, tile.y); actor.mesh.position.copy(actor.start); actor.movedAt -= 100;
-        }
-        actor.target.set(tile.x, 0, tile.y);
-      }
+      if (actor.target.x !== tile.x || actor.target.z !== tile.y) this.moveActor(actor, tile);
       actor.mesh.userData.uid = uid;
       actor.mesh.userData.tile = { x: tile.x, y: tile.y };
       if (actor.mesh.userData.model) faceCreature(actor.mesh, monster.facing);
@@ -1963,6 +2033,34 @@ export class World {
         destroy(actor.mesh);
         this.monsters.delete(uid);
       }
+  }
+  /**
+   * Creatures cross a tile on the hero's step curve. One that moved last turn
+   * too (a chaser during a held run) keeps its speed; a jump of more than two
+   * tiles lands at once.
+   */
+  moveActor(actor, tile) {
+    const now = this.motionClock(), glide = actor.glide;
+    const jump = Math.max(Math.abs(actor.target.x - tile.x), Math.abs(actor.target.z - tile.y));
+    actor.nominal = Math.max(1, Math.hypot(actor.target.x - tile.x, actor.target.z - tile.y));
+    const speed = glide.carry(now) * actor.length;
+    actor.start.copy(actor.mesh.position);
+    actor.target.set(tile.x, 0, tile.y);
+    actor.chained = !!actor.movedAt && now - actor.movedAt < 400;
+    actor.movedAt = now;
+    const dx = actor.target.x - actor.start.x, dz = actor.target.z - actor.start.z;
+    actor.length = Math.hypot(dx, dz);
+    if (jump > 2 || this.reduced || actor.length < 1e-6) {
+      actor.start.copy(actor.target);
+      actor.mesh.position.copy(actor.target);
+      glide.plan(now, 0, 1);
+      return;
+    }
+    const along = Math.max(0, speed * (actor.dir.x * dx + actor.dir.y * dz) / actor.length);
+    actor.dir.set(dx / actor.length, dz / actor.length);
+    const cruise = actor.chained && this.runActive;
+    const ms = cruise ? this.stepInterval : STEP_MS;
+    glide.plan(now, ms, 0, along / actor.length, cruise ? actor.nominal / ms / actor.length : 0);
   }
   syncMovers(state, old) {
     this.player.visible = true;
@@ -2038,7 +2136,6 @@ export class World {
         (a, b) => a.distanceToSquared(target) - b.distanceToSquared(target),
       );
     }
-    this.disablePointLights();
     this.syncCooperationAura(state);
     this.updateWalls();
     this.ensureSolid();
@@ -2175,22 +2272,48 @@ export class World {
       y = Math.round(this.scratchPosition.z);
     return this.state.tiles.find((t) => t.x === x && t.y === y) || null;
   }
-  rotate(direction) {
-    const offset = this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
-    offset.applyAxisAngle(UP, (direction * Math.PI) / 4);
-    this.camera.position.copy(this.controls.target).add(offset);
-    this.controls.update();
-    this.captureCamera();
-    this.updateWalls();
+  /** Where the camera is headed: the end of a running orbit ease, or where it is. */
+  cameraGoal() {
+    if (this.cameraTween) return new THREE.Vector3().setFromSpherical(this.cameraTween.to);
+    return this.camera.position.clone().sub(this.controls.target);
+  }
+  /** Orbit to a new offset over a short ease instead of jumping. */
+  tweenCamera(offset, ms = 140) {
+    if (this.reduced) {
+      this.cameraTween = null;
+      this.camera.position.copy(this.controls.target).add(offset);
+      this.controls.update();
+      this.captureCamera();
+      this.updateWalls();
+      this.invalidate();
+      return;
+    }
+    const from = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
+    const to = new THREE.Spherical().setFromVector3(offset);
+    const turn = to.theta - from.theta;
+    this.cameraTween = { start: performance.now(), ms, from, to, turn: Math.atan2(Math.sin(turn), Math.cos(turn)), at: new THREE.Spherical() };
     this.invalidate();
   }
-  zoom(factor) {
-    const offset = this.scratchOffset.copy(this.camera.position).sub(this.controls.target);
-    offset.multiplyScalar(factor).clampLength(5, 46);
-    this.camera.position.copy(this.controls.target).add(offset);
-    this.controls.update();
+  stepCameraTween(now) {
+    const tween = this.cameraTween;
+    if (!tween) return;
+    const u = Math.max(0, Math.min(1, (now - tween.start) / tween.ms)), eased = stepCurve(u);
+    tween.at.set(
+      tween.from.radius + (tween.to.radius - tween.from.radius) * eased,
+      tween.from.phi + (tween.to.phi - tween.from.phi) * eased,
+      tween.from.theta + tween.turn * eased,
+    );
+    this.camera.position.copy(this.controls.target).add(this.scratchOffset.setFromSpherical(tween.at));
+    if (u < 1) return;
+    this.cameraTween = null;
     this.captureCamera();
-    this.invalidate();
+    this.updateWalls();
+  }
+  rotate(direction) {
+    this.tweenCamera(this.cameraGoal().applyAxisAngle(UP, (direction * Math.PI) / 4));
+  }
+  zoom(factor) {
+    this.tweenCamera(this.cameraGoal().multiplyScalar(factor).clampLength(5, 46));
   }
   reset() {
     if (this.state) {
@@ -2200,18 +2323,16 @@ export class World {
         prefs?.radius ?? GAME_CAMERA_DIST,
         prefs?.elevation ?? GAME_CAMERA_Y,
       );
+      const offset = this.camera.position.clone().sub(this.controls.target);
       this.controls.target.set(this.state.x, 0, this.state.y);
-      this.camera.position
-        .copy(this.controls.target)
-        .add(this.heldCameraOffset);
+      this.camera.position.copy(this.controls.target).add(offset);
       if (this.playerTarget) this.player.position.copy(this.playerTarget);
       this.followHeld = true;
       this.finishStepTiles();
       this.yawEase = false;
       this.controls.update();
       writeCameraPrefs(this.heldCameraOffset);
-      this.updateWalls();
-      this.invalidate();
+      this.tweenCamera(this.heldCameraOffset.clone());
     }
   }
   emitFootstep() {
@@ -2220,33 +2341,114 @@ export class World {
     this.footfalls=(this.footfalls||0)+1;
     window.dispatchEvent(new CustomEvent("ularn:footstep",{detail:{...step,right:!!this.stepLeadRight}}));
   }
+  /**
+   * A crossing starts where the hero was last drawn, at the time it was drawn.
+   * The next frame's vsync time can precede a step that lands in the same
+   * frame, which would otherwise draw the start position twice.
+   */
+  motionClock() {
+    const now = performance.now();
+    return this.frameNow && now - this.frameNow < 40 ? this.frameNow : now;
+  }
   startFollow(target,footstep=null) {
-    this.stepPoseFrom=this.followLive() ? this.lastStepPose : null;
+    const now = this.motionClock();
+    const live = this.followLive();
+    // Speed carried in from the crossing in progress, or from one that just handed over
+    // (possibly before a frame has drawn its final position).
+    const speed = this.glide.carry(now) * this.stepLength;
+    const fromX = this.stepDir.x, fromZ = this.stepDir.y;
+    if (this.stepCruised && this.lastStepAt && now - this.lastStepAt < 400)
+      this.stepInterval += (Math.min(STEP_MS * 1.3, Math.max(STEP_MS, now - this.lastStepAt)) - this.stepInterval) * 0.3;
+    if (this.runNextAt) {
+      const late = performance.now() - this.runNextAt;
+      if (late >= 0 && late < 60) this.stepLate += (late - this.stepLate) * 0.25;
+    }
+    this.runNextAt = 0;
+    this.lastStepAt = now;
+    this.stepStartedAt = performance.now();
+    if (!live && speed === 0) this.heroSpeeds.length = 0;
+    this.stepPoseFrom=live ? this.lastStepPose : null;
     this.footstepPending=document.hidden || this.lost ? null : footstep;
     this.followFrom.copy(this.player.position);
     this.followCam.copy(this.controls.target);
-    this.followStart = performance.now();
+    this.followStart = now;
     const moving =
       this.followFrom.distanceToSquared(target) > 1e-8 ||
       this.followCam.distanceToSquared(target) > 1e-8;
-    this.followMs = this.reduced || !moving ? 0 : FOLLOW_MS;
-    this.followHeld = this.followMs === 0;
-    this.hasMotion = this.followMs > 0;
+    const dx = target.x - this.followFrom.x, dz = target.z - this.followFrom.z;
+    const distance = Math.hypot(dx, dz);
+    // Several tiles in one turn (a run or a short hop) glides; a teleport lands at once.
+    const far = distance > 1.5;
+    let snap = this.reduced || !moving || distance > 12;
     if (moving && footstep) this.stepLeadRight = !this.stepLeadRight;
     this.stepHome = { x: Math.round(this.followFrom.x), z: Math.round(this.followFrom.z) };
     this.stepDest = { x: Math.round(target.x), z: Math.round(target.z) };
     this.ensureSolid();
-    if (!this.followMs) {
+    if (!snap) {
+      this.followRoute = stepRoute(
+        { x: this.followFrom.x, z: this.followFrom.z },
+        { x: target.x, z: target.z },
+        (x, z) => this.isSolid(x, z),
+      );
+      this.stepLength = routeLength(this.followRoute);
+      if (far && this.stepLength < 1e-6) snap = true;
+    }
+    this.followHeld = snap;
+    this.hasMotion = !snap;
+    if (snap) {
+      this.glide.plan(now, 0, 1);
+      this.followMs = 0;
+      this.stepCruised = this.stepFar = false;
       this.snapFollow();
       this.finishStepTiles();
       this.emitFootstep();
       return;
     }
-    this.followRoute = stepRoute(
-      { x: this.followFrom.x, z: this.followFrom.z },
-      { x: target.x, z: target.z },
-      (x, z) => this.isSolid(x, z),
-    );
+    if (distance > 1e-6) this.stepDir.set(dx / distance, dz / distance);
+    // One tile (or a diagonal) per cadence, whatever is left of the previous crossing.
+    this.stepNominal = Math.max(1, Math.hypot(target.x - this.stepHome.x, target.z - this.stepHome.z));
+    // Reversals and sharp turns start from rest; a straight run keeps cruising.
+    const along = Math.max(0, speed * (fromX * this.stepDir.x + fromZ * this.stepDir.y));
+    const rate0 = this.stepLength > 1e-6 ? along / this.stepLength : 0;
+    this.stepFar = far;
+    this.stepCruised = rate0 > 0;
+    if (far) this.glide.plan(now, Math.min(700, Math.max(STEP_MS, distance * 70)), 0, rate0, 0);
+    else if (this.runActive) this.glide.plan(now, this.stepInterval, 0, rate0, this.cruiseRate());
+    else this.glide.plan(now, STEP_MS, 0, rate0, 0);
+    this.followMs = this.glide.end() - now;
+  }
+  /** Progress per ms that crosses one nominal tile per step interval. */
+  cruiseRate() {
+    return this.stepLength > 1e-6 ? this.stepNominal / Math.max(STEP_MS, this.stepInterval) / this.stepLength : 0;
+  }
+  /** Input expects another step after `delay` ms: hand over at cruise instead of planting. */
+  expectNextStep(delay) {
+    const now = performance.now();
+    this.runActive = true;
+    this.runNextAt = now + delay;
+    // Only the crossing this turn just started (in real time) takes the hint.
+    if (!this.followLive() || this.stepFar || now - this.stepStartedAt > 40) return;
+    const cruise = this.cruiseRate();
+    // Hand over a little after the next turn is expected, so a late timer
+    // still finds the hero mid-glide instead of planted for a frame.
+    const endAt = Math.max(this.followStart + STEP_MS, this.runNextAt + Math.max(20, this.stepLate + 12));
+    this.glide.replan(now, endAt, cruise);
+    this.followMs = this.glide.end() - this.followStart;
+    for (const actor of this.monsters.values())
+      if (actor.chained && now - actor.movedAt <= 40 && !actor.glide.done(now))
+        actor.glide.replan(now, endAt, actor.nominal / Math.max(STEP_MS, this.stepInterval) / actor.length);
+  }
+  /** The hold or route ended: ease the current crossing out from its live speed. */
+  endRun() {
+    this.runActive = false;
+    this.runNextAt = 0;
+    const now = performance.now();
+    for (const actor of this.monsters.values())
+      if (actor.glide.endRate > 0 && !actor.glide.done(now))
+        actor.glide.replan(now, Math.max(now + 60, actor.movedAt + STEP_MS), 0);
+    if (!this.followLive() || this.glide.endRate <= 0) return;
+    this.glide.replan(now, Math.max(now + 60, this.followStart + STEP_MS), 0);
+    this.followMs = this.glide.end() - this.followStart;
   }
   snapFollow() {
     if (!this.playerTarget) return;
@@ -2293,14 +2495,18 @@ export class World {
     }
     this.pixelCount = 0;
   }
-  animate() {
-    const now = performance.now(),
-      elapsed = (now - this.lastTime) / 1000;
-    // A turn wakes the loop after it has been idle. Spending that gap as one
-    // step makes the camera and hero pop. Clock-based follow ignores it;
-    // everything else takes a single frame.
-    const dt = elapsed > 0.08 ? 1 / 60 : elapsed;
+  animate(frameTime) {
+    // Motion samples the vsync time so every frame advances by the same step;
+    // render cost is still measured from when this callback actually ran.
+    const started = performance.now(),
+      now = Number.isFinite(frameTime) ? Math.max(this.lastTime, Math.min(frameTime, started)) : started,
+      elapsed = Math.max(0, now - this.lastTime) / 1000;
+    // invalidate() rewinds the clock by one frame after an idle gap, so waking
+    // never spends the gap at once. Long frames still advance in real time
+    // (Cinematic idles at 12 FPS) up to a bounded step.
+    const dt = Math.min(elapsed, 0.1);
     this.lastTime = now;
+    this.frameNow = now;
     if (document.hidden || this.lost) {
       this.animating = false;
       return;
@@ -2312,9 +2518,8 @@ export class World {
     if (!this.reduced && this.water.visible) this.waterTime.value = this.tick;
     this.animating = true;
     if (this.playerTarget && this.followLive()) {
-      const t = Math.min(1, (now - this.followStart) / this.followMs);
-      const eased = stepEase(t);
-      if (t >= 1) {
+      const eased = this.glide.progress(now);
+      if (this.glide.done(now)) {
         this.snapFollow();
         if (this.yawEase) this.player.rotation.y = this.yawTo;
         this.yawEase = false;
@@ -2334,8 +2539,17 @@ export class World {
         this.player.position.set(clear.x, 0, clear.z);
         this.faceStep(eased);
       }
-      if (t>=STEP_CONTACT) this.emitFootstep();
+      if (eased>=STEP_CONTACT) this.emitFootstep();
     }
+    if (this.playerTarget && this.followLive() && dt > 0) {
+      if (this.heroSampling) {
+        const speeds = this.heroSpeeds;
+        speeds.push(this.player.position.distanceTo(this.heroLast) / dt);
+        if (speeds.length > 240) speeds.shift();
+      }
+      this.heroSampling = true;
+      this.heroLast.copy(this.player.position);
+    } else this.heroSampling = false;
     if (this.playerTarget) {
       this.playerLight.position
         .copy(this.player.position)
@@ -2357,32 +2571,35 @@ export class World {
       }
       if (this.burstAge > 0.55) this.burst.visible = false;
     }
+    // Cinematic: the hero's shadow moves with the hero, every frame of a step.
     if (
       this.cinematicRendering() &&
       this.playerTarget &&
-      this.player.position.distanceToSquared(this.playerTarget) > 0.0001 &&
-      this.tick - (this.shadowTime || 0) > 0.08
-    ) {
-      this.markShadowUpdate();
-      this.shadowTime = this.tick;
-    }
+      this.player.position.distanceToSquared(this.playerTarget) > 0.0001
+    ) this.markShadowUpdate();
+    this.stepCameraTween(now);
+    this.stepViewOffset(dt);
     this.renderer.info.reset();
     this.scratchCam.copy(this.camera.position);
+    // Orbit damping is per frame in three.js; scale it so 120 Hz glides like 60 Hz.
+    this.controls.dampingFactor = 1 - Math.pow(1 - 0.075, Math.max(dt, 1 / 240) * 60);
     this.controls.update();
     this.camera.updateMatrixWorld();
     this.hasMotion = this.followLive() || !!this.heroLimbLive;
     if (this.playerTarget && this.player.position.distanceToSquared(this.playerTarget) > 0.0001)
       this.hasMotion = true;
     if (this.camera.position.distanceToSquared(this.scratchCam) > 1e-8) this.hasMotion = true;
+    if (this.cameraTween || this.viewEasing) this.hasMotion = true;
     const camTurned = !this.lastCamQuatValid || !this.lastCamQuat.equals(this.camera.quaternion);
     if (camTurned) {
       this.lastCamQuat.copy(this.camera.quaternion);
       this.lastCamQuatValid = true;
     }
-    for (const { mesh, target, start, movedAt } of this.monsters.values()) {
-      const moving = mesh.position.distanceToSquared(target) > 0.0004;
+    for (const { mesh, target, start, glide } of this.monsters.values()) {
+      const progress = this.reduced ? 1 : glide.progress(now);
+      const moving = progress < 1;
       if (!moving) mesh.position.copy(target);
-      else mesh.position.lerpVectors(start,target,this.reduced ? 1 : Math.min(1,(now-movedAt)/100));
+      else mesh.position.lerpVectors(start, target, progress);
       const body = mesh.userData.body;
       if (body) {
         const base = mesh.userData.hover || 0;
@@ -2425,6 +2642,7 @@ export class World {
       this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
     }
     if (this.state?.level === 0) this.updateCutaways(Math.min(elapsed, .1));
+    if (this.qualityPending) this.applyQualityWhenSettled();
     this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) this.composer.render(dt);
@@ -2432,7 +2650,7 @@ export class World {
     } finally {
       this.restorePixelGrid();
     }
-    sample(this.renderSamples, performance.now() - now);
+    sample(this.renderSamples, performance.now() - started);
     if (!this.paused && this.state && this.hasMotion) {
       // Animation integration clamps long frames, but Auto must still see
       // actual GPU/main-thread stalls and reduce resolution when overloaded.
@@ -2508,6 +2726,7 @@ export class World {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.longTaskObserver?.disconnect();
     this.stopFrames();
     this.events.abort();
     this.controls.dispose();

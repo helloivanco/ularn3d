@@ -4,36 +4,55 @@ export const DIRECTIONS = [
 ];
 export const MOVE_DELAY = 220;
 export const MOVE_INTERVAL = 140;
+const NAMED = { up: "k", down: "j", left: "h", right: "l", home: "y", pageup: "u", end: "b", pagedown: "n" };
+/** Tile offset of a movement key, or null. */
+export const keyOffset = (key) => {
+  const letter = NAMED[key] || String(key).toLowerCase();
+  const direction = DIRECTIONS.find((d) => d[2] === letter);
+  return direction ? { x: direction[0], y: direction[1] } : null;
+};
 export const movementKey = (key) => ["up", "down", "left", "right", "home", "end", "pageup", "pagedown", ...DIRECTIONS.map((d) => d[2])].includes(key);
 // Missing metadata is conservative: only explicitly harmless visible creatures
 // are passable. A mimic wearing a lemming silhouette is still a threat.
 export const isHostile = (tile) => !!tile?.monster && tile.monster.harmless !== true;
 
 // One timer, one action per deadline. A stalled frame never creates a burst of turns.
+// Repeats keep to the ideal cadence, so engine time does not stretch every step;
+// a stall resets the timeline instead of catching up. onCadence reports when the
+// next step is due (null when the hold ends) so the glide can carry its speed.
 export class HeldMovement {
-  constructor(send, allowed, timers = globalThis) {
-    this.send = send; this.allowed = allowed; this.timers = timers;
-    this.current = null; this.timer = null;
+  constructor(send, allowed, timers = globalThis, onCadence = null) {
+    this.send = send; this.allowed = allowed; this.timers = timers; this.onCadence = onCadence;
+    this.current = null; this.timer = null; this.due = 0;
   }
+  now() { return this.timers.now ? this.timers.now() : performance.now(); }
   start(key, source) {
     this.stop();
     if (!this.allowed()) return;
     this.current = { key, source };
     this.send(key);
     if (!this.current || !this.allowed()) { this.stop(); return; }
-    this.timer = this.timers.setTimeout(() => this.repeat(), MOVE_DELAY);
+    this.schedule(MOVE_DELAY);
   }
   repeat() {
     this.timer = null;
     if (!this.current || !this.allowed()) { this.stop(); return; }
     this.send(this.current.key);
     if (!this.current || !this.allowed()) { this.stop(); return; }
-    this.timer = this.timers.setTimeout(() => this.repeat(), MOVE_INTERVAL);
+    const remaining = this.due + MOVE_INTERVAL - this.now();
+    this.schedule(remaining >= MOVE_INTERVAL / 2 ? Math.min(MOVE_INTERVAL, remaining) : MOVE_INTERVAL);
+  }
+  schedule(delay) {
+    this.due = this.now() + delay;
+    this.timer = this.timers.setTimeout(() => this.repeat(), delay);
+    this.onCadence?.(delay, this.current.key);
   }
   release(source) { if (this.current?.source === source) this.stop(); }
   stop() {
+    const holding = !!this.current;
     this.timers.clearTimeout(this.timer);
     this.timer = null; this.current = null;
+    if (holding) this.onCadence?.(null);
   }
 }
 

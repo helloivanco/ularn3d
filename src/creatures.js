@@ -562,8 +562,11 @@ export function faceCreature(group, facing) {
     group.userData.targetAngle = Math.atan2(-facing.x, -facing.y);
   }
 }
+// userData is JSON-cloned, so the per-frame body lookup is cached beside it.
+const bodies = new WeakMap();
 export function animateCreature(group, now, walking, reduced) {
-  const body = group.getObjectByName("creature-body");
+  let body = bodies.get(group);
+  if (body === undefined) bodies.set(group, body = group.getObjectByName("creature-body") || null);
   if (!body) return;
   const elapsed = Math.max(0, Math.min(50, now - (group.userData.animationAt ?? now)));
   group.userData.animationAt = now;
@@ -576,7 +579,8 @@ export function animateCreature(group, now, walking, reduced) {
   const angle = group.userData.targetAngle ?? group.rotation.y;
   let difference = (angle - group.rotation.y + Math.PI) % (Math.PI * 2);
   if (difference < 0) difference += Math.PI * 2;
-  group.rotation.y += (difference - Math.PI) * (reduced ? 1 : .35);
+  // Same turn rate at 60 and 120 Hz.
+  group.rotation.y += (difference - Math.PI) * (reduced ? 1 : 1 - Math.exp(-elapsed / 38));
   body.position.y = reduced ? 0 : Math.sin(phase) * (.006 + stride * .01);
   for (const part of body.children) {
     const rest = part.userData.restRotation;

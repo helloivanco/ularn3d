@@ -5,7 +5,7 @@ import { GameAudio } from "./audio.js";
 import { audioSettings } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
-import { HeldMovement, movementKey, findRoute, isHostile, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
+import { HeldMovement, movementKey, findRoute, isHostile, keyOffset, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
 import { GameMap } from "./map.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
@@ -88,7 +88,19 @@ syncAudioControls();
 
 let route = [], travelRevision = 0;
 const movementAllowed = () => !!state && state.maze && !state.over && !state.prompt && !state.busy && !state.roomBlocked && !graphicsLost && !document.hidden && !document.querySelector("dialog[open]");
-const held = new HeldMovement((key) => sendCommand(key), movementAllowed);
+// A held direction tells the renderer when the next step is due, so the hero
+// cruises across tiles. Walking into a known wall, door or enemy eases out instead.
+const stepOpen = (key) => {
+  const offset = keyOffset(key);
+  if (!state || !offset) return false;
+  const x = state.x + offset.x, y = state.y + offset.y;
+  const tile = state.tiles.find((cell) => cell.x === x && cell.y === y);
+  return !tile || !(tile.wall || tile.closed || isHostile(tile));
+};
+const held = new HeldMovement((key) => sendCommand(key), movementAllowed, globalThis, (delay, key) => {
+  if (delay != null && stepOpen(key)) world?.expectNextStep(delay);
+  else world?.endRun();
+});
 const heldKeys = new Set();
 const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map"), dialog: $("map-dialog"), viewport: $("map-viewport"), travel: (tile) => travel(tile), stop: () => stopTravel(),
   glyph: tile => tile.monster?.symbol || MAP_GLYPHS[tile.id] || tile.symbol || (tile.id ? "?" : "."), color: mapGlyphColor,
@@ -161,9 +173,10 @@ window.addEventListener("ularn:action", ({detail}) => {
 });
 window.addEventListener("ularn:combat", ({ detail }) => {
   if (state?.over) return;
-  if (detail.to && window.ularnGraphics) {
+  if (detail.to && window.ularnGraphics && state) {
     const point = ularnGraphics.projectTile(detail.to.x, detail.to.y, .4);
-    detail = { ...detail, pan: Math.max(-.65, Math.min(.65, (point.x - ularnGraphics.metrics().heroScreen.x) / 250)) };
+    const hero = ularnGraphics.projectTile(state.x, state.y, .4);
+    detail = { ...detail, pan: Math.max(-.65, Math.min(.65, (point.x - hero.x) / 250)) };
   }
   if (detail.kind === "weapon") sound("weapon", detail);
   else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
@@ -175,7 +188,7 @@ try {
   if (saved !== null) inventoryPinned = saved === "true";
 } catch {}
 let inventorySignature = "", effectsSignature = "";
-let hudSignature = "";
+let hudSignature = "", turnSignature = "";
 let hostTurnSeen = null;
 let damageFlashTimer = null;
 const PERF_ENABLED = (() => {
@@ -468,7 +481,12 @@ const syncTerminalEndActions = (state) => {
 };
 const journalNearBottom = (el) =>
   el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+let journalRaw = null;
 const syncJournal = (rawLog, logRev = null) => {
+  // The snapshot reuses its log array until a line changes. Most steps add no
+  // line, so they skip the filter and the scroll read (a forced layout).
+  if (rawLog === journalRaw && logRev === journalLogRev) return;
+  journalRaw = rawLog;
   const lines = rawLog.filter((line) => String(line).trim());
   const el = $("journal-lines");
   const stickToBottom = journalNearBottom(el);
@@ -539,8 +557,6 @@ function update() {
     state.xpNext,
     state.title,
     state.level,
-    state.moves,
-    state.timeLeft,
     state.stats.STR,
     state.stats.INT,
     state.stats.WIS,
@@ -570,8 +586,12 @@ function update() {
     const party = partyNow;
     const partyHud = $("party-hud");
     const turnStrip = $("turn-strip");
-    if (partyHud) {
-      const auraNow = auraControl(state);
+    const auraNow = partyHud ? auraControl(state) : null;
+    if (partyHud && party.length < 2 && !auraNow.control) {
+      // Solo play: nothing to draw, so do not rebuild hidden cards.
+      partyHud.hidden = true;
+      if (partyHud.childElementCount) partyHud.replaceChildren();
+    } else if (partyHud) {
       partyHud.hidden = party.length < 2;
       const cards = party.map((member) => {
         const card = document.createElement("article");
@@ -643,14 +663,19 @@ function update() {
       state.level === 0
         ? "SURFACE"
         : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
-    $("turn-count").textContent = `TURN ${state.moves}`;
-    $("time-left").textContent = Math.ceil(state.timeLeft);
     $("engine-modal").hidden = state.maze && !state.over;
     $("engine-title").textContent = state.over
       ? "EXPEDITION ENDED"
       : "ULARN";
     $("new-after-death").hidden = !state.over;
     if (state.saveError) toast(state.saveError);
+  }
+  // The turn and time readouts change every step; the rest of the HUD rarely does.
+  const turnKey = `${state.moves}|${Math.ceil(state.timeLeft)}`;
+  if (turnKey !== turnSignature) {
+    turnSignature = turnKey;
+    $("turn-count").textContent = `TURN ${state.moves}`;
+    $("time-left").textContent = Math.ceil(state.timeLeft);
   }
   audio.deferMusic = false;
   if (!movementAllowed() || (previous && previous.level !== state.level)) stopTravel();
@@ -768,6 +793,7 @@ function stopTravel() {
     clearTimeout(walking);
     walking = null;
   }
+  world?.endRun();
 }
 function command(key, shift=false) { stopTravel(); sendCommand(key,shift); }
 function sendCommand(key, shift = false) {
@@ -948,7 +974,7 @@ function travel(tile) {
       stopTravel(); return;
     }
     hp = state.hp;
-    if (path.length) { setRoute([{ x: state.x, y: state.y }, ...path]); walking = setTimeout(step, MOVE_INTERVAL); }
+    if (path.length) { setRoute([{ x: state.x, y: state.y }, ...path]); walking = setTimeout(step, MOVE_INTERVAL); world?.expectNextStep(MOVE_INTERVAL); }
     else stopTravel();
   };
   step();

@@ -29,6 +29,57 @@ export const stepEase = (t) => {
   return x * x * (3 - 2 * x);
 };
 
+/**
+ * Cubic Hermite progress from s0 to 1 over plan time u ∈ [0, 1].
+ * m0/m1 are the start and end slopes in progress per unit plan time.
+ * s0 = m0 = m1 = 0 is stepEase; m0 = m1 = 1 is a constant cruise.
+ */
+export const stepCurve = (u, s0 = 0, m0 = 0, m1 = 0) => {
+  const t = clamp01(u), t2 = t * t, t3 = t2 * t;
+  const s = (2 * t3 - 3 * t2 + 1) * s0 + (t3 - 2 * t2 + t) * m0 + (3 * t2 - 2 * t3) + (t3 - t2) * m1;
+  return Math.min(1, Math.max(s0, s));
+};
+export const stepCurveSlope = (u, s0 = 0, m0 = 0, m1 = 0) => {
+  const t = clamp01(u), t2 = t * t;
+  return (6 * t - 6 * t2) * (1 - s0) + (3 * t2 - 4 * t + 1) * m0 + (3 * t2 - 2 * t) * m1;
+};
+
+/**
+ * One tile crossing whose speed carries across steps. Rates are progress per
+ * millisecond, so a held run cruises from tile to tile instead of stopping at
+ * each plant, and a release eases out from whatever speed the hero has.
+ */
+export class StepGlide {
+  constructor() { this.start = 0; this.ms = 0; this.s0 = 1; this.m0 = 0; this.m1 = 0; this.endRate = 0; }
+  plan(now, ms, s0 = 0, rate0 = 0, rate1 = 0) {
+    const remaining = 1 - clamp01(s0);
+    let duration = Math.max(1, ms);
+    // Keep the curve monotone (Fritsch–Carlson): shorten rather than overshoot the tile.
+    const fastest = Math.hypot(rate0, rate1);
+    if (fastest > 0) duration = Math.max(1, Math.min(duration, 3 * remaining / fastest));
+    Object.assign(this, { start: now, ms: duration, s0: clamp01(s0), m0: rate0 * duration, m1: rate1 * duration, endRate: rate1 });
+    return this;
+  }
+  /** Change the ending without a jump in position or speed. */
+  replan(now, endAt, rate1 = 0) {
+    return this.plan(now, endAt - now, this.progress(now), this.rate(now), rate1);
+  }
+  time(now) { return this.ms > 0 ? clamp01((now - this.start) / this.ms) : 1; }
+  progress(now) { return stepCurve(this.time(now), this.s0, this.m0, this.m1); }
+  rate(now) {
+    const u = this.time(now);
+    if (u >= 1) return 0;
+    return Math.max(0, stepCurveSlope(u, this.s0, this.m0, this.m1)) / this.ms;
+  }
+  /** Speed to carry into the next crossing: the live rate, or the hand-over rate just after the end. */
+  carry(now, grace = 60) {
+    if (!this.done(now)) return this.rate(now);
+    return now - this.end() < grace ? this.endRate : 0;
+  }
+  done(now) { return this.time(now) >= 1; }
+  end() { return this.start + this.ms; }
+}
+
 const cellHits = (x, z, radius, ix, iz) => {
   const nearestX = Math.max(ix - 0.5, Math.min(x, ix + 0.5));
   const nearestZ = Math.max(iz - 0.5, Math.min(z, iz + 0.5));

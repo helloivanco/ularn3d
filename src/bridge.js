@@ -459,7 +459,19 @@ const logViewForSnapshot3D = () => {
   logSliceCount3D++;
   return logView3D;
 };
-let saveTimer3D = null;
+let saveTimer3D = null, saveIdle3D = null;
+// The 2 s autosave captures GameState in a frame's spare time (after the
+// frame, or at most 50 ms late), not in the middle of drawing a walk.
+const whenIdle3D = (callback) => typeof requestIdleCallback === "function"
+  ? { idle: requestIdleCallback(callback, { timeout: 50 }) }
+  : { frame: requestAnimationFrame(() => { saveIdle3D.timer = setTimeout(callback, 0); }) };
+function cancelAutosave3D() {
+  clearTimeout(saveTimer3D); saveTimer3D = null;
+  if (saveIdle3D?.idle != null) cancelIdleCallback(saveIdle3D.idle);
+  if (saveIdle3D?.frame != null) cancelAnimationFrame(saveIdle3D.frame);
+  if (saveIdle3D?.timer != null) clearTimeout(saveIdle3D.timer);
+  saveIdle3D = null;
+}
 let saveEpoch3D = 0, saveSequence3D = 0, saveWorker3D = null;
 let saveInFlight3D = null, saveWorkerFailed3D = false;
 const saveQueue3D = new Map();
@@ -578,7 +590,7 @@ paint = function () {
   if (GAMEOVER) {
     saveDirty3D = false;
     invalidatePendingSaves3D();
-    clearTimeout(saveTimer3D); saveTimer3D = null;
+    cancelAutosave3D();
     try {
       localStorage.removeItem(SAVE_KEY_3D);
       diskWriteCount3D++;
@@ -589,7 +601,10 @@ paint = function () {
     // Mark dirty only — do not compress or hit localStorage every step.
     // Persist via ularn.save() on Save, Save & Exit, pagehide, or tab hide.
     saveDirty3D = true;
-    if (saveTimer3D === null) saveTimer3D = setTimeout(() => { saveTimer3D = null; autosave3D(); }, 2000);
+    if (saveTimer3D === null && saveIdle3D === null) saveTimer3D = setTimeout(() => {
+      saveTimer3D = null;
+      saveIdle3D = whenIdle3D(() => { saveIdle3D = null; autosave3D(); });
+    }, 1950);
   }
 };
 
@@ -816,7 +831,7 @@ window.ularn = {
     if (ROOM_SESSION_ON) return false;
     if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping)
       return false;
-    clearTimeout(saveTimer3D); saveTimer3D = null; invalidatePendingSaves3D();
+    cancelAutosave3D(); invalidatePendingSaves3D();
     try {
       // Equal-looking items can occupy different slots. Preserve their identity,
       // since the original loader matches equipment only by item ID and bonus.

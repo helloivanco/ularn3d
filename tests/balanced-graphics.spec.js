@@ -314,6 +314,8 @@ test("the same corridor stays as bright zoomed out as zoomed in", async ({
     paint();
   });
   const settle = async () => {
+    // Zoom and recenter ease; measure once the orbit has arrived.
+    await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().cameraSettling)).toBe(false);
     await page.evaluate(
       () =>
         new Promise((resolve) => {

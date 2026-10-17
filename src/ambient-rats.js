@@ -332,6 +332,11 @@ export class AmbientRats {
       this.level !== level ||
       this.wallCells.length !== wallCells.length ||
       wallCells.some((t, i) => t.x !== this.wallCells[i]?.x || t.y !== this.wallCells[i]?.y);
+    // Exploring the same floor only adds wall: rats already placed keep their
+    // tile instead of jumping to a freshly seeded layout on every step.
+    const kept = this.enabled && this.level === level
+      ? this.slots.map((slot) => (slot.active && !slot.hidden ? this.wallCells[slot.cell] : null))
+      : null;
     this.level = level;
     this.wallCells = wallCells;
     this.wallHeightAt = wallHeightAt;
@@ -351,8 +356,25 @@ export class AmbientRats {
       }
       return list;
     });
+    if (kept && this.keepPlaced(kept)) return;
     this.seed = (level * 9973 + wallCells.length) | 0;
     this.placeInitial();
+  }
+
+  /** Re-index placed rats onto the new layout. False when none survive. */
+  keepPlaced(kept) {
+    let survivors = 0;
+    this.slots.forEach((slot, i) => {
+      const t = kept[i];
+      const cell = t ? this.wallIndex.get(`${t.x},${t.y}`) : undefined;
+      if (cell == null || !this.neighbors[cell]?.length) {
+        if (slot.active && !slot.hidden) { slot.active = false; slot.look = null; slot.mesh.visible = false; }
+        return;
+      }
+      slot.cell = cell;
+      survivors++;
+    });
+    return survivors > 0;
   }
 
   separated(cell, chosen, maxSep) {

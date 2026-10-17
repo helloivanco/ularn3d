@@ -207,3 +207,21 @@ test("rat poses are distinct rodents", () => {
   }
   assert.equal(signatures.size, sprites.length);
 });
+
+test("exploring more wall on the same floor leaves placed rats where they are", () => {
+  const scene = new THREE.Scene();
+  const rats = new AmbientRats(scene);
+  const ring = wallRing();
+  rats.setLayout(ring, 3, ring.map(() => WALL_FULL));
+  const before = rats.slots.filter((slot) => slot.active).map((slot) => ({ ...rats.wallCells[slot.cell] }));
+  assert.ok(before.length > 0);
+  // New wall appears ahead of the explored ring, shifting every index after it.
+  const grown = [{ x: 3, y: 3 }, { x: 3, y: 4 }, ...ring, { x: 13, y: 12 }];
+  rats.setLayout(grown, 3, grown.map(() => WALL_FULL));
+  const after = rats.slots.filter((slot) => slot.active).map((slot) => ({ ...rats.wallCells[slot.cell] }));
+  assert.deepEqual(after, before);
+  // A new floor still lays rats out from scratch.
+  rats.setLayout(grown, 4, grown.map(() => WALL_FULL));
+  assert.ok(rats.snapshot().count > 0);
+  rats.dispose();
+});

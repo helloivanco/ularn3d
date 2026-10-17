@@ -39,6 +39,24 @@ test("held movement executes immediately, never catches up overdue turns, and ca
   held.release("ArrowLeft"); advance(10000); expect(sent).toHaveLength(4);
 });
 
+test("held cadence absorbs engine time, never bursts after a stall, and reports the next step", () => {
+  let now = 0, id = 0; const tasks = new Map(), sent = [], cadence = [];
+  const timers = { now: () => now, setTimeout(callback, delay) { const key = ++id; tasks.set(key, { callback, due: now + delay }); return key; }, clearTimeout(key) { tasks.delete(key); } };
+  const advance = (time) => { now = time; const due = [...tasks].filter(([, task]) => task.due <= now); due.forEach(([key, task]) => { tasks.delete(key); task.callback(); }); };
+  // Each engine step takes 12ms of the main thread.
+  const held = new HeldMovement((key) => { sent.push([key, now]); now += 12; }, () => true, timers, (delay) => cadence.push(delay));
+  held.start("right", "ArrowRight");
+  expect(cadence).toEqual([220]);
+  advance(232); advance(372); advance(512);
+  expect(sent.map(([, at]) => at)).toEqual([0, 232, 372, 512]);
+  expect(cadence.slice(1)).toEqual([128, 128, 128]);
+  // A long stall sends exactly one step and restarts the timeline.
+  advance(5000); expect(sent).toHaveLength(5);
+  expect(cadence.at(-1)).toBe(140);
+  held.release("ArrowRight"); expect(cadence.at(-1)).toBe(null);
+  held.release("ArrowRight"); expect(cadence.filter((value) => value === null)).toHaveLength(1);
+});
+
 test("all 66 species have distinct bounded models and reuse immutable geometry", () => {
   expect(CREATURES).toHaveLength(66); expect(new Set(CREATURES.map((entry) => entry.model)).size).toBe(66);
   for (const entry of CREATURES) {
@@ -84,6 +102,28 @@ test("keyboard hold cadence, browser repeat, reversal, release and prompts are s
   await page.keyboard.down("ArrowRight"); await page.clock.runFor(800);
   expect(await page.evaluate(() => player.MOVESMADE)).toBe(turns);
   await page.keyboard.up("ArrowRight");
+});
+
+test("a held run glides at an even speed instead of planting on every tile", async ({ page }) => {
+  await arena(page); await freezeClock(page);
+  await page.keyboard.down("ArrowRight");
+  const xs = [];
+  for (let frame = 0; frame < 60; frame++) {
+    await page.clock.runFor(16);
+    xs.push(await page.evaluate(() => ularnGraphics.metrics().heroPosition[0]));
+  }
+  await page.keyboard.up("ArrowRight");
+  expect(await page.evaluate(() => player.x)).toBeGreaterThanOrEqual(39);
+  // Past the first step's ease-in, every frame keeps moving at about cruise speed.
+  const speeds = xs.slice(1).map((x, i) => x - xs[i]).slice(18, 56);
+  const mean = speeds.reduce((sum, value) => sum + value, 0) / speeds.length;
+  expect(mean).toBeGreaterThan(0.08);
+  expect(Math.min(...speeds)).toBeGreaterThan(mean * 0.6);
+  expect(Math.max(...speeds)).toBeLessThan(mean * 1.4);
+  // Releasing eases out and lands exactly on the last tile.
+  await page.clock.runFor(400);
+  const end = await page.evaluate(() => ({ x: player.x, hero: ularnGraphics.metrics().heroPosition }));
+  expect(end.hero).toEqual([end.x, 0, 8]);
 });
 
 test("direction pad holds without a duplicate click, and blur stops input", async ({ page }) => {

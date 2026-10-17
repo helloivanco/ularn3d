@@ -12,6 +12,9 @@ import {
   pointEntersWall,
   pointOnRoute,
   STEP_MS,
+  StepGlide,
+  stepCurve,
+  stepEase,
   stepPose,
   stepRoute,
 } from "../src/hero-motion.js";
@@ -126,4 +129,52 @@ test("knees flex on the swing, ankles counter-rotate, and a carried weapon stays
   const from=stepPose(.6,true,true),to=stepPose(0,false,true);
   assert.deepEqual(blendStep(from,to,0),from);
   assert.deepEqual(blendStep(from,to,.22),to);
+});
+
+const near = (actual, expected, epsilon = 1e-6) =>
+  assert.ok(Math.abs(actual - expected) < epsilon, `${actual} vs ${expected}`);
+
+test("the step curve keeps a tap's ease and cruises when speed carries", () => {
+  for (let i = 0; i <= 20; i++) near(stepCurve(i / 20), stepEase(i / 20));
+  for (let i = 0; i <= 20; i++) near(stepCurve(i / 20, 0, 1, 1), i / 20);
+  for (const [m0, m1] of [[0, 0], [0, 1], [1, 0], [1, 1], [0, 1.6], [1.4, 1]]) {
+    let previous = 0;
+    for (let i = 0; i <= 100; i++) {
+      const s = stepCurve(i / 100, 0, m0, m1);
+      assert.ok(s >= previous - 1e-12, `monotone for ${m0},${m1}`);
+      assert.ok(s <= 1);
+      previous = s;
+    }
+    near(stepCurve(1, 0, m0, m1), 1);
+  }
+});
+
+test("a held run keeps its speed across tiles and a release eases out", () => {
+  const cruise = 1 / STEP_MS;
+  const first = new StepGlide().plan(0, 220, 0, 0, cruise);
+  near(first.rate(0), 0);
+  near(first.progress(220), 1);
+  // The second tile starts at the speed the first one ended with.
+  const endRate = first.endRate;
+  near(endRate, cruise);
+  const second = new StepGlide().plan(220, STEP_MS, 0, endRate, cruise);
+  near(second.rate(220), cruise);
+  near(second.progress(220 + STEP_MS / 2), 0.5);
+  // Releasing mid-tile replans from the live position and speed, then stops.
+  const at = 220 + 100, s = second.progress(at), rate = second.rate(at);
+  second.replan(at, at + 60, 0);
+  near(second.progress(at), s);
+  near(second.rate(at), rate, 1e-9);
+  near(second.progress(second.end()), 1);
+  assert.equal(second.rate(second.end()), 0);
+  // Close to the plant the release finishes quickly instead of overshooting.
+  const late = new StepGlide().plan(0, STEP_MS, 0, cruise, cruise);
+  late.replan(STEP_MS * 0.97, STEP_MS * 0.97 + 60, 0);
+  assert.ok(late.end() < STEP_MS * 0.97 + 60);
+  let previous = late.progress(STEP_MS * 0.97);
+  for (let t = STEP_MS * 0.97; t <= late.end() + 5; t += 1) {
+    const value = late.progress(t);
+    assert.ok(value >= previous - 1e-12 && value <= 1);
+    previous = value;
+  }
 });
