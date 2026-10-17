@@ -7,6 +7,8 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { caveGlowMaterial, caveGlowCenter, releaseCaveGlowResources, VignetteShader, CAVE_HERO_LIGHT } from "./cave-glow.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
@@ -91,6 +93,9 @@ const CAMERA_PREF_KEY = "ularn3d.camera";
  * density are skipped. The reached tier is remembered on this device.
  */
 const AUTO_TIER_KEY = "ularn3d.autoTier";
+const EMBER_COLOR = 0xff7a3c;
+/* Cinematic vignette strength: deeper in the caves, faint in town. */
+const VIGNETTE = { town: 0.16, caves: 0.42, volcano: 0.36 };
 const AUTO_CAPS = [0.65, 0.75, 1, 1.5, 2];
 const AUTO_LABELS = ["low", "balanced", "high", "sharp", "native"];
 export const autoTierLimit = (ratio = globalThis.devicePixelRatio || 1) => ratio > 1.5 + 1e-6 ? 4 : ratio > 1 + 1e-6 ? 3 : 2;
@@ -363,7 +368,7 @@ export class World {
     );
     this.embers = new THREE.InstancedMesh(
       new THREE.ConeGeometry(0.045, 0.12, 4),
-      matBasic(0xff7a3c, { toneMapped: false }),
+      new THREE.MeshBasicMaterial({ color: EMBER_COLOR, toneMapped: false }),
       24,
     );
     for (const decor of [this.rubble, this.embers]) {
@@ -695,6 +700,7 @@ export class World {
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
         torchReassignments:this.lighting.reassignments,
         antialiasing:this.cinematicRendering() ? "SMAA" : this.msaa ? "MSAA" : "none",
+        caveGlow: !!this.floor.material?.userData?.caveGlow, vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
         wallRelief:!!this.walls.geometry.getAttribute("color"),
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
@@ -921,7 +927,7 @@ export class World {
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
     releaseCreatureResources(clearArtCache);
-    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials();
+    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials(); releaseCaveGlowResources(clearArtCache);
     releaseMonsterArtResources(clearArtCache);
     releaseItemArtResources(clearArtCache);
     this.sun.shadow.dispose();
@@ -1206,6 +1212,7 @@ export class World {
     this.composer.dispose();
     this.composer = null;
     this.bloom = null;
+    this.vignette = null;
   }
   ensureComposer() {
     if (this.composer) return;
@@ -1229,6 +1236,7 @@ export class World {
     this.composer.addPass(this.ao);
     this.composer.addPass(this.bloom);
     this.antialias=new SMAAPass(); this.composer.addPass(this.antialias);
+    this.vignette = new ShaderPass(VignetteShader); this.composer.addPass(this.vignette);
     this.composer.addPass(new OutputPass());
   }
   applyLevelLighting() {
@@ -1243,14 +1251,17 @@ export class World {
       this.fill.visible = true;
       if (this.scene.fog) this.scene.fog.density = 0.02;
     } else {
-      /* Constant dungeon light: ambient only, no directional/point, no fog dimming. */
-      this.ambient.intensity = cinematic ? 1.85 : 1.7;
+      /* Constant dungeon light: ambient only, no directional/point, no fog dimming.
+         Cinematic lowers the ambient and lets the hero's light carry nearby detail. */
+      this.ambient.intensity = cinematic ? 1.35 : 1.7;
       this.sun.intensity = 0;
       this.fill.intensity = 0;
       this.sun.visible = false;
       this.fill.visible = false;
       if (this.scene.fog) this.scene.fog.density = 0;
     }
+    // Embers reach the bloom threshold only in Cinematic.
+    this.embers?.material.color.setHex(EMBER_COLOR).multiplyScalar(cinematic ? 6 : 1);
     if (this.state) {
       this.fill.color.set(
         volcano ? 0xb54c35 : town ? (cinematic ? 0xd7b07a : 0x78b9cf) : 0x8eb8c9,
@@ -1342,7 +1353,11 @@ export class World {
     const dungeon = this.state && this.state.level !== 0;
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
-    if (dungeon) return surfaceBasic(kind, color, extra);
+    // Cinematic adds a warm pool around the hero on the same unlit, mapped material.
+    if (dungeon) {
+      const flat = surfaceBasic(kind, color, extra);
+      return this.cinematicRendering() ? caveGlowMaterial(flat) : flat;
+    }
     return this.cinematicRendering()
       ? surface(kind, color, extra)
       : surfaceLambert(kind, color, extra);
@@ -1382,10 +1397,14 @@ export class World {
     this.shadowUpdates++;
   }
   syncPlayerLight() {
-    const enabled=this.cinematicRendering() && this.state?.level===0;
+    const enabled=this.cinematicRendering() && !!this.state;
     if (!enabled) { this.disablePointLights(); this.lightKey = null; return; }
-    this.playerLight.visible=true; this.playerLight.intensity=3.5;
-    this.torchLights.forEach((light,index)=>{light.visible=index<4;});
+    const town = this.state.level===0;
+    this.playerLight.visible=true;
+    this.playerLight.intensity=town ? 3.5 : CAVE_HERO_LIGHT.intensity;
+    this.playerLight.distance=town ? 8 : CAVE_HERO_LIGHT.distance;
+    this.torchLights.forEach((light,index)=>{light.visible=town && index<4;});
+    if (!town) return;
     // Torch choice depends only on the hero's tile and the lamp set.
     const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${this.lampRev}` : null;
     if (key && key !== this.lightKey) { this.lightKey = key; this.lighting.assign(this.lamps,this.playerTarget,4); }
@@ -1422,6 +1441,17 @@ export class World {
     try { localStorage.setItem(AUTO_TIER_KEY, String(this.autoTier)); } catch {}
     this.qualityChangedAt = now; this.overBudgetMs = this.headroomMs = 0;
     this.frameSamples.length = 0; this.applyQualityWhenSettled();
+  }
+  /** Center the vignette on the hero, whatever panels have shifted the framing. */
+  aimVignette() {
+    const uniforms = this.vignette.uniforms, level = this.state?.level ?? 0;
+    uniforms.uStrength.value = !this.state || !level ? VIGNETTE.town : level > 15 ? VIGNETTE.volcano : VIGNETTE.caves;
+    uniforms.uAspect.value = this.camera.aspect;
+    this.scratchPosition.copy(this.player.position).setY(0.6).project(this.camera);
+    uniforms.uCenter.value.set(
+      Math.min(1, Math.max(0, this.scratchPosition.x * 0.5 + 0.5)),
+      Math.min(1, Math.max(0, this.scratchPosition.y * 0.5 + 0.5)),
+    );
   }
   applyQualityWhenSettled() {
     // A resize mid-step is a long frame and a visible pop; wait for the plant.
@@ -2580,7 +2610,7 @@ export class World {
     if (this.playerTarget) {
       this.playerLight.position
         .copy(this.player.position)
-        .add(this.scratchOffset.set(0, 1.4, 0.2));
+        .add(this.scratchOffset.set(0, this.state?.level ? CAVE_HERO_LIGHT.height : 1.4, 0.2));
       this.heroLimbLive = this.poseHero(now);
       this.heroAnimation.update(now);
       this.heroLimbLive ||= this.heroAnimation.active;
@@ -2653,12 +2683,13 @@ export class World {
       }
     }
     if (this.wallCells.length) this.updateWalls(dt);
+    if (this.cinematicRendering() && this.state) this.syncPlayerLight();
     if (this.cinematicRendering() && this.state?.level===0) {
-      this.syncPlayerLight();
       const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
       this.hasMotion ||= lightsMoving;
       if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget);
     }
+    if (this.cinematicRendering() && this.state?.level) caveGlowCenter.copy(this.player.position);
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
     this.ambientRatsNear = this.ambientRats?.update(dt, this.camera) || false;
@@ -2673,6 +2704,7 @@ export class World {
     this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) {
+        if (this.vignette) this.aimVignette();
         if (this.ao?.enabled) {
           // Framing slides (view offset) change the projection between resizes.
           this.ao.ssaoMaterial.uniforms.cameraProjectionMatrix.value.copy(this.camera.projectionMatrix);
