@@ -1684,6 +1684,7 @@ export class World {
         // Unlit in the background color: the explored floor sits in the dark
         // without a lit footprint edge drawing a hard seam across the view.
         slab.material = matBasic(this.scene.background.getHex());
+        slab.name = "cave-slab";
       } else {
         const base = groundSlab(-0.715);
         block(
