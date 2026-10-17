@@ -4,6 +4,12 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.81 — Torchlit caves in Cinematic
+
+- In Cinematic, the caves glow warmly around you and fade toward the edges of the view, with a soft vignette. Nearby creatures and treasure catch your light
+- Volcano embers glow in Cinematic
+- Balanced and Auto caves stay evenly lit, exactly as before
+
 ## 1.3.80 — Sharper picture
 
 - Auto graphics renders at full resolution on Retina and other high-density screens when your computer has room, and keeps edges smooth with antialiasing at every level. Slower machines still step down

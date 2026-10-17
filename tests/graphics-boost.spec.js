@@ -91,3 +91,24 @@ test("Auto on a 2x screen climbs to native resolution with MSAA and no Cinematic
   expect(scene.composer).toBe(false);expect(scene.shadowMapEnabled).toBe(false);expect(scene.pointLights).toBe(0);
   await context.close();
 });
+
+test("Cinematic caves glow around the hero while Auto caves stay flat and unlit", async ({page}) => {
+  await page.addInitScript(()=>{
+    localStorage.setItem("ularn3d.quality","cinematic");
+    localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));
+  });
+  await page.goto("/play/");await expect(page.locator("#loading")).toBeHidden();
+  await page.locator("#begin").click();
+  await page.evaluate(()=>{newcavelevel(1);paint();});
+  await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
+  const cave=await page.evaluate(()=>ularnGraphics.metrics());
+  expect(cave.caveGlow).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBe(1);
+  // The glow keeps the unlit, mapped cave materials.
+  expect(cave.floorMaterial).toBe("MeshBasicMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
+  await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("auto");
+  await page.locator("#resume-game").click();
+  await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().composer)).toBe(false);
+  const flat=await page.evaluate(()=>ularnGraphics.metrics());
+  expect(flat.caveGlow).toBe(false);expect(flat.vignette).toBe(false);
+  expect(flat.playerLight).toBe(false);expect(flat.pointLights).toBe(0);expect(flat.ambient).toBeGreaterThanOrEqual(1.4);
+});
