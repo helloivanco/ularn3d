@@ -134,9 +134,10 @@ test("camera starts north; zoom prefs survive beginExpeditionCamera", async ({ p
 
   await page.locator("#zoom-out").click();
   await page.locator("#zoom-out").click();
+  // Both zoom steps ease; wait until the orbit settles and saves its preference.
   await expect.poll(() => page.evaluate(() => {
-    const offset = ularnGraphics.metrics().cameraOffset;
-    return Math.hypot(offset[0], offset[2]) > 10 && JSON.parse(localStorage.getItem("ularn3d.camera") || "{}").radius > 10;
+    const { cameraOffset: offset, cameraSettling } = ularnGraphics.metrics();
+    return !cameraSettling && Math.hypot(offset[0], offset[2]) > 12 && JSON.parse(localStorage.getItem("ularn3d.camera") || "{}").radius > 12;
   })).toBe(true);
   const zoomed = await page.evaluate(() => {
     const m = ularnGraphics.metrics();

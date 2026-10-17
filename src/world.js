@@ -503,6 +503,7 @@ export class World {
     this.stepLate = 4;
     this.stepInterval = STEP_MS;
     this.lastStepAt = 0;
+    this.stepStartedAt = 0;
     this.stepHome = null;
     this.stepDest = null;
     this.solidTiles = new Set();
@@ -644,6 +645,7 @@ export class World {
         activeFrameP95: percentile(this.frameSamples), renderP95: percentile(this.renderSamples),
         inputLatencyP95: percentile(this.inputSamples), updateP95: percentile(this.updateSamples),
         longTasks: this.longTasks, stepJitter: stepJitter(this.heroSpeeds), heroSpeeds: this.heroSpeeds.map((v) => Math.round(v * 100) / 100),
+        cameraSettling: !!(this.cameraTween || this.viewEasing),
         terrainRebuilds: this.grid.rebuilds, staticChunks: this.staticTiles.chunks.size,
         routePoints: this.routePointCount, routeVisible: false,
         heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect,
@@ -2363,6 +2365,7 @@ export class World {
     }
     this.runNextAt = 0;
     this.lastStepAt = now;
+    this.stepStartedAt = performance.now();
     if (!live && speed === 0) this.heroSpeeds.length = 0;
     this.stepPoseFrom=live ? this.lastStepPose : null;
     this.footstepPending=document.hidden || this.lost ? null : footstep;
@@ -2423,7 +2426,8 @@ export class World {
     const now = performance.now();
     this.runActive = true;
     this.runNextAt = now + delay;
-    if (!this.followLive() || this.stepFar || now - this.followStart > 40) return;
+    // Only the crossing this turn just started (in real time) takes the hint.
+    if (!this.followLive() || this.stepFar || now - this.stepStartedAt > 40) return;
     const cruise = this.cruiseRate();
     // Hand over a little after the next turn is expected, so a late timer
     // still finds the hero mid-glide instead of planted for a frame.
