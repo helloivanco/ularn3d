@@ -99,8 +99,11 @@ export const createLiveRoom = ({ self, roomId, onRoster, onChat, onStatus, onSta
           const config = room.game_config;
           if (config?.version !== 2 || !config.players?.length) return { ok: false, error: 'old_room' };
           onStatus?.('Joining the expedition…');
-          const view = self.role === 'spectator' ? config.players[0].slot : self.slot;
-          await window.ularn.beginRoom({ seed: room.seed, config, viewActor: view });
+          const watching = self.role === 'spectator';
+          await window.ularn.beginRoom({
+            seed: room.seed, config, viewActor: watching ? config.players[0].slot : self.slot,
+            runId: room.run_id, scoreActor: watching ? null : self.slot,
+          });
           booted = true;
         }
         await accept(result.actions);
@@ -246,9 +249,4 @@ export const fetchPublicScores = async (userId) => {
   } catch {
     return { ok: false, error: "unavailable", rows: [] };
   }
-};
-
-export const loadScores = async (userId) => {
-  const result = await fetchPublicScores(userId);
-  return result.ok ? result.rows : [];
 };

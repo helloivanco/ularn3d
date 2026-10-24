@@ -19,15 +19,18 @@ doRollbar = (severity, title, detail) => {
   else if (severity === ROLLBAR_WARN) console.warn(title, detail);
 };
 uploadStyle = () => true;
-cloudflareWriteHighScore = score => PARTY_ON ? Promise.resolve(false) : ularnScoreService.submit(score, "3d");
+// Room players record their own adventurer (see recordRoomScore3D). Other parties stay off the board.
+cloudflareWriteHighScore = score => PARTY_ON && !ROOM_SESSION_ON ? Promise.resolve(false) : ularnScoreService.submit(score, "3d");
 getHighscores = () => ularnScoreService.highscores(ULARN, "3d");
 cloudflareLoadGame = async id => scoreDetailsText(await ularnScoreService.details(id, "3d"));
+let roomScoreActor3D = null, roomScore3D = null, roomScoreSent3D = false;
+const roomFates3D = new Map();
 const expeditionScoreQuery3D = dbQueryHighScores;
 const originalShowScores3D = showScores;
 showScores = function (...args) { originalShowScores3D(...args); window.dispatchEvent(new Event("ularn:update")); };
-// The end screen reads the public Supabase board. It does not print a score from this device.
+// Spectators and older parties read the verified Supabase board. It does not print a score from this device.
 dbQueryHighScores = async (...args) => {
-  if (!PARTY_ON) return expeditionScoreQuery3D(...args);
+  if (!PARTY_ON || roomScoreActor3D != null) return expeditionScoreQuery3D(...args);
   const paintBoard = (text) => {
     alternativeDisplay = " ";
     lprcat(text);
@@ -105,8 +108,25 @@ mousetrap = function (event, key) {
     paint();
     return false;
   }
+  const stairs = stairsTravel3D(key);
+  if (stairs) return originalInput3D(event, stairs);
   return originalInput3D(event, key);
 };
+// Away from stairs, > and < walk to the matching stairs already seen on this
+// floor (the engine's } and { travel) instead of saying there is no way down.
+function stairsTravel3D(key) {
+  if ((key !== ">" && key !== "<") || !mazeMode || blocking_callback || GAMEOVER || !getPref("explore_stairs")) return null;
+  const down = key === ">";
+  const here = down ? [OSTAIRSDOWN, OVOLDOWN, OENTRANCE] : [OSTAIRSUP, OVOLUP, OHOMEENTRANCE];
+  if (here.some((id) => itemAt(player.x, player.y).matches(id))) return null;
+  const target = down
+    ? level === 0 ? OENTRANCE : OSTAIRSDOWN
+    : level === 1 ? OHOMEENTRANCE : level === MAXLEVEL ? OVOLUP : OSTAIRSUP;
+  for (let y = 0; y < MAXY; y++)
+    for (let x = 0; x < MAXX; x++)
+      if (getKnow(x, y) & HAVESEEN && itemAt(x, y).matches(target)) return down ? "}" : "{";
+  return null;
+}
 
 const SAVE_KEY_3D = "ularn3d.expedition.v1";
 const AUTO_LOOT_KEY_3D = "ularn3d.autoLoot";
@@ -685,6 +705,13 @@ window.ularn = {
     );
     setGameConfig();
     loadPreferences();
+    // Auto explore (X), travel to an object (G) and travel to stairs ({ }) start
+    // on unless the player turned them off in Options. A room never runs one:
+    // every browser must apply exactly the same shared steps.
+    for (const name of ["explore_toggle", "explore_object", "explore_stairs"]) {
+      if (ROOM_SESSION_ON) overridePref(name, false);
+      else if (localStorageGetObject(name, null) === null) overridePref(name, true);
+    }
     overridePref("no_intro", true);
     overridePref("side_inventory", false);
     const autoLoot = ROOM_SESSION_ON ? false : readAutoLoot3D();
@@ -1081,19 +1108,78 @@ window.ularn.snapshot = function () {
     if (ACTIVE_SLOT !== canonical) activateAdventurer(canonical);
   }
 };
-window.ularn.beginRoom = async function ({ seed, config, viewActor }) {
+window.ularn.beginRoom = async function ({ seed, config, viewActor, runId = null, scoreActor = null }) {
   if (initialized3D && !ROOM_SESSION_ON) throw new Error('Finish the current expedition before joining a room.');
   ROOM_SESSION_ON = true;
   const first = config.players[0];
   await this.start({ name: first.name, character: first.character, difficulty: config.difficulty, seed });
   beginRoomParty(config.players);
   ROOM_VIEW_ACTOR = viewActor;
+  roomScoreActor3D = runId && scoreActor != null ? scoreActor : null;
+  roomScore3D = null;
+  roomScoreSent3D = false;
+  roomFates3D.clear();
+  // One board row per adventurer per run, so a reload after the end cannot add a second.
+  if (roomScoreActor3D != null) gameID = `${runId}-${roomScoreActor3D}`;
   window.dispatchEvent(new Event('ularn:update'));
 };
 window.ularn.applyRoomAction = function (row) {
   const accepted = applyRoomAction(row);
+  if (GAMEOVER) recordRoomScore3D();
   window.dispatchEvent(new Event('ularn:update'));
   return accepted;
+};
+
+// The engine ends a room with the last adventurer standing as the active
+// hero. Each browser instead scores its own adventurer, using the fate it met.
+const originalBecomeGhost3D = becomeGhost;
+becomeGhost = function (reason) {
+  const fell = originalBecomeGhost3D(reason);
+  if (fell && ROOM_SESSION_ON) roomFates3D.set(ACTIVE_SLOT, reason);
+  return fell;
+};
+const originalRevive3D = reviveAdventurer;
+reviveAdventurer = function (slotIndex) {
+  const revived = originalRevive3D(slotIndex);
+  if (revived) roomFates3D.delete(slotIndex);
+  return revived;
+};
+function ownRoomScore3D() {
+  if (roomScore3D || roomScoreActor3D == null || !GAMEOVER) return roomScore3D;
+  const index = ROOM_ACTORS[roomScoreActor3D];
+  if (index == null || !ADVENTURERS[index]) return null;
+  const canonical = ACTIVE_SLOT;
+  const partyWon = !!player?.winner;
+  activateAdventurer(index);
+  const kept = lastmonst;
+  try {
+    if (roomFates3D.has(index)) lastmonst = roomFates3D.get(index);
+    else if (index !== canonical) lastmonst = partyWon && player.HP > 0 ? DIED_WINNER : DIED_QUITTER;
+    roomScore3D = new LocalScore();
+  } finally {
+    lastmonst = kept;
+    if (ACTIVE_SLOT !== canonical) activateAdventurer(canonical);
+  }
+  return roomScore3D;
+}
+function recordRoomScore3D() {
+  if (roomScoreSent3D || !ROOM_SESSION_ON || !GAMEOVER) return;
+  const score = ownRoomScore3D();
+  if (!score) return;
+  roomScoreSent3D = true;
+  originalWriteScore3D(score);
+}
+const originalWriteScore3D = writeScoreToDatabase;
+writeScoreToDatabase = function (endGameScore) {
+  if (!ROOM_SESSION_ON) return originalWriteScore3D(endGameScore);
+  // Let died() finish with its own hero before switching to this browser's.
+  setTimeout(recordRoomScore3D, 0);
+  return Promise.resolve();
+};
+const originalLoadScores3D = loadScores;
+loadScores = function (newScore, ...rest) {
+  const own = ROOM_SESSION_ON && GAMEOVER ? ownRoomScore3D() : null;
+  return originalLoadScores3D(own || newScore, ...rest);
 };
 window.ularn.roomView = function (actor) {
   ROOM_VIEW_ACTOR = actor;

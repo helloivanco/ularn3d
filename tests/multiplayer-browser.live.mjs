@@ -17,11 +17,11 @@ try {
     await page.goto(`${root}/play/`);await page.waitForFunction(()=>window.ularnOnline);
   }
   const [host,a,b,c,watch]=pages;
-  await host.locator('#multiplayer').click();await host.getByRole('button',{name:'Host a room',exact:true}).click();await host.locator('#host-name').fill('LiveHost');await host.locator('#host-public').uncheck();await host.getByRole('button',{name:'Create lobby',exact:true}).click();await expect(host.locator('#lobby-ready')).toBeVisible({timeout:30000});const code=await host.locator('.room-code strong').innerText();console.log('private test room',roomId,code);
+  await host.locator('#multiplayer').click();await host.getByRole('button',{name:'Host a room',exact:true}).click();await host.locator('#host-name').fill('LiveHost');await host.getByText('Room options').click();await host.locator('#host-public').uncheck();await host.getByRole('button',{name:'Create lobby',exact:true}).click();await expect(host.locator('#lobby-ready')).toBeVisible({timeout:30000});const code=await host.locator('.room-code strong').innerText();console.log('private test room',roomId,code);
   for(const [page,name,character] of [[a,'LiveMage','Wizard'],[b,'LiveScout','Rogue'],[c,'LiveDwarf','Dwarf']]){
     await page.goto(`${root}/play/?room=${code}`);await expect(page.locator('#join-code')).toBeVisible({timeout:15000});await page.locator('#join-name').fill(name);await page.locator('#join-character').selectOption(character);await page.getByRole('button',{name:'Join room',exact:true}).click();await expect(page.locator('#lobby-ready')).toBeVisible({timeout:30000});
   }
-  for(const page of [host,a,b,c])await page.locator('#lobby-ready').click();await expect(host.locator('#lobby-start')).toBeEnabled({timeout:15000});await host.locator('#lobby-start').click();for(const page of [host,a,b,c])await page.waitForFunction(()=>ularnOnline.inMatch(),{timeout:30000});
+  await expect(host.locator('#lobby-start')).toBeEnabled({timeout:15000});await host.locator('#lobby-start').click();for(const page of [host,a,b,c])await page.waitForFunction(()=>ularnOnline.inMatch(),{timeout:30000});
   await watch.locator('#multiplayer').click();await watch.getByRole('button',{name:'Watch',exact:true}).click();await watch.locator('#watch-code').fill(code);await watch.getByRole('button',{name:'Watch room',exact:true}).click();await watch.waitForFunction(()=>ularnOnline.inMatch(),{timeout:30000});
   for(const page of pages)await expect.poll(()=>page.evaluate(()=>ularnOnline.diagnostics().notifications),{timeout:20000}).toBe('SUBSCRIBED');
   const names=[];for(const page of [host,a,b,c])names.push(await page.evaluate(()=>ularn.snapshot().name));expect(names).toEqual(['LiveHost','LiveMage','LiveScout','LiveDwarf']);

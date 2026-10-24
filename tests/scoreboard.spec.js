@@ -22,6 +22,7 @@ async function mockDatabase(page, fixture) {
     if (request.method() === "POST") {
       fixture.submitted.push(request.postDataJSON());
       if (fixture.failUpload) return route.fulfill({ status: 503, body: "Unavailable" });
+      if (request.postDataJSON().game_id === fixture.refuse) return route.fulfill({ status: 400, json: { code: "23514" } });
       const row = { ...request.postDataJSON(), created_at: globalScore.created_at };
       if (!fixture.rows.some(saved => saved.game_id === row.game_id && saved.edition === row.edition)) fixture.rows.push(row);
       return route.fulfill({ status: 201 });
@@ -145,6 +146,23 @@ test("failed submissions survive reload and retry without duplicates", async ({ 
   await page.evaluate(() => ularnScoreService.flush());
   expect(await page.evaluate(() => ularnScoreService.status().pending)).toBe(0);
   expect(fixture.rows).toHaveLength(1);
+});
+
+test("a score the board refuses is set aside so later expeditions still upload", async ({ page }) => {
+  const fixture = fixtures.get(page);
+  fixture.refuse = "refused-game";
+  await page.evaluate(() => localStorage.setItem("ularn.global.pending.v1.3d.refused-game", JSON.stringify({
+    game_id: "refused-game", edition: "3d", ularn: true, winner: false, player_name: "Old", character: "Adventurer",
+    difficulty: 0, score: 1, time_used: 1, moves: 1, fate: "", level_name: "H", details: {},
+  })));
+  await finish(page);
+  await expect.poll(() => fixture.rows.length).toBe(1);
+  expect(fixture.rows[0]).toMatchObject({ score: 100 });
+  expect(await page.evaluate(() => [
+    localStorage.getItem("ularn.global.pending.v1.3d.refused-game"),
+    JSON.parse(localStorage.getItem("ularn.global.rejected.v1.3d.refused-game"))?.player_name,
+    ularnScoreService.status().pending,
+  ])).toEqual([null, "Old", 0]);
 });
 
 test("local records remain available online and details stay local", async ({ page }) => {

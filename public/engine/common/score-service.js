@@ -2,6 +2,8 @@
 (() => {
   const config = window.ULARN_SCORE_CONFIG || {};
   const QUEUE_PREFIX = 'ularn.global.pending.v1.';
+  // Rows the service refused as invalid. Kept for inspection, never retried.
+  const REJECTED_PREFIX = 'ularn.global.rejected.v1.';
   const TABLE = 'ularn_scores';
   const columns = 'game_id,edition,ularn,winner,player_name,character,difficulty,score,time_used,moves,fate,level_name,created_at';
   let flushing = null;
@@ -54,6 +56,7 @@
     });
     if (!response.ok) {
       const error = new Error(`Global score request failed (${response.status}).`);
+      error.status = response.status;
       error.retryable = response.status === 429 || response.status >= 500;
       throw error;
     }
@@ -115,16 +118,24 @@
     flushing = (async () => {
       notify('syncing');
       try {
+        let refused = '';
         // Separate keys make concurrent tabs' additions/removals independent.
         while (pending().length) {
           for (const entry of pending()) {
-            await upload(entry.row);
+            try { await upload(entry.row); }
+            catch (error) {
+              // The service will never accept this row. Set it aside so it
+              // cannot hold back every later expedition from this browser.
+              if (![400, 409, 413, 422].includes(error.status)) throw error;
+              try { localStorage.setItem(REJECTED_PREFIX + entry.key.slice(QUEUE_PREFIX.length), localStorage.getItem(entry.key)); } catch { /* Best effort. */ }
+              refused = 'One finished score was refused by the global board.';
+            }
             localStorage.removeItem(entry.key);
           }
         }
         retryDelay = 30000;
-        notify(pending().length ? 'queued' : 'synced');
-        return true;
+        notify(pending().length ? 'queued' : refused ? 'error' : 'synced', refused);
+        return !refused;
       } catch (error) {
         notify('queued', error.message);
         if (error.retryable !== false) {

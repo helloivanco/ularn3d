@@ -46,7 +46,7 @@ test('room creation shows progress through connection and retries the same room'
   await expect(host.getByRole('button', { name: 'Retry connection', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
   await expect(host).not.toBeVisible();
-  await expect(page.locator('#lobby-ready')).toHaveText('Ready to play');
+  await expect(page.locator('#lobby-ready')).toHaveAttribute('aria-pressed', 'true');
   expect(service.count('create_room')).toBe(1);
 });
 
@@ -76,7 +76,7 @@ test('failed creation and joining show errors and restore the actions', async ({
   await host.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('#multiplayer').click();
   await page.getByRole('button', { name: 'Join with a code', exact: true }).click();
-  await page.locator('#join-code').fill('WRONG1');
+  await page.locator('#join-code').fill('WRONG2');
   const joining = dialogWithTitle(page, 'Join');
   const release = service.hold('join_room');
   await joining.getByRole('button', { name: 'Join room', exact: true }).click();
@@ -87,7 +87,7 @@ test('failed creation and joining show errors and restore the actions', async ({
   await expect(joining.getByRole('button', { name: 'Join room', exact: true })).toBeEnabled();
 });
 
-test('two players ready up, spectators do not block, and the host starts both browsers', async ({ page, browser }) => {
+test('players are ready on arrival, spectators do not block, and the host starts both browsers', async ({ page, browser }) => {
   const service = onlineRoomFixture();
   const guestContext = await browser.newContext();
   const spectatorContext = await browser.newContext();
@@ -98,28 +98,35 @@ test('two players ready up, spectators do not block, and the host starts both br
     await service.attach(guest, 'bea');
     await service.attach(spectator, 'cid');
     await create(page);
+    await expect(page.locator('#lobby-ready')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#lobby-start')).toBeDisabled();
-    await expect(dialogWithTitle(page, 'Lobby').getByRole('status')).toContainText('Select Ready to play');
+    await expect(dialogWithTitle(page, 'Lobby').getByRole('status')).toContainText('Share the code');
+    // A failed automatic ready leaves the guest one click away.
+    service.failNext('set_ready');
     await join(guest);
     await join(spectator, 'spectator');
     await expect(spectator.locator('#lobby-ready')).toBeHidden();
     await expect(guest.locator('#lobby-start')).toBeHidden();
-    service.throwNext('set_ready');
-    await page.locator('#lobby-ready').click();
-    await expect(dialogWithTitle(page, 'Lobby').getByRole('status')).toContainText('Connection failed');
-    await expect(page.locator('#lobby-ready')).toHaveText('Ready to play');
-    await expect(page.locator('#lobby-ready')).toHaveAttribute('aria-pressed', 'false');
-    const ready = service.hold('set_ready');
-    await page.locator('#lobby-ready').click();
-    await expect(page.locator('#lobby-ready')).toHaveText('Updating readiness…');
-    await expect(page.locator('#lobby-ready')).toBeDisabled();
+    await expect(guest.locator('#lobby-ready')).toHaveText('Ready to play');
     await expect(page.locator('#lobby-start')).toBeDisabled();
-    ready();
-    await expect(page.locator('#lobby-ready')).toHaveAttribute('aria-pressed', 'true');
     await expect(dialogWithTitle(page, 'Lobby').getByRole('status')).toContainText('Waiting for Bea');
     await guest.locator('#lobby-ready').click();
     await expect(page.locator('#lobby-start')).toBeEnabled();
     await expect(dialogWithTitle(guest, 'Lobby').getByRole('status')).toContainText('Waiting for the host');
+    service.throwNext('set_ready');
+    await page.locator('#lobby-ready').click();
+    await expect(dialogWithTitle(page, 'Lobby').getByRole('status')).toContainText('Connection failed');
+    await expect(page.locator('#lobby-ready')).toHaveAttribute('aria-pressed', 'true');
+    const unready = service.hold('set_ready');
+    await page.locator('#lobby-ready').click();
+    await expect(page.locator('#lobby-ready')).toHaveText('Updating readiness…');
+    await expect(page.locator('#lobby-ready')).toBeDisabled();
+    await expect(page.locator('#lobby-start')).toBeDisabled();
+    unready();
+    await expect(page.locator('#lobby-ready')).toHaveText('Ready to play');
+    await expect(page.locator('#lobby-start')).toBeDisabled();
+    await page.locator('#lobby-ready').click();
+    await expect(page.locator('#lobby-start')).toBeEnabled();
     await page.screenshot({ path: 'test-results/multiplayer/ready-lobby.png' });
     service.failNext('start_run');
     await page.locator('#lobby-start').click();
@@ -188,3 +195,77 @@ for (const problem of ['none', 'failure', 'stalled']) {
     } finally { release?.(); releaseHeartbeat?.(); }
   });
 }
+
+test('an invite link opens a filled-in join form, even over an older room', async ({ page, browser }) => {
+  const service = onlineRoomFixture();
+  const guestContext = await browser.newContext();
+  try {
+    const guest = await guestContext.newPage();
+    await service.attach(page, 'ada');
+    await create(page);
+    await service.attach(guest, 'bea');
+    await guest.evaluate(() => {
+      localStorage.setItem('ularn3d.heroName', 'Bea');
+      localStorage.setItem('ularn.online.room.v2', JSON.stringify({ id: 'old-room', code: 'QQQ222', name: 'Bea' }));
+    });
+    await guest.goto('/play/?room=abc234');
+    const joining = dialogWithTitle(guest, 'Join');
+    await expect(joining).toBeVisible();
+    await expect(guest.locator('#join-code')).toHaveValue('ABC234');
+    await expect(guest.locator('#join-name')).toHaveValue('Bea');
+    await expect(guest.locator('#join-password')).toBeHidden();
+    expect(service.count('resume_room')).toBe(0);
+    await joining.getByRole('button', { name: 'Join room', exact: true }).click();
+    await expect(dialogWithTitle(guest, 'Lobby')).toBeVisible();
+    await expect(page.locator('#lobby-start')).toBeEnabled();
+  } finally { await guestContext.close(); }
+});
+
+test('a locked room asks for its password only once the code is tried', async ({ page }) => {
+  const service = onlineRoomFixture();
+  service.room.password = 'lantern';
+  await service.attach(page, 'bea');
+  await page.locator('#multiplayer').click();
+  await page.getByRole('button', { name: 'Join with a code', exact: true }).click();
+  const joining = dialogWithTitle(page, 'Join');
+  await expect(page.locator('#join-password')).toBeHidden();
+  await page.locator('#join-code').fill('ABC2');
+  await joining.getByRole('button', { name: 'Join room', exact: true }).click();
+  await expect(joining.getByRole('status')).toHaveText('Enter the 6-character room code.');
+  expect(service.count('join_room')).toBe(0);
+  await page.locator('#join-code').fill('ABC234');
+  await page.locator('#join-name').fill('Bea');
+  await joining.getByRole('button', { name: 'Join room', exact: true }).click();
+  await expect(joining.getByRole('status')).toHaveText('This room needs a password. Ask the host for it.');
+  await expect(page.locator('#join-password')).toBeVisible();
+  await page.locator('#join-password').fill('torch');
+  await joining.getByRole('button', { name: 'Join room', exact: true }).click();
+  await expect(joining.getByRole('status')).toHaveText('That password is wrong.');
+  await page.locator('#join-password').fill('lantern');
+  await joining.getByRole('button', { name: 'Join room', exact: true }).click();
+  await expect(dialogWithTitle(page, 'Lobby')).toBeVisible();
+});
+
+test('the multiplayer leaderboard shows everyone’s expeditions and the verified co-op board', async ({ page }) => {
+  const origin = 'https://ularn-test.supabase.co';
+  await page.route('**/engine/score-config.js', route => route.fulfill({
+    contentType: 'text/javascript', body: `window.ULARN_SCORE_CONFIG = ${JSON.stringify({ url: origin, publishableKey: 'sb_publishable_test' })};`,
+  }));
+  await page.route(`${origin}/rest/v1/ularn_scores**`, route => {
+    const winner = new URL(route.request().url()).searchParams.get('winner') === 'eq.true';
+    return route.fulfill({ json: winner ? [] : [{
+      game_id: 'run-1', edition: '3d', ularn: true, winner: false, player_name: 'Bea', character: 'Rogue', difficulty: 0,
+      score: 1234, time_used: 40, moves: 300, fate: 'killed by a <font color="red">gnome</font>', level_name: '3', created_at: '2026-10-20T00:00:00Z',
+    }] });
+  });
+  const service = onlineRoomFixture();
+  service.verified.push({ user_id: 'ada', display_name: 'Ada', score: 900, mode: 'coop', verified: true, flagged: false, created_at: '2026-10-20T00:00:00Z' });
+  await service.attach(page, 'ada');
+  await page.locator('#multiplayer').click();
+  await page.getByRole('button', { name: 'Leaderboard', exact: true }).click();
+  const board = dialogWithTitle(page, 'Leaderboard');
+  await expect(board.locator('.board-list li')).toHaveText(['Bea · 1,234 · Rogue · killed by a gnome on 3']);
+  await board.getByRole('button', { name: 'Verified co-op', exact: true }).click();
+  await expect(board.locator('.board-list li')).toHaveText(['Ada · 900 · verified']);
+  await expect(board.getByRole('button', { name: 'Verified co-op', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
