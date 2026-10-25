@@ -111,3 +111,29 @@ Every boosted run reached Auto high at native-resolution cap 1.0; the baseline s
 Run `GRAPHICS_OUTPUT=/path/to/output node scripts/benchmark-scenes.mjs BASELINE_URL CANDIDATE_URL` to reproduce. Separate profiles, seeded first-start interception, fixture hashes and equal action counts keep the comparison valid. Hardware benchmarks should run without other graphics tests concurrently. Functional checks additionally cover Auto high across all three regions, fallback after sustained slow frames, mapped terrain, zoom brightness, cutaways, idle rendering, context recovery, replay and long expeditions.
 
 [Before](screenshots/graphics-boost-before.png) · [After](screenshots/graphics-boost-after.png) · [Town](screenshots/graphics-boost-town.png) · [Volcano](screenshots/graphics-boost-volcano.png) · [Phone layout](screenshots/graphics-boost-phone-caves.png)
+
+## Game feel in 1.4.0
+
+Combat feedback is layered on top of the renderer and never changes its idle rules:
+
+- Hit flashes swap in cached emissive clones of each creature material. The clones share the original's compiled program, so a flash never triggers a shader compile.
+- Flinches, lunges and corpses are offsets on existing actors.
+- Spell impacts reuse the six-slot pool, with 12 points and one additive sprite per slot.
+- The level-up column is created once on first use.
+- Damage numbers, the nameplate, banners and vignettes are DOM layers. They animate on the compositor and do not wake WebGL.
+
+Shake is a screen-space view offset, so cutaways, picking and follow never see a moved camera. Arrival and death framing ease the projection zoom rather than moving the orbit camera; moving it re-cut walls and rebuilt terrain chunks on every frame. Everything reports live only while animating, so Balanced and Auto still stop drawing once a fight settles (asserted in `tests/game-feel.spec.js`).
+
+Measured on October 25, 2026 with `BENCHMARK_COMBAT=1 node scripts/benchmark.mjs`, Auto quality, 1440 × 1000, hardware Chrome on an Apple M-series GPU (ANGLE Metal), comparing the 1.3.82 production build with 1.4.0:
+
+| Measurement (second run) | 1.3.82 | 1.4.0 |
+| --- | ---: | ---: |
+| Cave walk, average FPS | 59.9 | 60.0 |
+| Cave walk, frame interval p95 | 17.6 ms | 17.6 ms |
+| Cave walk, maximum draw calls | 113 | 99 |
+| Input-to-render latency p95 | 16.7 ms | 15.0 ms |
+| Combat (24 kills), average FPS | 60.0 | 60.0 |
+| Combat, frame interval p95 | 17.7 ms | 17.7 ms |
+| Combat, draw calls | 122 | 133 |
+
+The closer cave framing draws fewer tiles while walking. Combat adds up to 11 draw calls while flashes, corpses and impact sprays are on screen; it stays within the +12 budget and returns to the walking count once they settle. A floor-cycle check with every creature and item on screen keeps GPU geometry flat (220 across four cycles of four floors).

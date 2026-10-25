@@ -267,9 +267,9 @@ test("compact portrait and landscape keep essential HUD and controls reachable",
       `${width} × ${height}: no covered or clipped controls`,
     ).toEqual([]);
     await expect(page.locator("#attributes")).toHaveText(
-      /STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/,
+      /STR\s*\d+\s*INT\s*\d+\s*WIS\s*\d+\s*CON\s*\d+\s*DEX\s*\d+/,
     );
-    await expect(page.locator("#spell-count")).toHaveText(/Spells\s*:\s*\d+\/\d+/);
+    await expect(page.locator("#spell-count")).toHaveText(/Spells\s*\d+\/\d+/i);
     await expect(page.locator("#mana-text")).toBeVisible();
     const moves = await page.evaluate(() => player.MOVESMADE);
     await page

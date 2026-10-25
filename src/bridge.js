@@ -302,8 +302,9 @@ function emitAction3D(kind, location, detail = {}) {
 const originalTakeAudio3D = take;
 take = function (item) {
   const active = mazeMode, location = { level, from: { x: player.x, y: player.y } };
+  const known = item?.matches(OPOTION) ? isKnownPotion(item) : item?.matches(OSCROLL) ? isKnownScroll(item) : true;
   const result = originalTakeAudio3D(item);
-  if (active && result) emitAction3D("loot", location);
+  if (active && result) emitAction3D("loot", location, item ? { item: { id: item.id, arg: known ? item.arg ?? 0 : null, known } } : {});
   return result;
 };
 const originalQuaffAudio3D = quaffPotion;
@@ -388,7 +389,9 @@ const originalSpellDamage3D = speldamage;
 speldamage = function (id) {
   acceptedSpell3D = null;
   spellAimAssist3D = false;
-  const result = originalSpellDamage3D(id);
+  spellDepth3D++;
+  let result;
+  try { result = originalSpellDamage3D(id); } finally { spellDepth3D--; }
   const spell = acceptedSpell3D;
   acceptedSpell3D = null;
   if (!spell) return result;
@@ -397,7 +400,9 @@ speldamage = function (id) {
     const resolveDirection = keyboard_input_callback;
     keyboard_input_callback = function (direction) {
       const confused = !!player.CONFUSE;
-      const value = resolveDirection(direction);
+      spellDepth3D++;
+      let value;
+      try { value = resolveDirection(direction); } finally { spellDepth3D--; }
       spellAimAssist3D = false;
       if (projectileSpell3D) projectileSpell3D.castId = spell.castId;
       if (!confused) emitSpellCast3D(spell, direction);
@@ -427,7 +432,8 @@ godirect = function (id, x, y, dx, dy, ...args) {
     spell.lastVisible = to;
     emitCombat3D({ ...spell, phase: "projectile", from: path[0], to, path });
   }
-  return originalProjectileStep3D(id, x, y, dx, dy, ...args);
+  spellDepth3D++;
+  try { return originalProjectileStep3D(id, x, y, dx, dy, ...args); } finally { spellDepth3D--; }
 };
 const originalExitSpell3D = exitspell;
 exitspell = function () {
@@ -436,6 +442,76 @@ exitspell = function () {
   if (spell) emitCombat3D({ ...spell, phase: "impact", to: spell.lastVisible, path: [spell.lastVisible] });
   return originalExitSpell3D();
 };
+
+// Feedback events only observe: they read rule state before and after the
+// original call, never touch the engine RNG or clock, and never write fields.
+// Server replay runs without this bridge, so any write here would desync rooms.
+let spellDepth3D = 0;
+const visibleAt3D = (x, y) => inBounds(x, y) && !player.BLINDCOUNT && !!(getKnow(x, y) & KNOWHERE);
+const selfActor3D = () => !ROOM_SESSION_ON || ACTIVE_SLOT === ROOM_ACTORS[ROOM_VIEW_ACTOR];
+function emitFeel3D(type, detail) {
+  window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+// Mimics keep their disguise, so their species, name and health stay hidden.
+function monsterFeelView3D(monster) {
+  const mimic = monster.arg === MIMIC && monster.mimicarg;
+  const species = mimic || monster.arg;
+  return { uid: monsterView3D(monster).uid, species, name: monsterlist[species]?.desc || "", known: !mimic };
+}
+const originalHitPlayerFeel3D = hitplayer;
+hitplayer = function (x, y) {
+  const monster = monsterAt(x, y), hp = player.HP, at = level, lines = LOG.length, last = LOG[LOG.length - 1];
+  const result = originalHitPlayerFeel3D(x, y);
+  if (!monster || level !== at || (localBalance3D() && monster.matches(LEMMING))) return result;
+  const amount = Math.max(0, hp - player.HP);
+  const missed = !amount && (LOG.length !== lines || LOG[LOG.length - 1] !== last) && /miss/i.test(plainText3D(LOG[LOG.length - 1]));
+  const seen = visibleAt3D(x, y) && monster.isVisible();
+  emitFeel3D("ularn:hurt", {
+    level: at, amount, missed, fatal: GAMEOVER || player.HP <= 0, self: selfActor3D(),
+    ...(seen ? { from: { x, y }, ...monsterFeelView3D(monster) } : {}),
+  });
+  return result;
+};
+const originalHitMonsterFeel3D = hitm;
+hitm = function (x, y, damage) {
+  const monster = monsterAt(x, y), at = level;
+  if (!monster) return originalHitMonsterFeel3D(x, y, damage);
+  const maxHp = monsterlist[monster.arg]?.hitpoints || monster.hitpoints;
+  const before = Math.min(monster.hitpoints, maxHp), xp = monster.experience;
+  const seen = visibleAt3D(x, y) && monster.isVisible();
+  const result = originalHitMonsterFeel3D(x, y, damage);
+  if (level !== at || !seen) return result;
+  const killed = monsterAt(x, y) !== monster;
+  const view = monsterFeelView3D(monster);
+  emitFeel3D("ularn:damage", {
+    level: at, to: { x, y }, ...view, maxHp: view.known ? maxHp : null,
+    amount: Math.max(0, before - Math.max(0, monster.hitpoints)), killed, xp: killed ? xp : 0,
+    source: spellDepth3D > 0 ? "spell" : "weapon", self: selfActor3D(),
+  });
+  return result;
+};
+// Read-only twin of isLevelVisited(), which memoizes into EXPLORED_LEVELS.
+function deepestVisited3D() {
+  let deepest = level;
+  for (let lev = LEVELS.length - 1; lev > deepest; lev--) {
+    if (EXPLORED_LEVELS[lev]) return lev;
+    const know = LEVELS[lev]?.know;
+    if (know && know.some((column) => column.some((cell) => cell && cell !== KNOWNOT))) return lev;
+  }
+  return deepest;
+}
+let deepestKey3D = "", deepest3D = 0;
+let ending3D = null;
+function endingView3D(score) {
+  if (!score) return null;
+  return {
+    score: score.score, what: plainText3D(score.what), levelName: score.level, depth: level, deepest: deepestVisited3D(),
+    timeused: score.timeused, moves: score.moves, winner: !!score.winner, hardlev: score.hardlev,
+    character: score.character, who: score.who, gameID: score.gameID, kills: player?.MONSTKILLED ?? 0,
+    rank: player?.LEVEL ?? 1, title: CLASSES[Math.max(0, Math.min(CLASSES.length, player?.LEVEL ?? 1) - 1)] || "",
+    gold: player?.GOLD ?? 0, debug: !!score.debug,
+  };
+}
 
 // The upstream difficulty routine mutates these templates. Start every attempt
 // from the original values, then apply difficulty exactly once, including resume.
@@ -687,6 +763,12 @@ window.ularn = {
       return false;
     }
   },
+  // Read-only species list for the bestiary; templates are never touched.
+  species() {
+    return ULARN_monsterlist.slice(1).map((monster, index) => ({
+      id: index + 1, name: plainText3D(monster.desc), symbol: plainText3D(monster.char), level: monster.level,
+    }));
+  },
   async start({
     name = "Adventurer",
     character = "Adventurer",
@@ -696,6 +778,8 @@ window.ularn = {
     skipPaint = false,
   } = {}) {
     if (initialized3D) return;
+    ending3D = null;
+    deepestKey3D = "";
     ULARN = true;
     GOTW = false;
     PARAMS = { ularn: "true" };
@@ -976,6 +1060,8 @@ window.ularn = {
           // Mimics wear another creature's name. The hover card is only for
           // a creature the player can already identify.
           mon.known = monster.arg !== MIMIC;
+          // The engine's own per-species cap; the UI only shows a wound band.
+          mon.hpMax = mon.known ? monsterlist[monster.arg].hitpoints : null;
           mon.harmless = localBalance3D() && monster.matches(LEMMING);
           tile.monster = mon;
           actorRev =
@@ -999,6 +1085,8 @@ window.ularn = {
     snapshotTiles3D.length = n;
     const tiles = snapshotTiles3D;
     const structure = structureRev ^ n;
+    const depthKey = `${gameID}|${level}`;
+    if (depthKey !== deepestKey3D) { deepestKey3D = depthKey; deepest3D = deepestVisited3D(); }
     return {
       tiles,
       structureRev: structure,
@@ -1038,6 +1126,7 @@ window.ularn = {
       manaMax: player.SPELLMAX,
       xp: player.EXPERIENCE,
       xpNext: SKILL[Math.min(player.LEVEL, MAXPLEVEL)],
+      xpFloor: SKILL[Math.max(0, Math.min(player.LEVEL, MAXPLEVEL) - 1)] ?? 0,
       title: CLASSES[Math.max(0, Math.min(CLASSES.length, player.LEVEL) - 1)] || "",
       rank: player.LEVEL,
       gold: player.GOLD,
@@ -1049,6 +1138,11 @@ window.ularn = {
       multiplayer: typeof partySize === "function" && partySize() > 1,
       aura: typeof cooperationAuraOn === "function" ? cooperationAuraOn() : false,
       moves: player.MOVESMADE,
+      kills: player.MONSTKILLED,
+      spellsKnown: player.knownSpells.filter(Boolean).length,
+      deepest: Math.max(level, deepest3D),
+      difficulty: getDifficulty(),
+      ending: ending3D,
       timeLeft: Math.max(0, (TIMELIMIT - gtime) / 100),
       log: logViewForSnapshot3D(),
       stats: {
@@ -1067,6 +1161,8 @@ window.ularn = {
                 slot: index,
                 name: plainText3D(item.shortName()),
                 id: item.id,
+                arg: item.arg ?? 0,
+                known: item.matches(OPOTION) ? isKnownPotion(item) : item.matches(OSCROLL) ? isKnownScroll(item) : true,
                 equipped: ["WIELD", "WEAR", "SHIELD"].filter((field) => player[field] === item),
               }
             : null,
@@ -1167,11 +1263,16 @@ function recordRoomScore3D() {
   const score = ownRoomScore3D();
   if (!score) return;
   roomScoreSent3D = true;
+  ending3D = endingView3D(score);
   originalWriteScore3D(score);
+  window.dispatchEvent(new Event('ularn:update'));
 }
 const originalWriteScore3D = writeScoreToDatabase;
 writeScoreToDatabase = function (endGameScore) {
-  if (!ROOM_SESSION_ON) return originalWriteScore3D(endGameScore);
+  if (!ROOM_SESSION_ON) {
+    ending3D = endingView3D(endGameScore);
+    return originalWriteScore3D(endGameScore);
+  }
   // Let died() finish with its own hero before switching to this browser's.
   setTimeout(recordRoomScore3D, 0);
   return Promise.resolve();

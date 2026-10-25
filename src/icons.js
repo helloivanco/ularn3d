@@ -1,5 +1,14 @@
 // Original Ularn interface artwork. One 24px grid, one stroke weight, no icon font.
 const paths = {
+  // Feat and notice emblems.
+  sword: '<path d="M14.5 3H21v6.5L10 20.5 3.5 14 14.5 3Z"/><path d="m6 16-3 5m4-3 2 3M3 18l3 3"/>',
+  stairs: '<path d="M3 20h5v-5h5v-5h5V5h3"/><path d="M3 20V9m0 0 4-4"/>',
+  eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  crown: '<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/><path d="M5 19h14"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
+  skull: '<path d="M5 11a7 7 0 1 1 14 0v4l-2 1v4H7v-4l-2-1v-4Z"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><path d="M10 20v-2m4 2v-2"/>',
+  coin: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><path d="M12 9.5v5"/>',
+  heart: '<path d="M12 20s-8-4.7-8-10.2A4.3 4.3 0 0 1 12 7.4a4.3 4.3 0 0 1 8 2.4C20 15.3 12 20 12 20Z"/>',
   sigil:
     '<path d="m12 2 8 9-8 8-8-8 8-9Z"/><path d="m12 7 4 4-4 4-4-4 4-4ZM8 17l-4 5m12-5 4 5"/>',
   swords:

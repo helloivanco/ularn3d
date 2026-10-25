@@ -1,7 +1,17 @@
 import "./style.css";
 import "./hud.css";
 import "./entry.css";
+import "./feel.css";
 import { GameAudio } from "./audio.js";
+import { FeedbackDirector } from "./feedback.js";
+import { FeedbackHud } from "./feedback-hud.js";
+import { loadFeel, saveFeel, feelSettings, motionReduced } from "./feel-settings.js";
+import { loadProfile, saveProfile, recordRun, noteSpecies, rememberLastRun, bestiaryCount } from "./profile.js";
+import { checkFeats } from "./feats.js";
+import { lineKind } from "./journal.js";
+import { Bestiary } from "./bestiary.js";
+import { spellKind } from "./combat-effects.js";
+import { itemArtImage } from "./item-art.js";
 import { audioSettings } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
@@ -106,7 +116,17 @@ const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map")
   glyph: tile => tile.monster?.symbol || MAP_GLYPHS[tile.id] || tile.symbol || (tile.id ? "?" : "."), color: mapGlyphColor,
   allies: () => engine.party?.() || [], pings: () => window.ularnOnline?.mapPings?.() || [] });
 let journalSignature = "", statsSignature = "";
-const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const systemMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let feel = loadFeel(localStorage);
+let reduced = motionReduced(feel, systemMotion.matches);
+document.body.classList.toggle("reduce-motion", feel.motion === "reduced");
+// Cross-run records live apart from the expedition save; rooms never write them.
+let profile = loadProfile(localStorage);
+let runMemory = { lowHp: false };
+const DRAGONS = new Set([25, 48, 49, 53, 54, 56]), DEMONS = new Set([57, 58, 59, 60, 61, 62, 63, 64, 65]);
+const RETRY_KEY = "ularn3d.retry";
+let endingSequence = false, endingTimer = null, recordedEnding = null, recapDeltas = null;
+let director = null, feedbackHud = null, bestiary = null;
 const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
 const HERO_NAME_KEY = "ularn3d.heroName";
 // Exploring and travel shortcuts run many private steps; a room shares every step.
@@ -172,6 +192,7 @@ window.addEventListener("ularn:footstep",({detail}) => {
 });
 window.addEventListener("ularn:action", ({detail}) => {
   if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest"].includes(detail.kind)) sound(detail.kind,detail);
+  director?.onAction(detail);
 });
 window.addEventListener("ularn:combat", ({ detail }) => {
   if (state?.over) return;
@@ -183,7 +204,16 @@ window.addEventListener("ularn:combat", ({ detail }) => {
   if (detail.kind === "weapon") sound("weapon", detail);
   else if (detail.kind === "spell" && (!detail.phase || detail.phase === "cast"))
     sound("spell", detail);
+  else if (detail.kind === "spell" && detail.phase === "impact")
+    sound("spellImpact", { family: spellKind(detail.spell), pan: detail.pan });
+  director?.onCombat(detail);
 });
+// Engine blows are observed here and staged for the next authoritative update.
+window.addEventListener("ularn:damage", ({ detail }) => {
+  director?.onDamage(detail);
+  if (detail.killed && detail.self !== false && detail.known !== false) noteKill(detail.species);
+});
+window.addEventListener("ularn:hurt", ({ detail }) => director?.onHurt(detail));
 let inventoryPinned = innerWidth > 700;
 try {
   const saved = localStorage.getItem("ularn3d.inventoryPinned");
@@ -279,7 +309,17 @@ function updateInventoryAndEffects() {
       key.textContent = item.key;
       const name = document.createElement("span");
       name.textContent = item.name;
-      row.append(key, name);
+      row.append(key);
+      // Items seen on the floor carry that same (background-stripped) artwork.
+      const art = itemArtImage(item.id, item.arg ?? 0, item.known !== false);
+      if (art) {
+        const image = document.createElement("canvas");
+        image.className = "item-art"; image.width = image.height = 36;
+        image.getContext("2d").drawImage(art, 0, 0, 36, 36);
+        row.classList.add("with-art");
+        row.append(image);
+      }
+      row.append(name);
       if (item.equipped?.length) {
         row.classList.add("equipped");
         const tag = document.createElement("small");
@@ -314,6 +354,9 @@ function updateInventoryAndEffects() {
   $("auto-loot").setAttribute("aria-pressed", String(state.autoLoot));
   $("auto-loot").querySelector(".button-label").textContent = `Auto-loot ${state.autoLoot ? "on" : "off"}`;
 }
+// The title remembers the last calling and difficulty you set out with.
+if (classes.some(([name]) => name === profile.lastRun?.character)) character = profile.lastRun.character;
+if ([...$("difficulty").options].some((option) => option.value === String(profile.lastRun?.difficulty))) $("difficulty").value = String(profile.lastRun.difficulty);
 for (const [name, , description] of classes) {
   const button = document.createElement("button");
   button.type = "button";
@@ -329,7 +372,20 @@ for (const [name, , description] of classes) {
   });
   $("classes").appendChild(button);
 }
-$("class-description").textContent = classes[0][2];
+$("class-description").textContent = classes.find(([name]) => name === character)[2];
+// Title records: only once there is something to show.
+if (profile.runs > 0) {
+  const best = profile.best || {}, last = profile.history?.[0];
+  $("records-stats").replaceChildren(...[
+    ["Best score", Number(best.score || 0).toLocaleString()],
+    ["Deepest", profile.deepest > 15 ? `Volcano ${profile.deepest - 15}` : profile.deepest ? `Depth ${profile.deepest}` : "Town"],
+    ["Expeditions", String(profile.runs)],
+    ["Creatures slain", String(profile.kills || 0)],
+  ].map(([label, value]) => { const cell = document.createElement("div"); cell.innerHTML = "<dt></dt><dd></dd>"; cell.querySelector("dt").textContent = label; cell.querySelector("dd").textContent = value; return cell; }));
+  $("records-last").textContent = last ? `Last: ${last.character} · ${last.winner ? "returned with the cure" : last.what || "lost"} · ${last.depth > 15 ? `Volcano ${last.depth - 15}` : last.depth ? `Depth ${last.depth}` : "town"}` : "";
+  $("records-bestiary-count").textContent = `· ${bestiaryCount(profile)} / 66`;
+  $("records").hidden = false;
+}
 const hasExpedition = engine.hasSave();
 $("continue").hidden = !hasExpedition;
 $("return-expedition").hidden = !hasExpedition;
@@ -413,11 +469,68 @@ try {
   );
   $("graphics-quality").value = world.quality;
   if (reduced) world.controls.autoRotate = false;
-  $("loading").hidden = true;
+  world.setFeel(feel);
+  if (reduced !== world.reduced) world.setReduced(reduced);  $("loading").hidden = true;
 } catch (error) {
   console.error(error);
   $("loading").innerHTML =
     '<div style="max-width:440px;padding:30px;text-align:center">3D graphics could not start.<p style="font:14px Arial;line-height:1.7">Enable hardware acceleration in your browser, then reload. You can also play the complete classic edition below.</p><a style="color:#d7bc83;font:14px Arial" href="/engine/larn_local.html?ularn=true">Open classic Ularn →</a></div>';
+}
+// Game feel: the director decides what an event is worth; world, HUD and
+// audio sinks draw and play it. A missing renderer simply drops the 3D half.
+const worldSink = new Proxy({}, { get: (_, name) => (...args) => world?.[name]?.(...args) });
+feedbackHud = new FeedbackHud({ world, getState: () => state, settings: feel, reduced });
+director = new FeedbackDirector({
+  sinks: { world: worldSink, hud: feedbackHud, audio: { play: (kind, detail) => sound(kind, detail), heartbeat: (rate) => audio.setHeartbeat?.(rate) } },
+  settings: feel, reduced,
+});
+window.ularnFeel = Object.freeze({
+  metrics: () => ({ ...director.metrics(), ...feedbackHud.metrics(), ending: endingSequence, profile: { runs: profile.runs, feats: Object.keys(profile.feats).length, bestiary: bestiaryCount(profile) } }),
+});
+bestiary = new Bestiary({ dialog: $("bestiary-dialog"), getProfile: () => profile, species: () => engine.species?.() || [] });
+const openBestiary = () => { stopTravel(); $("pause-dialog").close(); bestiary.open(); };
+$("open-bestiary").addEventListener("click", openBestiary);
+$("open-bestiary-recap").addEventListener("click", openBestiary);
+$("records-bestiary").addEventListener("click", openBestiary);
+const recordsRoom = () => !!window.ularnOnline?.inRoom?.() || !!window.ularnOnline?.spectating?.();
+const persistProfile = () => saveProfile(localStorage, profile);
+// Feats stack in their own corner, so they never wait behind a level-up banner.
+const notifyFeats = (unlocked) => unlocked.forEach((feat, index) => setTimeout(() => {
+  feedbackHud.notice({ icon: feat.icon, title: feat.title, line: feat.line });
+  sound("feat");
+}, 450 + index * 380));
+let newCreatureAt = 0;
+// First sightings fill the bestiary; a rush of new creatures shares one notice.
+function noteSightings(snapshot) {
+  if (recordsRoom()) return;
+  let changed = false, fresh = [];
+  for (const tile of snapshot.tiles) {
+    const monster = tile.monster;
+    if (!monster?.known) continue;
+    const result = noteSpecies(profile, monster.id, { seen: true, at: Date.now() });
+    if (result.profile !== profile) { profile = result.profile; changed = true; }
+    if (result.firstSeen) fresh.push(monster.name);
+  }
+  if (!changed) return;
+  persistProfile();
+  const now = performance.now();
+  if (fresh.length && now - newCreatureAt > 2000) {
+    newCreatureAt = now;
+    feedbackHud.notice({ icon: "book", title: fresh.length > 1 ? `${fresh.length} new creatures` : "New creature", line: fresh.length > 1 ? fresh.join(", ") : `${fresh[0][0].toUpperCase()}${fresh[0].slice(1)} added to your bestiary.` });
+  }
+  notifyFeats(checkFeatsNow({}));
+}
+function noteKill(species) {
+  if (recordsRoom() || species == null) return;
+  profile = noteSpecies(profile, species, { seen: true, killed: true, at: Date.now() }).profile;
+  persistProfile();
+  notifyFeats(checkFeatsNow({ killedSpecies: species }));
+}
+function checkFeatsNow(context) {
+  if (!state || recordsRoom()) return [];
+  const result = checkFeats(profile, runMemory, state, { ...context, dragonIds: DRAGONS, demonIds: DEMONS, now: Date.now(), debug: !!state.ending?.debug });
+  if (result.profile !== profile) { profile = result.profile; persistProfile(); }
+  return result.unlocked;
 }
 async function start(resume) {
   if (window.ularnOnline?.inRoom?.()) { window.ularnOnline.openRoom(); return; }
@@ -507,14 +620,17 @@ const syncJournal = (rawLog, logRev = null) => {
   if (journalSynced > 0) {
     const last = el.lastElementChild;
     const latest = lines[journalSynced - 1];
-    if (last && latest != null && last.innerHTML !== latest)
+    if (last && latest != null && last.innerHTML !== latest) {
       last.innerHTML = latest;
+      last.className = `line-${lineKind(latest)}`;
+    }
   }
   if (lines.length > journalSynced) {
     const extra = document.createDocumentFragment();
     for (let i = journalSynced; i < lines.length; i++) {
       const row = document.createElement("div");
       row.innerHTML = lines[i];
+      row.className = `line-${lineKind(lines[i])}`;
       extra.appendChild(row);
     }
     el.appendChild(extra);
@@ -532,7 +648,20 @@ function update() {
   state = fog
     ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
     : next;
+  // Floors change under the veil; slain creatures are marked before the world
+  // drops their actors; level-ups and floor cards follow the rebuilt world.
+  const veil = director.begin(previous, state);
+  if (veil) feedbackHud.veil(veil);
+  director.applyEvents(previous, state);
   world?.update(state);
+  director.applyDiff(previous, state);
+  feedbackHud.sync(state);
+  if (previous?.gameID !== state.gameID) runMemory = { lowHp: false };
+  if (!previous || previous.actorRev !== state.actorRev || previous.level !== state.level) noteSightings(state);
+  if (previous && !state.over && (previous.level !== state.level || previous.rank !== state.rank || previous.gold !== state.gold ||
+    previous.hasEye !== state.hasEye || previous.hasCure !== state.hasCure || previous.hp !== state.hp)) notifyFeats(checkFeatsNow({}));
+  if (previous && !previous.over && state.over) beginEnding(state);
+  if (state.over) recordEnding(state);
   if (window.ularnOnline?.inMatch?.()) {
     document.querySelectorAll('#hud [data-key]').forEach(button => { button.disabled = !!state.roomBlocked; });
     $("explore").disabled = true;
@@ -642,20 +771,29 @@ function update() {
         return chip;
       })));
     }
-    $("health-bar").style.width =
-      `${Math.max(0, Math.min(100, (state.hp / state.hpMax) * 100))}%`;
+    // Meters scale on the compositor; the pale ghost holds, then drains to the new value.
+    const hpRatio = Math.max(0, Math.min(1, state.hp / Math.max(1, state.hpMax)));
+    $("health-bar").style.transform = `scaleX(${hpRatio})`;
+    const ghost = $("health-ghost");
+    if (ghost) {
+      if (previous && previous.gameID === state.gameID && state.hp < previous.hp && !reduced) ghost.style.transform = `scaleX(${hpRatio})`;
+      else { ghost.style.transition = "none"; ghost.style.transform = `scaleX(${hpRatio})`; void ghost.offsetWidth; ghost.style.transition = ""; }
+    }
     $("mana-text").textContent = `${state.mana} / ${state.manaMax}`;
-    $("mana-bar").style.width =
-      `${Math.max(0, Math.min(100, (state.mana / Math.max(1, state.manaMax)) * 100))}%`;
-    $("gold").textContent = state.gold.toLocaleString();
+    $("mana-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, state.mana / Math.max(1, state.manaMax)))})`;
+    // Looted gold counts up on its own once the coins land.
+    if (!(previous && state.gold > previous.gold && state.bank === previous.bank && !reduced && !director.catchUp && !state.over)) $("gold").textContent = state.gold.toLocaleString();
     $("armor").textContent = state.ac;
     $("weapon").textContent = state.wc;
     $("spell-count-value").textContent = `${state.mana}/${state.manaMax}`;
-    $("attributes").innerHTML = HUD_STATS.map(
-      (stat) => `<span>${stat}=<b>${state.stats[stat]}</b></span>`,
-    ).join(" ");
+    syncStatChips(previous);
     $("xp-count-value").textContent = `${state.xp}/${state.xpNext}`;
     $("xp-title").textContent = state.title || "";
+    const xpFloor = state.xpFloor ?? 0;
+    $("xp-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, (state.xp - xpFloor) / Math.max(1, state.xpNext - xpFloor)))})`;
+    if (previous && previous.gameID === state.gameID && state.rank > previous.rank) {
+      $("xp-box").classList.remove("xp-flash"); void $("xp-box").offsetWidth; $("xp-box").classList.add("xp-flash");
+    }
     const location =
       state.level === 0
         ? "THE TOWN OF ULARN"
@@ -667,13 +805,16 @@ function update() {
       state.level === 0
         ? "SURFACE"
         : `FLOOR ${state.level > 15 ? "V" + (state.level - 15) : state.level}`;
-    $("engine-modal").hidden = state.maze && !state.over;
     $("engine-title").textContent = state.over
-      ? "EXPEDITION ENDED"
+      ? state.winner ? "EXPEDITION COMPLETE" : "END OF EXPEDITION"
       : "ULARN";
-    $("new-after-death").hidden = !state.over;
     if (state.saveError) toast(state.saveError);
   }
+  // The death or victory beat plays out in the world before the recap opens.
+  $("engine-modal").hidden = (state.maze && !state.over) || endingSequence;
+  $("new-after-death").hidden = !state.over || endingSequence;
+  syncRecap(state);
+  syncRunClock(state);
   // The turn and time readouts change every step; the rest of the HUD rarely does.
   const turnKey = `${state.moves}|${Math.ceil(state.timeLeft)}`;
   if (turnKey !== turnSignature) {
@@ -754,6 +895,126 @@ function update() {
     });
   }
 }
+const STAT_NAMES = { STR: "Strength", INT: "Intelligence", WIS: "Wisdom", CON: "Constitution", DEX: "Dexterity" };
+function syncStatChips(previous) {
+  const box = $("attributes");
+  if (box.childElementCount !== HUD_STATS.length) {
+    box.replaceChildren(...HUD_STATS.map((stat) => {
+      const chip = document.createElement("span");
+      chip.className = "stat-chip";
+      chip.dataset.stat = stat;
+      chip.innerHTML = `<abbr title="${STAT_NAMES[stat]}">${stat}</abbr> <b></b>`;
+      return chip;
+    }));
+  }
+  for (const chip of box.children) {
+    const stat = chip.dataset.stat, value = state.stats[stat];
+    chip.querySelector("b").textContent = value;
+    const before = previous?.gameID === state.gameID ? previous.stats?.[stat] : value;
+    if (before != null && value !== before) {
+      chip.classList.remove("up", "down");
+      void chip.offsetWidth;
+      chip.classList.add(value > before ? "up" : "down");
+      clearTimeout(chip.fadeTimer);
+      chip.fadeTimer = setTimeout(() => chip.classList.remove("up", "down"), 1600);
+    }
+  }
+}
+function syncRunClock(snapshot) {
+  const clock = document.querySelector(".run-clock"), left = Math.ceil(snapshot.timeLeft);
+  clock?.classList.toggle("critical", !snapshot.over && left < 20);
+  clock?.classList.toggle("low", !snapshot.over && left >= 20 && left < 50);
+}
+
+// ---------- Ending: the fall or the triumph, then the recap ----------
+function beginEnding(snapshot) {
+  clearTimeout(endingTimer);
+  endingSequence = true;
+  if (world) world.keepFeel = true;
+  director.reset();
+  feedbackHud.clear();
+  if (snapshot.winner) { world?.victory(); feedbackHud.notice({ icon: "crown", title: "The cure is home", line: "Your daughter will live." }); }
+  else { world?.collapse(true); feedbackHud.deathVeil(true); }
+  endingTimer = setTimeout(finishEnding, reduced ? 0 : snapshot.winner ? 1800 : 1300);
+}
+function finishEnding() {
+  if (!endingSequence) return;
+  clearTimeout(endingTimer);
+  endingSequence = false;
+  if (world) world.keepFeel = false;
+  syncRenderPause();
+  update();
+}
+// Every finished solo run is recorded once, by game ID, with its personal-best deltas.
+function recordEnding(snapshot) {
+  const ending = snapshot.ending;
+  if (!ending || recordedEnding === ending.gameID) return;
+  recordedEnding = ending.gameID;
+  if (recordsRoom()) return;
+  const result = recordRun(profile, { ...ending, kills: snapshot.kills ?? ending.kills, deepest: Math.max(ending.deepest ?? 0, snapshot.deepest ?? 0) },
+    { name: snapshot.name, difficulty: snapshot.difficulty ?? ending.hardlev });
+  recapDeltas = result.deltas;
+  profile = rememberLastRun(result.profile, { name: snapshot.name, character: snapshot.character, difficulty: String(snapshot.difficulty ?? ending.hardlev ?? 0) });
+  persistProfile();
+  notifyFeats(checkFeatsNow({}));
+}
+const depthName = (level) => !level ? "the town" : level > 15 ? `Volcano ${level - 15}` : `Depth ${level}`;
+const recapStat = (label, value, note = "") => {
+  const cell = document.createElement("div");
+  cell.innerHTML = "<dt></dt><dd></dd>";
+  cell.querySelector("dt").textContent = label;
+  cell.querySelector("dd").textContent = value;
+  if (note) { const small = document.createElement("small"); small.textContent = note; cell.querySelector("dd").append(small); }
+  return cell;
+};
+let recapActive = false;
+function syncRecap(snapshot) {
+  // Walking never touches the end-of-run chrome.
+  if (!snapshot.over && !recapActive) return;
+  recapActive = !!snapshot.over;
+  const recap = $("run-recap"), card = document.querySelector(".terminal-card");
+  const showing = !!snapshot.over && !endingSequence && !!snapshot.ending;
+  const solo = !window.ularnOnline?.inRoom?.();
+  recap.hidden = !showing;
+  card.classList.toggle("recap-showing", showing && snapshot.awaitingScoreboard);
+  card.classList.toggle("recap-strip", showing && !snapshot.awaitingScoreboard);
+  card.classList.toggle("winner", !!snapshot.winner);
+  $("try-again").hidden = !snapshot.over || endingSequence || !solo;
+  $("open-bestiary-recap").hidden = !showing || !solo;
+  const returnButton = document.querySelector('.terminal-footer [data-key="return"]');
+  if (returnButton) returnButton.textContent = showing && snapshot.awaitingScoreboard ? "Scoreboard ↵" : "Enter ↵";
+  if (!showing || recap.dataset.game === `${snapshot.ending.gameID}|${!!recapDeltas}`) return;
+  recap.dataset.game = `${snapshot.ending.gameID}|${!!recapDeltas}`;
+  const ending = snapshot.ending, what = ending.what || "";
+  $("recap-portrait").src = `/art/classes/${String(snapshot.character || "adventurer").toLowerCase()}.webp`;
+  $("recap-eyebrow").textContent = snapshot.winner ? "VICTORY" : "YOU HAVE FALLEN";
+  $("recap-title").textContent = snapshot.winner ? "The cure is home" : what ? `${what[0].toUpperCase()}${what.slice(1)}` : "Your expedition ended";
+  $("recap-line").textContent = `${snapshot.name}, ${snapshot.title || "adventurer"} · ${snapshot.character} · level ${snapshot.rank}`;
+  const deepest = Math.max(snapshot.deepest ?? 0, ending.deepest ?? 0);
+  $("recap-stats").replaceChildren(
+    recapStat("Score", Number(ending.score || 0).toLocaleString()),
+    recapStat("Deepest", depthName(deepest), deepest !== snapshot.level ? `ended at ${depthName(snapshot.level)}` : ""),
+    recapStat("Creatures slain", String(snapshot.kills ?? 0)),
+    recapStat("Turns", Number(snapshot.moves || 0).toLocaleString(), `${ending.timeused ?? 0} mobuls`),
+  );
+  // A first run beats nothing yet; the rank line already says so.
+  const chips = [], best = recapDeltas?.of > 1 ? recapDeltas.newBest : null;
+  if (best?.score && ending.score > 0) chips.push("New best score!");
+  if (best?.depth && deepest > 0) chips.push("Deepest descent yet");
+  if (best?.kills && (snapshot.kills ?? 0) > 0) chips.push("Most kills yet");
+  if (best && recapDeltas.callingBest && !chips.length && ending.score > 0) chips.push(`Best ${snapshot.character} run`);
+  $("recap-chips").replaceChildren(...chips.map((text) => { const chip = document.createElement("span"); chip.textContent = text; return chip; }));
+  $("recap-rank").textContent = recapDeltas?.of > 1 ? `#${recapDeltas.rank} of your ${recapDeltas.of} recorded expeditions` : recapDeltas ? "Your first recorded expedition" : "";
+}
+// One key back into the caves: same name, calling and difficulty.
+function tryAgain() {
+  if (!state?.over || window.ularnOnline?.inRoom?.()) return;
+  try { sessionStorage.setItem(RETRY_KEY, JSON.stringify({ name: state.name, character: state.character, difficulty: String(state.difficulty ?? 0) })); } catch {}
+  location.reload();
+}
+$("try-again").addEventListener("click", tryAgain);
+$("new-after-death").addEventListener("click", () => location.reload());
+
 window.addEventListener("ularn:update", update);
 window.addEventListener("resize", () => {
   if (state) drawMap();
@@ -885,6 +1146,14 @@ window.addEventListener("keydown", (event) => {
     $("pause-dialog").showModal();
     return;
   }
+  // Any key skips the fall; afterwards R tries again and C picks a new calling.
+  if (state.over && endingSequence) { event.preventDefault(); finishEnding(); return; }
+  if (state.over && !window.ularnOnline?.inRoom?.() && !event.repeat && (event.key === "r" || event.key === "R")) { event.preventDefault(); tryAgain(); return; }
+  if (state.over && !window.ularnOnline?.inRoom?.() && !event.repeat && (event.key === "c" || event.key === "C")) { event.preventDefault(); location.reload(); return; }
+  if (event.key.length === 1 && !event.repeat) {
+    const echo = document.querySelector(`.actionbar [data-key="${CSS.escape(event.key)}"]`);
+    if (echo) { echo.classList.add("key-echo"); setTimeout(() => echo.classList.remove("key-echo"), 140); }
+  }
   if (event.key.length === 1 || keyMap[event.key]) {
     event.preventDefault();
     const key = keyMap[event.key] || event.key;
@@ -995,6 +1264,39 @@ $("sound").addEventListener("click", () => {
   else setAudioPreference({ enabled: !soundOn });
   if (soundOn) sound("open");
 });
+// A soft tick under the pointer; the mixer rate-limits it and never lets it crowd out a fight.
+document.addEventListener("pointerover", (event) => {
+  if (event.pointerType !== "mouse" || !state) return;
+  const control = event.target.closest?.(".actionbar button, .dpad button, .terminal-footer button, .bestiary-tabs button, .beast");
+  if (control && !control.contains(event.relatedTarget)) sound("hover");
+});
+// Feel & accessibility: shake, flashing, numbers, wound bars and motion apply at once.
+function syncFeelControls() {
+  $("feel-shake").value = Math.round(feel.shake * 100);
+  $("feel-shake-text").textContent = `${Math.round(feel.shake * 100)}%`;
+  $("feel-numbers").checked = feel.numbers;
+  $("feel-health").checked = feel.healthBars;
+  $("feel-flashes").checked = !feel.flashes;
+  $("feel-motion").value = feel.motion;
+}
+function setFeel(changes) {
+  feel = feelSettings({ ...feel, ...changes });
+  saveFeel(localStorage, feel);
+  reduced = motionReduced(feel, systemMotion.matches);
+  document.body.classList.toggle("reduce-motion", feel.motion === "reduced");
+  director.setSettings(feel); director.setReduced(reduced);
+  feedbackHud.setSettings(feel); feedbackHud.setReduced(reduced);
+  world?.setFeel(feel);
+  if (world && world.reduced !== reduced) world.setReduced(reduced);
+  syncFeelControls();
+}
+syncFeelControls();
+$("feel-shake").addEventListener("input", (event) => setFeel({ shake: Number(event.target.value) / 100 }));
+$("feel-numbers").addEventListener("change", (event) => setFeel({ numbers: event.target.checked }));
+$("feel-health").addEventListener("change", (event) => setFeel({ healthBars: event.target.checked }));
+$("feel-flashes").addEventListener("change", (event) => setFeel({ flashes: !event.target.checked }));
+$("feel-motion").addEventListener("change", (event) => setFeel({ motion: event.target.value }));
+systemMotion.addEventListener?.("change", () => setFeel({}));
 $("audio-enabled").addEventListener("change", (event) => setAudioPreference({ enabled: event.target.checked }));
 $("music-volume").addEventListener("input", (event) => setAudioPreference({ music: Number(event.target.value) / 100 }));
 $("effects-volume").addEventListener("input", (event) => setAudioPreference({ effects: Number(event.target.value) / 100 }));
@@ -1054,7 +1356,6 @@ $("view-scores").addEventListener("click", () => {
 });
 $("global-scores").addEventListener("click", () => engine.showScoreboard());
 $("local-scores").addEventListener("click", () => engine.showScoreboard(true));
-$("new-after-death").addEventListener("click", () => location.reload());
 $("rotate-left").addEventListener("click", () => world.rotate(-1));
 $("rotate-right").addEventListener("click", () => world.rotate(1));
 $("camera-reset").addEventListener("click", () => world.reset());
@@ -1097,7 +1398,7 @@ window.addEventListener("ularn:graphics-restored", () => {
 // Menus and background tabs need no continuous scene rendering.
 function syncRenderPause() {
   if (document.hidden || document.querySelector("dialog[open]")) stopTravel();
-  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]") || !!state && (!state.maze || state.over));
+  world?.setPaused?.(document.hidden || !!document.querySelector("dialog[open]") || !!state && (!state.maze || (state.over && !endingSequence)));
   audio.setMenu(!!document.querySelector("dialog[open]") || !!state && !state.maze);
 }
 const dialogObserver = new MutationObserver(syncRenderPause);
@@ -1134,3 +1435,17 @@ viewportObserver.observe(document.querySelector(".camera-tools"));
 window.addEventListener("resize", () => { gameMap.resize(); updateViewport(); });
 
 window.addEventListener("pagehide", () => audio.suspend());
+
+// Try again: the previous page stored the hero; start straight back in the caves.
+(() => {
+  let retry = null;
+  try { retry = JSON.parse(sessionStorage.getItem(RETRY_KEY) || "null"); sessionStorage.removeItem(RETRY_KEY); } catch {}
+  if (!retry || !world || new URL(location.href).searchParams.has("room") || window.ularnOnline?.inRoom?.()) return;
+  if (classes.some(([name]) => name === retry.character)) {
+    character = retry.character;
+    document.querySelectorAll(".class-choice").forEach((button) => button.setAttribute("aria-pressed", String(button.textContent.trim() === character)));
+  }
+  if (retry.name) $("hero-name").value = String(retry.name).slice(0, 24);
+  if ([...$("difficulty").options].some((option) => option.value === String(retry.difficulty))) $("difficulty").value = String(retry.difficulty);
+  start(false);
+})();

@@ -74,6 +74,24 @@
     <main id="app">
       <div id="world" aria-label="Interactive 3D world"></div>
       <div class="vignette"></div>
+      <div id="fx-layer" aria-hidden="true">
+        <div id="hurt-vignette"></div>
+        <div id="floaters"></div>
+        <div id="nameplate" class="nameplate" hidden>
+          <span class="nameplate-name"></span>
+          <span class="nameplate-band" data-pips="0"><i></i><i></i><i></i><i></i></span>
+          <span class="nameplate-wound"></span>
+        </div>
+        <div id="transition-veil"></div>
+        <div id="death-veil" hidden></div>
+      </div>
+      <div id="feel-banner" class="feel-banner" role="status" aria-live="polite" hidden>
+        <span class="banner-eyebrow"></span><strong class="banner-title"></strong><span class="banner-line"></span><span class="banner-chips"></span>
+      </div>
+      <div id="depth-card" class="depth-card" role="status" aria-live="polite" hidden>
+        <span class="depth-region"></span><strong class="depth-title"></strong><span class="depth-line"></span>
+      </div>
+      <div id="notice-stack" aria-live="polite"></div>
       <div class="entry-veil" aria-hidden="true"></div>
       <header class="topbar">
         <div id="location">
@@ -169,6 +187,12 @@
           </div>
         </div>
       </section>
+      <aside id="records" class="records-card panel" aria-labelledby="records-title" hidden>
+        <div class="eyebrow" id="records-title">YOUR RECORDS</div>
+        <dl id="records-stats"></dl>
+        <p id="records-last"></p>
+        <button type="button" id="records-bestiary" class="text-link">Bestiary <span id="records-bestiary-count"></span></button>
+      </aside>
       </div>
       <div id="hud" hidden>
         <div class="map-stack">
@@ -247,7 +271,7 @@
           <div class="vital-pair"><div class="vital"><div class="meter-label">
             <span>VITALITY</span><strong id="health-text"></strong>
           </div>
-          <div class="meter health"><i id="health-bar"></i></div></div><div class="vital">
+          <div class="meter health"><i class="ghost" id="health-ghost"></i><i id="health-bar"></i></div></div><div class="vital">
           <div class="meter-label">
             <span>SPELL POWER</span><strong id="mana-text"></strong>
           </div>
@@ -260,12 +284,15 @@
         </aside>
         <div id="info-boxes">
           <div id="stat-box">
-            <div id="spell-count" aria-label="Spells remaining">Spells : <b id="spell-count-value">0/0</b></div>
+            <div id="spell-count" aria-label="Spells remaining"><span>SPELLS</span> <b id="spell-count-value">0/0</b></div>
             <div id="attributes" aria-label="Character attributes"></div>
           </div>
           <div id="xp-box" aria-label="Experience progression">
-            <div id="xp-count" aria-label="Experience toward next level">Exp : <b id="xp-count-value">0/10</b></div>
-            <div id="xp-title" aria-label="Experience title"></div>
+            <div class="xp-heading">
+              <div id="xp-title" aria-label="Experience title"></div>
+              <div id="xp-count" aria-label="Experience toward next level"><b id="xp-count-value">0/10</b> <span>XP</span></div>
+            </div>
+            <div class="meter xp"><i id="xp-bar"></i></div>
           </div>
         </div>
         <section class="journal">
@@ -353,13 +380,29 @@
             <button id="local-scores" aria-pressed="false">Local records</button>
           </div>
           <p id="score-sync-status" role="status" hidden></p>
+          <section id="run-recap" class="run-recap" hidden aria-labelledby="recap-title">
+            <div class="recap-head">
+              <img id="recap-portrait" class="recap-portrait" alt="" width="80" height="96" />
+              <div>
+                <div class="eyebrow" id="recap-eyebrow">YOU HAVE FALLEN</div>
+                <h2 id="recap-title"></h2>
+                <p id="recap-line"></p>
+              </div>
+            </div>
+            <dl class="recap-stats" id="recap-stats"></dl>
+            <div class="recap-chips" id="recap-chips"></div>
+            <p class="recap-rank" id="recap-rank"></p>
+          </section>
           <div class="terminal-scroll"><pre id="LARN" tabindex="-1"></pre><pre id="score-details" hidden aria-live="polite"></pre></div>
           <div class="terminal-footer">
-            <button data-key="space">Continue / next page</button
+            <button id="try-again" class="primary-action" hidden>
+              Try again <kbd>R</kbd></button
+            ><button data-key="space">Continue / next page</button
             ><button data-key="return">Enter ↵</button
-            ><button data-key="escape">Return to game</button
+            ><button data-key="escape">Return to expedition</button
+            ><button id="open-bestiary-recap" class="recap-only" hidden>Bestiary</button
             ><button id="new-after-death" hidden>
-              New expedition <span data-icon="northeast"></span>
+              Change calling <kbd>C</kbd>
             </button>
           </div>
         </div>
@@ -471,7 +514,8 @@
         ><button id="save-exit" class="button secondary">Save & return to title</button
         ><button id="original-help" class="button secondary">
           Original game manual
-        </button><button id="view-scores" class="button secondary">Scoreboard</button>
+        </button><button id="view-scores" class="button secondary">Scoreboard</button
+        ><button id="open-bestiary" class="button secondary">Bestiary</button>
         <label class="quality-setting" for="graphics-quality"
           >Graphics
           <select id="graphics-quality" class="field">
@@ -490,7 +534,34 @@
           <p id="audio-track" class="audio-track">The Caves Below</p>
           <p id="audio-status" role="status" aria-live="polite"></p>
         </fieldset>
+        <fieldset class="feel-settings">
+          <legend>Feel &amp; accessibility</legend>
+          <label for="feel-shake">Screen shake <output id="feel-shake-text">70%</output></label>
+          <input id="feel-shake" type="range" min="0" max="100" value="70" aria-label="Screen shake" />
+          <label class="check"><input id="feel-numbers" type="checkbox" checked /> Damage numbers</label>
+          <label class="check"><input id="feel-health" type="checkbox" checked /> Enemy wound bars</label>
+          <label class="check"><input id="feel-flashes" type="checkbox" /> Reduce flashing</label>
+          <label class="motion-setting" for="feel-motion">Motion
+            <select id="feel-motion" class="field">
+              <option value="system">Match system setting</option>
+              <option value="full">Full motion</option>
+              <option value="reduced">Reduced motion</option>
+            </select>
+          </label>
+        </fieldset>
         <p id="pause-status" role="status"></p>
+      </dialog>
+      <dialog id="bestiary-dialog" class="panel dialog bestiary" aria-labelledby="bestiary-title">
+        <div class="bestiary-heading">
+          <div><div class="eyebrow">CREATURES OF THE CAVES</div><h2 id="bestiary-title">Bestiary</h2><p id="bestiary-progress"></p></div>
+          <button class="close-dialog" aria-label="Close bestiary"><span data-icon="close"></span></button>
+        </div>
+        <div class="bestiary-tabs" role="tablist" aria-label="Filter creatures">
+          <button role="tab" data-filter="all" aria-selected="true">All</button
+          ><button role="tab" data-filter="seen" aria-selected="false">Seen</button
+          ><button role="tab" data-filter="slain" aria-selected="false">Slain</button>
+        </div>
+        <div id="bestiary-grid" class="bestiary-grid" role="list"></div>
       </dialog>
       <div id="graphics-status" role="alert" class="panel" hidden>
         Graphics paused. Waiting for your browser to restore the 3D view.<br /><small

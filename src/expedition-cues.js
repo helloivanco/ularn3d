@@ -1,5 +1,5 @@
 /** Stairs, shafts, elevators, the cave mouth, and the way home. */
-const STAIR_TILES = new Set([5, 6, 13, 14, 54, 55, 56, 93]);
+export const STAIR_TILES = new Set([5, 6, 13, 14, 54, 55, 56, 93]);
 
 export const bedForLevel = (level) => {
   const depth = Number(level) || 0;

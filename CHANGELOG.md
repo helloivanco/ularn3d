@@ -4,6 +4,19 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.4.0 — Every blow lands
+
+- Hits flash the creature and knock it back, damage numbers rise from the blow, and a nameplate shows how wounded your foe is, never its exact health
+- Heavy blows shake the view and pause for a heartbeat. Slain creatures topple and sink, and the loot they drop springs out of the floor
+- Spells burst where they land. Levelling up raises a column of light and a banner listing what you gained
+- When you are hurt, the edges of the screen redden and your health bar shows what you lost. At low health a heartbeat sounds and the music dulls
+- Each new floor fades in with its depth, and tells you if you fell through a trap door
+- Death plays out before a new recap: who killed you, how deep you reached, your kills and turns, and how the run compares with your best. Press R to try again with the same hero at once
+- Your records, 23 feats and a bestiary of all 66 creatures now fill in as you play. The title screen remembers your last calling and difficulty
+- A redesigned status panel: stat chips, an experience bar, a color-coded journal and item art in your pack
+- The caves are framed closer, and town and caves remember their own zoom. In Cinematic, dust drifts in the caves and embers rise in the volcano
+- Menu → Feel & accessibility sets screen shake, reduced flashing, damage numbers, enemy wound bars and motion. The classic rules are unchanged
+
 ## 1.3.82 — Auto explore, scores that stick, quicker multiplayer
 
 - Press X or the new Explore button to chart a floor automatically. It stops when a creature appears or something needs you, and picks up loot when auto-loot is on
