@@ -78,10 +78,10 @@ test("character stats sit beside the adventurer frame and the compact map stays 
   });
   await page.waitForTimeout(400);
   await expect(page.locator("#attributes")).toBeVisible();
-  await expect(page.locator("#spell-count")).toHaveText(/Spells\s*:\s*\d+\/\d+/);
-  await expect(page.locator("#xp-count")).toHaveText(/Exp\s*:\s*\d+\/\d+/);
+  await expect(page.locator("#spell-count")).toHaveText(/Spells\s*\d+\/\d+/i);
+  await expect(page.locator("#xp-count")).toHaveText(/\d+\/\d+\s*XP/);
   await expect(page.locator("#xp-title")).toHaveText(/novice explorer/i);
-  await expect(page.locator("#attributes")).toHaveText(/STR=\d+\s+INT=\d+\s+WIS=\d+\s+CON=\d+\s+DEX=\d+/);
+  await expect(page.locator("#attributes")).toHaveText(/STR\s*\d+\s*INT\s*\d+\s*WIS\s*\d+\s*CON\s*\d+\s*DEX\s*\d+/);
   await expect(page.locator("#gold")).toBeVisible();
   const layout = await page.evaluate(() => {
     const box = document.getElementById("info-boxes").getBoundingClientRect();
@@ -110,7 +110,7 @@ test("character stats sit beside the adventurer frame and the compact map stays 
       xpBesideStats: xpBox.left >= document.getElementById("stat-box").getBoundingClientRect().right - 4,
       journalMoved: journal.left >= box.right - 8,
       spellAboveStats: document.getElementById("spell-count").getBoundingClientRect().bottom <= stats.top + 2,
-      spellLarger: parseFloat(getComputedStyle(document.getElementById("spell-count")).fontSize) >
+      spellLarger: parseFloat(getComputedStyle(document.getElementById("spell-count-value")).fontSize) >
         parseFloat(getComputedStyle(document.getElementById("attributes")).fontSize),
       cellWidth: mapBox.width / cols,
       cellHeight: mapBox.height / rows,
@@ -122,10 +122,10 @@ test("character stats sit beside the adventurer frame and the compact map stays 
   });
   expect(layout.statsVisible).toBe(true);
   expect(layout.xpVisible).toBe(true);
-  expect(layout.labels).toMatch(/^STR=\d+ INT=\d+ WIS=\d+ CON=\d+ DEX=\d+$/);
-  expect(layout.spells).toBe(`Spells : ${layout.mana}/${layout.manaMax}`);
-  expect(layout.xp).toBe(`Exp : ${layout.snapXp}/${layout.snapXpNext}`);
-  expect(layout.title).toBe("novice explorer");
+  expect(layout.labels).toMatch(/^STR \d+ INT \d+ WIS \d+ CON \d+ DEX \d+$/);
+  expect(layout.spells).toBe(`SPELLS ${layout.mana}/${layout.manaMax}`);
+  expect(layout.xp).toBe(`${layout.snapXp}/${layout.snapXpNext} XP`);
+  expect(layout.title.toLowerCase()).toBe("novice explorer");
   expect(layout.manaMeter).toBe(`${layout.mana} / ${layout.manaMax}`);
   expect(layout.spellAboveStats).toBe(true);
   expect(layout.spellLarger).toBe(true);
@@ -160,13 +160,16 @@ test("camera starts facing north and keeps orbit across floor transitions", asyn
     offset: ularnGraphics.metrics().cameraOffset,
   }));
   expect(cave.level).toBe(1);
-  cave.offset.forEach((value, index) => expect(Math.abs(value - turned[index])).toBeLessThan(0.05));
+  // Caves keep their own closer zoom; the orbit (yaw) carries over unchanged.
+  const yaw = ([x, , z]) => Math.atan2(x, z);
+  expect(Math.abs(yaw(cave.offset) - yaw(turned))).toBeLessThan(0.01);
+  const caveTurned = cave.offset;
   await page.evaluate(() => {
     newcavelevel(2);
     paint();
   });
   const nextFloor = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
-  nextFloor.forEach((value, index) => expect(Math.abs(value - turned[index])).toBeLessThan(0.05));
+  nextFloor.forEach((value, index) => expect(Math.abs(value - caveTurned[index])).toBeLessThan(0.05));
   await page.screenshot({ path: "test-results/dungeon_camera_after_floor_change.png" });
 });
 

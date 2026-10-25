@@ -50,3 +50,11 @@ These recorded checks and measurements describe the earlier local build before r
 The browser regression checks passed, including the intentional spell-failure fixture after making that acceptance scenario deterministic. All nine audio checks also passed with software rendering. Production build, desktop protocol checks, and offline desktop playback/save/relaunch passed. Two publishing-only checks remain outside the local change.
 
 On this Mac's Apple M2 Pro at 1440 × 1000, the production navigation benchmark with music enabled recorded 60.0 FPS, 17.7 ms frame p95 and 15.5 ms input-to-render p95. The audio context was running, playing the caves bed/stem pair with 2 music sources and 38 accepted effects. [Raw playback/performance record](audio/navigation-benchmark.json).
+
+## Feedback cues
+
+Combat feedback adds synthesized cues on the effects bus: `kill` (a thud and crunch pitched by creature size, landing with blade contact), `spellImpact` (fire, cold, electric or bell families where a bolt lands), `levelup` (an E-minor arpeggio with a shimmer tail), `arrive` (a drone swell and two-note motif, pitched lower with depth), `feat`, `whiff` for misses, and a rate-limited `hover` tick for interface controls. Every new cue varies pitch by ±3% and level by ±10% from the private generator, never from gameplay randomness.
+
+Stingers dip the music through `duckFor(level, holdMs)` on the duck stage only, so the player's music volume is never rewritten: a level-up holds the music at 35% for 1.4 s, an arrival at 50%, a feat at 60%. Overlapping dips compose, and the deepest held dip wins.
+
+Low health starts a dry heartbeat through `setHeartbeat(rate)`: 70 beats per minute at 30% health and 100 at 15%. A low-pass filter between the music gain and the duck stage eases the score down to about 2.4 kHz and then 900 Hz, and back to full range when the hero recovers. The loop stops in menus, while suspended, when sound is off and when the expedition ends. `ularnAudio.metrics()` reports `heartbeat` and `duck`. Heartbeat and hover never count as the last effect, and above 16 active voices they, along with misses, are skipped first.

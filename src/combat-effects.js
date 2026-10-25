@@ -5,7 +5,29 @@ const POINT_LIMIT = 96;
 const PALETTE = [0x98d0fa, 0xb4e694, 0xc0a0f0, 0xf3c679, 0x82dfd3, 0xef9fbc];
 const WARD_CODES = new Set(["pro", "inv", "glo", "stp", "hld", "web"]);
 const point = (p) => new THREE.Vector3(p.x, 0.48, p.y);
-function spellKind(spell) {
+const BURST = 12;
+// Fixed spoke directions: presentation noise never draws on any engine RNG.
+const SPOKES = Float32Array.from({ length: BURST * 3 }, (_, i) => {
+  const n = Math.floor(i / 3), axis = i % 3, angle = n / BURST * Math.PI * 2 + (n % 3) * .21;
+  return axis === 0 ? Math.cos(angle) : axis === 1 ? .25 + (n % 4) * .18 : Math.sin(angle);
+});
+let glowTexture = null;
+// Without a DOM (unit tests building the pool) the flash is a plain soft quad.
+const softGlow = () => {
+  if (glowTexture || typeof document === "undefined") return glowTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext("2d"), gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(.35, "rgba(255,255,255,.55)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  glowTexture = new THREE.CanvasTexture(canvas);
+  glowTexture.colorSpace = THREE.SRGBColorSpace;
+  return glowTexture;
+};
+export function spellKind(spell) {
   const code = String(spell?.code || "").toLowerCase();
   const name = String(spell?.name || "").toLowerCase();
   if (code === "bal" || code === "mfi" || /fire|flame/.test(name)) return "fire";
@@ -38,11 +60,19 @@ export class CombatEffects {
       ring.rotation.x = -Math.PI / 2;
       const line = new THREE.LineSegments(lineGeometry, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }));
       line.frustumCulled = false;
-      group.add(orb, ring, line);
+      // Impact: a spray of sparks and a soft additive flash where the spell lands.
+      const burstGeometry = new THREE.BufferGeometry();
+      burstGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(BURST * 3), 3));
+      const burst = new THREE.Points(burstGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.12, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+      burst.frustumCulled = false;
+      const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: softGlow(), color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+      burst.visible = flash.visible = false;
+      group.add(orb, ring, line, burst, flash);
       group.visible = false;
       scene.add(group);
-      return { group, orb, ring, line, material, age: 0, active: false, history: [] };
+      return { group, orb, ring, line, burst, flash, material, age: 0, active: false, history: [], impactAt: null };
     });
+    this.impacts = 0;
   }
   event(detail, reduced) {
     if (detail.kind !== "spell" || !detail.spell || !detail.from) return false;
@@ -79,7 +109,37 @@ export class CombatEffects {
     if (path.length < 2) slot.segmentStart.copy(slot.segmentEnd);
     slot.reduced = reduced;
     if (reduced) slot.orb.position.copy(slot.segmentEnd);
+    // A directed bolt bursts where its visible path ends; wards stay on the caster.
+    const lands = detail.phase === "impact" || (detail.phase === "cast" && slot.kind !== "ward" && path.length > 1);
+    if (lands && slot.kind !== "ward") {
+      slot.impactAt = detail.phase === "impact" || reduced ? 0 : slot.kind === "lightning" ? 0.06 : 0.12;
+      slot.burst.position.copy(slot.segmentEnd);
+      slot.flash.position.copy(slot.segmentEnd);
+      slot.burst.material.color.copy(slot.material.color);
+      slot.flash.material.color.copy(slot.material.color);
+      slot.lifetime = Math.max(slot.lifetime, slot.impactAt + 0.4);
+      this.impacts++;
+    } else if (detail.phase === "cast") slot.impactAt = null;
     return true;
+  }
+  updateImpact(slot) {
+    const t = slot.impactAt == null ? -1 : slot.age - slot.impactAt;
+    const live = t >= 0 && t < 0.4;
+    slot.burst.visible = live;
+    slot.flash.visible = live && t < 0.2;
+    if (!live) return;
+    const u = t / 0.4, spread = slot.reduced ? .7 : (1 - (1 - u) ** 3) * .9;
+    const positions = slot.burst.geometry.attributes.position;
+    for (let i = 0; i < BURST; i++) {
+      positions.array[i * 3] = SPOKES[i * 3] * spread;
+      positions.array[i * 3 + 1] = SPOKES[i * 3 + 1] * spread * (slot.reduced ? 1 : 1 - u * .6);
+      positions.array[i * 3 + 2] = SPOKES[i * 3 + 2] * spread;
+    }
+    positions.needsUpdate = true;
+    slot.burst.material.opacity = 1 - u;
+    const f = t / 0.2;
+    slot.flash.scale.setScalar(slot.reduced ? 1 : .35 + f * 1.25);
+    slot.flash.material.opacity = (1 - f) * .9;
   }
   update(dt) {
     for (const slot of this.slots) {
@@ -87,8 +147,10 @@ export class CombatEffects {
       slot.age = (performance.now() - slot.startedAt) / 1000;
       if (slot.age >= slot.lifetime) {
         slot.active = slot.group.visible = false;
+        slot.burst.visible = slot.flash.visible = false;
         continue;
       }
+      this.updateImpact(slot);
       const opacity = Math.min(1, (slot.lifetime - slot.age) / 0.25);
       slot.material.opacity = opacity;
       slot.line.material.opacity = opacity * 0.85;
@@ -123,11 +185,12 @@ export class CombatEffects {
     }
   }
   clear() {
-    this.slots.forEach((s) => { s.active = s.group.visible = false; s.history = []; });
+    this.slots.forEach((s) => { s.active = s.group.visible = false; s.history = []; s.impactAt = null; s.burst.visible = s.flash.visible = false; });
   }
   metrics() {
     const active = this.slots.filter((s) => s.active);
-    return { activeEffects: active.length, effectCapacity: LIMIT, effectPoints: active.reduce((n, s) => n + s.history.length, 0), lastSpell: this.slots.reduce((a, s) => s.sequence > (a?.sequence || 0) ? s : a, null)?.spell || null };
+    return { activeEffects: active.length, effectCapacity: LIMIT, effectPoints: active.reduce((n, s) => n + s.history.length, 0), lastSpell: this.slots.reduce((a, s) => s.sequence > (a?.sequence || 0) ? s : a, null)?.spell || null,
+      impactBursts: this.impacts };
   }
   dispose() {
     for (const slot of this.slots) {
@@ -135,8 +198,11 @@ export class CombatEffects {
       slot.orb.geometry.dispose();
       slot.ring.geometry.dispose();
       slot.line.geometry.dispose();
+      slot.burst.geometry.dispose();
       slot.material.dispose();
       slot.line.material.dispose();
+      slot.burst.material.dispose();
+      slot.flash.material.dispose();
     }
   }
 }

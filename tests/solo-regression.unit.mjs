@@ -9,6 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { scriptedRun, bootEngine, playInputs } from "./lib/engine-session.mjs";
+import { COMBAT_SEED, COMBAT_TURNS, COMBAT_GOLDEN, stageCombat } from "./lib/combat-fixture.mjs";
 
 const SEED = 2;
 const TURNS = 500;
@@ -26,6 +27,22 @@ test("500-turn solo seed matches the golden checksum", async () => {
   assert.equal(first.level, 0);
   assert.equal(first.checksum, second.checksum);
   assert.equal(first.checksum, GOLDEN);
+});
+
+test("seeded melee exchange matches the combat golden", async () => {
+  const fight = async () => {
+    const api = bootEngine({ seed: COMBAT_SEED });
+    const key = stageCombat(api);
+    await playInputs(api, Array.from({ length: COMBAT_TURNS }, () => key));
+    const state = api.captureGameState();
+    state.party = null;
+    return { checksum: api.checksumGameState(state), kills: api.player.MONSTKILLED, hp: api.player.HP };
+  };
+  const first = await fight(), second = await fight();
+  assert.equal(first.checksum, second.checksum);
+  assert.equal(first.kills, 1);
+  assert.ok(first.hp < 4000);
+  assert.equal(first.checksum, COMBAT_GOLDEN);
 });
 
 test("party of one matches the solo checksum", async () => {

@@ -310,6 +310,14 @@ export function faceItem(group, camera) {
   if (Math.abs(side) > 0.05) artwork.scale.x = (side < 0 ? -1 : 1) * group.userData.artWidth;
 }
 
+// The already-stripped canvas of loaded floor art, for HUD flyers and icons.
+// Null until the floor sprite has loaded once; nothing is fetched here.
+export function itemArtImage(id, arg = 0, known = true) {
+  const path = itemArtPath(id, arg, known);
+  const image = path && textures.get(path)?.image;
+  return image && (image.getContext || image.complete) ? image : null;
+}
+
 export function itemArtMetrics() {
   return { itemTextures: textures.size, itemMaterials: materials.size };
 }

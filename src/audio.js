@@ -76,6 +76,15 @@ const rateForSpell = (spell) => {
   return Math.min(1.35, Math.max(0.78, profile.frequency / 520));
 };
 
+// Game-feel cues. Decorative ones yield to a busy mix; ambient ones (the
+// heartbeat loop, pointer ticks) stay out of the accepted-effect history.
+const CUES = new Set(["kill", "spellImpact", "levelup", "arrive", "feat", "heartbeat", "hover", "confirm", "whiff"]);
+// Ambient cues never become the "last effect": a feat chime or the heartbeat
+// arriving later must not mask the action sound that actually just played.
+const DECORATIVE = new Set(["heartbeat", "hover", "whiff"]), AMBIENT = new Set(["heartbeat", "hover", "feat"]);
+const STINGER_DUCKS = { levelup: [.35, 1400], feat: [.6, 800], arrive: [.5, 900] };
+const noteHz = (note) => 440 * 2 ** ((note - 69) / 12);
+const bounded = (value, fallback, low, high) => { const n = Number(value ?? fallback); return Math.max(low, Math.min(high, Number.isFinite(n) ? n : fallback)); };
 
 // Music is pre-rendered; gameplay only moves gain envelopes and short FX voices.
 export class GameAudio {
@@ -88,7 +97,7 @@ export class GameAudio {
     this.paused = false; this.unlocked = false; this.status = "idle"; this.error = "";
     this.sampleCache = new Map();
     this.history = []; this.effectsCount = 0; this.notesPlayed = 0;
-    this.stepIndex=0;
+    this.stepIndex=0; this.ducks = []; this.heartbeat = 0; this.heartbeatRate = 0;
   }
   random() { this.randomState = (Math.imul(this.randomState, 1664525) + 1013904223) >>> 0; return this.randomState / 4294967296; }
   prepare() {
@@ -97,7 +106,7 @@ export class GameAudio {
       this.stopMusic();
       for (const source of [...this.voices]) source.onended?.();
       this.context = this.contextFactory(); this.graph = null; this.noise = null;
-      this.lastFootstepAt = -Infinity;
+      this.lastFootstepAt = -Infinity; this.lastHoverAt = -Infinity;
     }
     const ctx = this.context;
     if (!this.graph) {
@@ -107,7 +116,11 @@ export class GameAudio {
       this.compressor = ctx.createDynamicsCompressor();
       Object.assign(this.compressor.threshold, { value: -12 }); this.compressor.knee.value = 18;
       this.compressor.ratio.value = 6; this.compressor.attack.value = .006; this.compressor.release.value = .2;
-      this.musicGain.connect(this.duckGain); this.duckGain.connect(this.master); this.effectsGain.connect(this.master);
+      // Low-health muffle between the music volume and the duck stage; open by default.
+      this.musicFilter = ctx.createBiquadFilter(); this.musicFilter.type = "lowpass"; this.musicFilter.Q.value = 0;
+      this.clearHz = Math.min(20000, ctx.sampleRate / 2); this.musicFilter.frequency.value = this.clearHz;
+      this.ducks = []; this.heartbeat = 0;
+      this.musicGain.connect(this.musicFilter); this.musicFilter.connect(this.duckGain); this.duckGain.connect(this.master); this.effectsGain.connect(this.master);
       this.master.connect(this.compressor); this.compressor.connect(ctx.destination);
       this.reverb = ctx.createConvolver(); this.wet = ctx.createGain(); this.wet.gain.value = .12;
       const impulse = ctx.createBuffer(2, Math.floor(ctx.sampleRate * .8), ctx.sampleRate);
@@ -120,7 +133,7 @@ export class GameAudio {
       this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const data = this.noise.getChannelData(0); let low = 0;
       for (let i = 0; i < data.length; i++) { low = low * .7 + (this.random() * 2 - 1) * .3; data[i] = low * 2; }
-      ctx.onstatechange = () => { if (ctx.state !== "running" && !this.paused && this.unlocked) this.status = "blocked"; this.notify(); };
+      ctx.onstatechange = () => { if (ctx.state !== "running" && !this.paused && this.unlocked) this.status = "blocked"; this.syncHeartbeat(); this.notify(); };
     }
     return ctx;
   }
@@ -132,7 +145,7 @@ export class GameAudio {
       if (ctx.state !== "running") await ctx.resume();
       if (ctx.state !== "running" || this.paused || !this.settings.enabled) return false;
       if (!this.musicLoadError) { this.error = ""; this.status = this.loadingRegion ? "loading" : this.activeTrack ? "playing" : "ready"; }
-      this.notify(); if (!this.musicLoadError) this.startMusic(); return true;
+      this.syncHeartbeat(); this.notify(); if (!this.musicLoadError) this.startMusic(); return true;
     } catch {
       this.status = "blocked"; this.error = "Sound could not start. Tap Sound to try again."; this.notify(); return false;
     }
@@ -155,7 +168,7 @@ export class GameAudio {
     if (next !== this.region) { this.region = next; this.loadingRegion = null; this.musicLoadError = false; this.error = ""; this.musicEpoch++; this.offset = 0; this.startMusic(); }
     this.threat = Math.max(0, Math.min(1, threat)); this.updateTension();
   }
-  setMenu(menu) { if (this.menu === !!menu) return; this.menu = !!menu; this.updateTension(); this.updateDuck(); }
+  setMenu(menu) { if (this.menu === !!menu) return; this.menu = !!menu; this.updateTension(); this.updateDuck(); this.syncHeartbeat(); }
   async load(name) {
     if (!this.cache.has(name)) this.cache.set(name, (async () => {
       const response = await fetch(`/audio/${name}.wav`);
@@ -200,7 +213,7 @@ export class GameAudio {
     for (const node of [...this.musicSources]) node.cleanup(); this.activeTrack = null;
   }
   finish(kind) {
-    this.ended = true; this.epoch++; this.stopMusic();
+    this.ended = true; this.epoch++; this.heartbeatRate = 0; this.syncHeartbeat(); this.stopMusic();
     for (const source of [...this.voices]) { try { source.stop(); } catch {} source.onended?.(); }
     this.play(kind);
   }
@@ -215,15 +228,35 @@ export class GameAudio {
     this.impactThreat = .85; this.updateTension(); clearTimeout(this.tensionTimer);
     this.tensionTimer = setTimeout(() => { this.impactThreat = 0; this.updateTension(); }, 4000);
   }
-  updateDuck() {
+  // Music dips compose: the deepest held dip wins, never louder than the menu
+  // level, and each release steps back up to whatever is still held.
+  duckLevel(t = this.context?.currentTime ?? 0) { return Math.min(this.menu ? .55 : 1, ...this.ducks.filter((dip) => dip.until > t).map((dip) => dip.level)); }
+  updateDuck(attack = .12) {
     if (!this.context || !this.graph) return;
-    const now = this.context.currentTime, target = this.menu ? .55 : 1;
-    this.duckGain.gain.cancelScheduledValues(now); this.duckGain.gain.setTargetAtTime(target, now, .12);
+    const now = this.context.currentTime, gain = this.duckGain.gain;
+    this.ducks = this.ducks.filter((dip) => dip.until > now);
+    gain.cancelScheduledValues(now); gain.setTargetAtTime(this.duckLevel(now), now, attack);
+    for (const dip of [...this.ducks].sort((a, b) => a.until - b.until)) gain.setTargetAtTime(this.duckLevel(dip.until), dip.until, dip.release);
   }
-  duck() {
-    const now = this.context.currentTime;
-    this.duckGain.gain.cancelScheduledValues(now); this.duckGain.gain.setTargetAtTime(.45, now, .025);
-    this.duckGain.gain.setTargetAtTime(this.menu ? .55 : 1, now + .3, .18);
+  duckFor(level = .5, holdMs = 600, attack = .05, release = .3) {
+    if (!this.context || !this.graph) return;
+    this.ducks.push({ level: bounded(level, .5, 0, 1), until: this.context.currentTime + bounded(holdMs, 600, 0, 10000) / 1000, release });
+    this.updateDuck(attack);
+  }
+  duck() { this.duckFor(.45, 300, .025, .18); }
+  // rate: beats per minute, 0 = off. The loop and the music muffle pause while
+  // menus are open, sound is suspended or disabled, or the expedition ended.
+  setHeartbeat(rate = 0) { this.heartbeatRate = bounded(rate, 0, 0, 180); this.syncHeartbeat(); }
+  syncHeartbeat() {
+    const rate = this.heartbeatRate && this.settings.enabled && !this.paused && !this.menu && !this.ended && this.graph && this.context?.state === "running" ? this.heartbeatRate : 0;
+    if (rate !== this.heartbeat && this.graph) this.musicFilter.frequency.setTargetAtTime(rate ? 2400 * .375 ** Math.min(1, Math.max(0, (rate - 70) / 30)) : this.clearHz, this.context.currentTime, .35);
+    this.heartbeat = rate;
+    if (!rate) { clearTimeout(this.heartbeatTimer); this.heartbeatTimer = null; }
+    else if (!this.heartbeatTimer) this.beat();
+  }
+  beat() {
+    this.heartbeatTimer = this.heartbeat ? setTimeout(() => this.beat(), 60000 / this.heartbeat) : null;
+    if (this.heartbeat) this.play("heartbeat");
   }
   voice({ frequency = 200, end = 100, duration = .2, delay = 0, type = "sine", volume = .1, noise = false, pan = 0, resonance = 1, wet = true, attack = .006 }) {
     if (this.voices.size >= this.maxVoices) return;
@@ -273,6 +306,7 @@ export class GameAudio {
     // Already-unlocked actions play before expensive turn/render work. Only a
     // context that needs unlocking may defer (and expire) an old action cue.
     if (this.context?.state === "running" && this.graph) { this.renderFX(kind, detail); return; }
+    if (AMBIENT.has(kind)) return; // Pointer ticks and heartbeats never unlock or replay late.
     const epoch = this.epoch, timestamp = performance.now();
     this.unlock().then((ready) => {
       if (ready && epoch === this.epoch && performance.now() - timestamp < 350 && !this.paused) this.renderFX(kind, detail);
@@ -285,7 +319,14 @@ export class GameAudio {
       if (now-(this.lastFootstepAt ?? -Infinity)<.085) return;
       this.lastFootstepAt=now;
     }
-    this.prepare(); this.effectsCount++; this.history.push(kind); if (this.history.length > 24) this.history.shift();
+    // A busy mix drops decorative cues first; the hard 24-voice bound still applies to all.
+    if ((DECORATIVE.has(kind) && this.voices.size > 16) || (kind === "heartbeat" && (this.menu || this.ended))) return;
+    if (kind === "hover") {
+      const now = this.prepare().currentTime;
+      if (this.voices.size > 12 || now - (this.lastHoverAt ?? -Infinity) < .06) return;
+      this.lastHoverAt = now;
+    }
+    this.prepare(); if (!AMBIENT.has(kind)) { this.effectsCount++; this.history.push(kind); if (this.history.length > 24) this.history.shift(); }
     const pan = Number(detail.pan) || 0;
     if (kind === "weapon") {
       const [pitch, end, type, duration, weight] = weaponProfile(detail.weapon);
@@ -341,13 +382,73 @@ export class GameAudio {
     } else if (kind === "victory" || kind === "death") {
       this.stopMusic(); const notes = kind === "victory" ? [64, 67, 71, 76] : [52, 51, 47, 40];
       notes.forEach((note, i) => this.voice({ frequency: 440 * 2 ** ((note - 69) / 12), end: 440 * 2 ** ((note - 69) / 12), duration: 1.8, delay: i * .2, type: kind === "death" ? "triangle" : "sine", volume: .1 }));
+    } else if (CUES.has(kind)) {
+      this.cue(kind, detail, pan);
     } else {
       this.voice({ frequency: 1200, end: 700, noise: true, duration: .045, volume: .045, wet: false });
       this.voice({ frequency: 330, end: 440, duration: .08, volume: .025, wet: false });
     }
   }
+  // Shared E-minor intervals. One private ±3% pitch / ±10% level draw per cue
+  // keeps chords in tune with themselves while repeats never sound identical.
+  cue(kind, detail, pan) {
+    const pitch = 1 + (this.random() * 2 - 1) * .03, level = 1 + (this.random() * 2 - 1) * .1;
+    const delay = bounded(detail.delay, kind === "kill" ? .105 : 0, 0, 2);
+    const at = (o) => this.voice({ pan, ...o, delay: delay + (o.delay || 0), frequency: o.frequency * pitch, end: (o.end ?? o.frequency) * pitch, volume: o.volume * level });
+    if (kind === "kill") {
+      // Bigger creatures land lower and longer; contact matches the 105 ms weapon strike.
+      const size = bounded(detail.size, .3, 0, 1), drop = 1 - size * .45;
+      at({ frequency: 130 * drop, end: 40 * drop, duration: .2 + size * .14, volume: .2, attack: .004 });
+      at({ frequency: 1100 - size * 450, end: 180, noise: true, duration: .11, volume: .1, resonance: .8 });
+      if (size > .4) at({ frequency: 240, end: 55, noise: true, duration: .32, delay: .04, volume: .07 * size, resonance: .6 });
+      this.duck();
+    } else if (kind === "spellImpact") {
+      const family = String(detail.family || spellProfile(detail.spell || {}).family).toLowerCase();
+      if (family === "fire") {
+        at({ frequency: 1500, end: 260, noise: true, duration: .34, volume: .12, resonance: .7, attack: .02 });
+        at({ frequency: 3400, end: 1900, noise: true, duration: .14, delay: .05, volume: .05, resonance: 2.5, wet: false });
+        at({ frequency: noteHz(40), end: noteHz(35), type: "triangle", duration: .3, volume: .07 });
+      } else if (family === "ice" || family === "cold") {
+        [88, 91, 95].forEach((note, i) => at({ frequency: noteHz(note) * (1 + i * .004), duration: .55 + i * .08, delay: i * .028, volume: .032 }));
+      } else if (family === "lightning" || family === "electric") {
+        at({ frequency: 4200, end: 1100, noise: true, duration: .16, volume: .11, resonance: 3, wet: false });
+        at({ frequency: 2600, end: 700, noise: true, duration: .1, delay: .055, volume: .075, resonance: 2.4 });
+        at({ frequency: 110, end: 55, type: "square", duration: .14, volume: .028 });
+      } else {
+        // Ward, arcane, healing and dark impacts ring as a bell: fundamental, inharmonic partial, hum.
+        const root = noteHz({ ward: 71, heal: 79, dark: 64 }[family] ?? 76);
+        at({ frequency: root, duration: .95, volume: .05, attack: .004 });
+        at({ frequency: root * 2.76, duration: .45, volume: .016 });
+        at({ frequency: root / 2, duration: 1.05, volume: .024, attack: .02 });
+      }
+      this.duck();
+    } else if (kind === "levelup") {
+      [64, 67, 71, 76].forEach((note, i) => at({ frequency: noteHz(note), type: "triangle", duration: i === 3 ? 1.1 : .5, delay: i * .1, volume: .055 }));
+      at({ frequency: 5200, end: 2600, noise: true, duration: 1.2, delay: .3, volume: .014, resonance: 4, attack: .3 });
+    } else if (kind === "arrive") {
+      // Deeper floors settle up to five semitones lower.
+      const shift = 2 ** (-bounded(detail.depth, 0, 0, 20) / 4 / 12);
+      at({ frequency: noteHz(40) * shift, type: "triangle", duration: 1.7, volume: .07, attack: .5 });
+      at({ frequency: noteHz(64) * shift, duration: .8, delay: .3, volume: .04 });
+      at({ frequency: noteHz(59) * shift, duration: 1.1, delay: .62, volume: .036 });
+    } else if (kind === "feat") {
+      [79, 83, 88].forEach((note, i) => at({ frequency: noteHz(note), duration: i === 2 ? .9 : .4, delay: i * .07, volume: .04, attack: .003 }));
+    } else if (kind === "heartbeat") {
+      at({ frequency: 58, end: 40, type: "triangle", duration: .13, volume: .16, wet: false, attack: .008 });
+      at({ frequency: 52, end: 38, type: "triangle", duration: .11, delay: .14, volume: .11, wet: false, attack: .008 });
+    } else if (kind === "hover") {
+      at({ frequency: 3200, end: 2200, noise: true, duration: .015, volume: .012, resonance: 1.4, wet: false, attack: .002 });
+    } else if (kind === "confirm") {
+      at({ frequency: noteHz(71), duration: .09, volume: .03, wet: false, attack: .004 });
+      at({ frequency: noteHz(76), duration: .16, delay: .07, volume: .03, wet: false, attack: .004 });
+    } else if (kind === "whiff") {
+      at({ frequency: 2200, end: 650, noise: true, duration: .18, volume: .045, resonance: .6, wet: false, attack: .035 });
+    }
+    if (STINGER_DUCKS[kind]) this.duckFor(...STINGER_DUCKS[kind]);
+  }
   async suspend() {
     this.paused = true; this.epoch++; clearTimeout(this.tensionTimer); this.impactThreat = 0;
+    this.syncHeartbeat(); this.ducks = []; this.updateDuck();
     for (const source of [...this.voices]) { try { source.stop(); } catch {} source.onended?.(); }
     if (this.reverb && this.context?.state !== "closed") {
       const impulse = this.reverb.buffer; this.reverb.disconnect();
@@ -362,7 +463,8 @@ export class GameAudio {
       contextState: this.context?.state || "not-started", status: this.status, error: this.error, track: SCORE[this.activeTrack?.region || this.region].title,
       playingRegion: this.activeTrack?.region || null,
       region: this.region, effectVoices: this.voices.size, maxVoices: this.maxVoices, musicSources: this.musicSources.size,
-      cachedTracks: this.cache.size, threat: Math.max(this.threat, this.impactThreat), effectsPlayed: this.effectsCount, lastEffect: this.history.at(-1) || null };
+      cachedTracks: this.cache.size, threat: Math.max(this.threat, this.impactThreat), effectsPlayed: this.effectsCount, lastEffect: this.history.at(-1) || null,
+      heartbeat: this.heartbeat, duck: this.duckLevel() };
   }
   async dispose() {
     await this.suspend();

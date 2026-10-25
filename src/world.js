@@ -16,6 +16,8 @@ import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResourc
 import { createCreatureModel } from "./creature-models.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
+import { ImpactEffects } from "./impact-effects.js";
+import { Trauma, PresentationClock } from "./feedback.js";
 import { StaticTiles } from "./static-world.js";
 import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
 import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
@@ -111,27 +113,46 @@ const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y
   const y = Math.max(4, Math.min(40, elevationY));
   return new THREE.Vector3(0, y, horiz);
 };
-const readCameraPrefs = () => {
+/*
+ * Caves frame closer than town so a freshly lit corridor fills the view rather
+ * than a field of dark. Town and caves remember zoom separately; the top-level
+ * fields stay the town preference, so older saved preferences still read.
+ */
+const CAVE_CAMERA = Object.freeze({ radius: 7.6, elevation: 13 });
+const cameraRegion = (level) => (level > 0 ? "caves" : "town");
+const cameraEntry = (value) => {
+  const radius = Number(value?.radius), elevation = Number(value?.elevation);
+  return Number.isFinite(radius) && Number.isFinite(elevation) ? { radius, elevation } : null;
+};
+// Parsed once: the camera is captured every turn and must not re-read storage.
+let cameraStore;
+const readCameraStore = () => {
+  if (cameraStore !== undefined) return cameraStore;
   try {
-    const raw = localStorage.getItem(CAMERA_PREF_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const radius = Number(parsed.radius);
-    const elevation = Number(parsed.elevation);
-    if (!Number.isFinite(radius) || !Number.isFinite(elevation)) return null;
-    return { radius, elevation };
+    const parsed = JSON.parse(localStorage.getItem(CAMERA_PREF_KEY) || "null");
+    cameraStore = parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    return null;
+    cameraStore = null;
   }
+  return cameraStore;
+};
+const readCameraPrefs = (level = 0) => {
+  const stored = readCameraStore();
+  if (cameraRegion(level) === "caves") return cameraEntry(stored?.caves) || { ...CAVE_CAMERA };
+  return cameraEntry(stored);
 };
 let writtenCameraPrefs = "";
-const writeCameraPrefs = (offset) => {
+const writeCameraPrefs = (offset, level = 0) => {
   try {
-    const radius = Math.hypot(offset.x, offset.z);
-    const value = JSON.stringify({ radius, elevation: offset.y });
+    const entry = { radius: Math.hypot(offset.x, offset.z), elevation: offset.y };
+    const stored = readCameraStore() || {};
+    const next = cameraRegion(level) === "caves"
+      ? { ...stored, caves: entry }
+      : { ...stored, ...entry };
+    const value = JSON.stringify(next);
     // Every turn captures the camera; storage is touched only when zoom or tilt changed.
     if (value === writtenCameraPrefs) return;
+    cameraStore = next;
     localStorage.setItem(CAMERA_PREF_KEY, value);
     writtenCameraPrefs = value;
   } catch {}
@@ -318,6 +339,19 @@ export class World {
     this.scene.add(this.terrain, this.props, this.actors);
     this.staticTiles = new StaticTiles(this.props);
     this.effects = new CombatEffects(this.scene);
+    // Game feel: impact effects, screen shake and a presentation clock that
+    // hit-stop can hold. None of them can delay or simulate an engine action.
+    this.impact = new ImpactEffects(this.scene);
+    this.trauma = new Trauma({ seed: 1.3 });
+    this.actionClock = new PresentationClock();
+    this.fxOffset = { x: 0, y: 0 };
+    this.killMarks = new Map();
+    this.feel = { flashes: true, shake: .7 };
+    this.frameHooks = new Set();
+    this.heroHurtAt = -Infinity;
+    this.collapsedAt = null; this.lens = null;
+    // The death beat keeps its effects alive while menus would otherwise clear them.
+    this.keepFeel = false;
     // Thin aim-assist spokes shown while a spell waits for a direction.
     const aimPositions = new Float32Array(8 * 2 * 3);
     const dirs = [
@@ -590,6 +624,7 @@ export class World {
       e.preventDefault();
       this.lost = true;
       this.heroAnimation.clear();
+      this.clearFeel();
       this.footstepPending=null;
       this.stopFrames();
       this.releaseLostResources();
@@ -605,20 +640,21 @@ export class World {
     });
     listen(window, "resize", () => this.resize());
     listen(document, "visibilitychange", () => {
-      if (document.hidden) { this.heroAnimation.clear(); this.stopFrames(); }
+      if (document.hidden) { this.heroAnimation.clear(); this.clearFeel(); this.stopFrames(); }
       else { this.lastTime = performance.now(); this.effects.clear(); this.invalidate(); }
     });
     listen(window, "ularn:combat", (event) => {
       const detail = event.detail;
       if (!this.state || detail?.level !== this.level || document.hidden) return;
+      const actionNow = this.actionNow();
       if (detail.kind === "weapon") {
         this.attackAge = 0;
-        this.attackStartedAt = performance.now();
+        this.attackStartedAt = actionNow;
         this.attackStyle = attackStyle(detail.weapon);
         const visible = !!detail.to && this.state.tiles.some(tile => tile.x === detail.to.x && tile.y === detail.to.y && tile.monster);
-        this.heroAnimation.start(detail, performance.now(), this.reduced, visible);
+        this.heroAnimation.start(detail, actionNow, this.reduced, visible);
       }
-      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = performance.now(); }
+      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = actionNow; }
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
         (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y)) {
         this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
@@ -731,6 +767,12 @@ export class World {
         ...itemArtMetrics(),
         ...this.effects.metrics(),
         ...this.heroAnimation.metrics(),
+        ...this.impact.metrics(),
+        trauma: Math.round(this.trauma.value * 1000) / 1000,
+        shakePx: Math.round(Math.hypot(this.fxOffset.x, this.fxOffset.y) * 100) / 100,
+        hitStopActive: this.actionClock.holding(performance.now()),
+        collapsed: this.collapsedAt != null,
+        cameraRegion: this.cameraRegion || null,
       }),
       beginExpeditionCamera: () => this.beginExpeditionCamera(),
       creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
@@ -796,7 +838,7 @@ export class World {
       }),
       heroMotion: () => {
         const now = performance.now();
-        const swing = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
+        const swing = this.attackStartedAt == null ? 1 : (this.actionNow(now) - this.attackStartedAt) / SWING_MS;
         const step = this.followLive() ? this.glide.progress(now) : 1;
         return {
           style: this.attackStyle || "punch",
@@ -899,13 +941,117 @@ export class World {
     this.paused = !!paused;
     if (this.paused) this.footstepPending = null;
     if (this.paused) this.heroAnimation.clear();
+    if (this.paused && !this.keepFeel) this.clearFeel();
     this.nextFrameTime = 0;
     this.invalidate();
+  }
+  actionNow(real = performance.now()) { return this.actionClock.now(real); }
+  setFeel(settings) { this.feel = { ...settings }; }
+  setReduced(reduced) {
+    this.reduced = !!reduced;
+    this.controls.enableDamping = !this.reduced;
+    if (this.reduced) this.clearFeel();
+    this.invalidate();
+  }
+  clearFeel() {
+    this.impact.clear();
+    this.trauma.reset();
+    this.actionClock.reset();
+    this.killMarks.clear();
+    this.fxOffset.x = this.fxOffset.y = 0;
+    if (this.viewOffset) this.applyViewOffset();
+    for (const actor of this.monsters.values()) actor.kick = null;
+  }
+  shake(amount) {
+    if (this.reduced || !(amount > 0)) return;
+    this.trauma.add(amount, performance.now());
+    this.invalidate();
+  }
+  // Freeze action animations at blade contact, never input or engine time.
+  hold(ms) {
+    if (this.reduced) return;
+    this.actionClock.hold(ms, performance.now() + 105);
+    this.invalidate();
+  }
+  kick(actor, kind, toward, at) {
+    const dx = toward.x - actor.target.x, dz = toward.z - actor.target.z, length = Math.hypot(dx, dz) || 1;
+    actor.kick = { kind, x: dx / length, z: dz / length, at };
+  }
+  // The engine already resolved the blow; this only shows it landing.
+  hitMonster(uid, { at, from, killed = false } = {}) {
+    const now = this.actionNow(), flash = this.feel.flashes ? 1 : .35;
+    if (killed) { this.killMarks.set(uid, { at: now, from: from ? { x: from.x, z: from.y } : null, flash }); return; }
+    const actor = this.monsters.get(uid);
+    if (!actor) return;
+    this.impact.flash(actor.mesh, now, { delay: this.reduced ? 0 : 105, ms: this.feel.flashes ? 75 : 120, intensity: .85 * flash });
+    if (!this.reduced && from) this.kick(actor, "flinch", { x: 2 * actor.target.x - from.x, z: 2 * actor.target.z - from.y }, now + 105);
+    this.invalidate();
+  }
+  lungeMonster(uid, hero) {
+    const actor = this.monsters.get(uid);
+    if (!actor || this.reduced) return;
+    this.kick(actor, "lunge", { x: hero.x, z: hero.y }, this.actionNow());
+    this.invalidate();
+  }
+  heroHurt() {
+    const now = this.actionNow();
+    this.heroHurtAt = now;
+    const flash = this.feel.flashes ? 1 : .35;
+    this.impact.flash(this.player, now, { color: 0xff3b2a, intensity: .7 * flash, ms: this.feel.flashes ? 90 : 140 });
+    this.invalidate();
+  }
+  levelUp() {
+    this.impact.levelUp(this.player.position, this.actionNow(), { reduced: this.reduced });
+    this.invalidate();
+  }
+  victory() {
+    this.impact.levelUp(this.player.position, this.actionNow(), { reduced: this.reduced, gold: true });
+    this.invalidate();
+  }
+  /*
+   * Arrival and death framing are lens moves: they ease the projection zoom and
+   * never move the orbit camera, so cutaways, terrain chunks and the saved zoom
+   * are untouched. Descending settles in from wide; climbing from close.
+   */
+  arrive(direction) {
+    if (this.reduced) return;
+    this.lensTo(direction === "up" ? 1.08 : .9, 1, 560);
+  }
+  collapse(on = true) {
+    this.collapsedAt = on ? this.actionNow() : null;
+    if (on && !this.reduced) this.lensTo(this.camera.zoom, 1.2, 1200);
+    this.invalidate();
+  }
+  lensTo(from, to, ms) {
+    this.lens = { start: performance.now(), from, to, ms };
+    this.camera.zoom = from;
+    this.camera.updateProjectionMatrix();
+    this.invalidate();
+  }
+  stepLens(now) {
+    const lens = this.lens;
+    if (!lens) return false;
+    const u = Math.min(1, (now - lens.start) / lens.ms), eased = 1 - (1 - u) ** 3;
+    this.camera.zoom = lens.from + (lens.to - lens.from) * eased;
+    this.camera.updateProjectionMatrix();
+    if (u >= 1) this.lens = null;
+    return true;
+  }
+  actorPosition(uid) { return this.monsters.get(uid)?.mesh.position ?? null; }
+  // Allocation-free projection for DOM overlays that follow world points.
+  projectInto(x, z, height, out) {
+    this.scratchPosition.set(x, height, z).project(this.camera);
+    out.x = (this.scratchPosition.x + 1) * innerWidth / 2;
+    out.y = (1 - this.scratchPosition.y) * innerHeight / 2;
+    out.visible = this.scratchPosition.z < 1;
+    return out;
   }
   releaseLostResources(clearArtCache = false) {
     // Remove disposal listeners tied to the lost GL context before restoration.
     // Keep the CPU-side artwork: Three.js uploads it again on the next render.
     // Otherwise later level/quality changes try to delete stale WebKit handles.
+    this.clearFeel();
+    this.impact.releaseMaterials();
     const geometries = new Set([this.floorGeometry, this.wallGeometry].filter(Boolean)),
       materials = new Set(),
       textures = new Set();
@@ -1141,12 +1287,13 @@ export class World {
     if (fx * fx + fz * fz < 1e-8) return;
     this.player.rotation.y = Math.atan2(fx, fz) + Math.PI;
   }
-  poseHero(now) {
+  // Steps follow real time; swings, casts and reactions follow the action clock.
+  poseHero(now, act = now) {
     const body = this.heroBody;
     if (!body) return false;
-    if (this.reduced) {this.applyStepPose(stepPose(1,false));return false;}
-    const swingT = this.attackStartedAt == null ? 1 : (now - this.attackStartedAt) / SWING_MS;
-    const castT = this.castStartedAt == null ? 1 : (now - this.castStartedAt) / CAST_MS;
+    if (this.reduced) {this.applyStepPose(stepPose(1,false)); return this.poseReactions(act);}
+    const swingT = this.attackStartedAt == null ? 1 : (act - this.attackStartedAt) / SWING_MS;
+    const castT = this.castStartedAt == null ? 1 : (act - this.castStartedAt) / CAST_MS;
     const stepping = this.followLive();
     const swinging = swingT >= 0 && swingT < 1;
     const casting = castT >= 0 && castT < 1;
@@ -1170,7 +1317,36 @@ export class World {
       body.rotation.y = attack.twist;
       this.setWeaponGrip(attack.gripZ);
     }
-    return stepping || swinging || casting;
+    const reacting = this.poseReactions(act);
+    return stepping || swinging || casting || reacting;
+  }
+  /**
+   * Hurt flinch, idle breath and the death collapse, layered after the step
+   * pose so each returns to rest on its own. Breath never keeps frames alive.
+   */
+  poseReactions(act) {
+    const body = this.heroBody;
+    if (!body) return false;
+    if (this.collapsedAt != null) {
+      const u = this.reduced ? 1 : Math.min(1, (act - this.collapsedAt) / 600), eased = 1 - (1 - u) ** 3;
+      // The hero faces -z, so positive pitch falls backward, away from the blow.
+      body.rotation.x = 1.3 * eased;
+      body.position.y -= .22 * eased;
+      return u < 1;
+    }
+    let live = false;
+    const t = act - this.heroHurtAt;
+    if (!this.reduced && t >= 0 && t < 260) {
+      const k = Math.sin(Math.PI * Math.min(1, t / 70) / 2) * Math.exp(-Math.max(0, t - 70) / 70);
+      body.rotation.x += .16 * k;
+      body.position.z += .07 * k;
+      live = true;
+    }
+    if (!this.reduced && this.state && !this.state.over) {
+      const env = this.cinematicRendering() ? 1 : Math.max(0, Math.min(1, (this.activeUntil - performance.now()) / 500));
+      body.position.y += Math.sin(act * .0021) * .006 * env;
+    }
+    return live;
   }
   creaturePresentation() {
     let model = 0;
@@ -1401,7 +1577,9 @@ export class World {
     if (!enabled) { this.disablePointLights(); this.lightKey = null; return; }
     const town = this.state.level===0;
     this.playerLight.visible=true;
-    this.playerLight.intensity=town ? 3.5 : CAVE_HERO_LIGHT.intensity;
+    // A carried flame breathes a little in the caves; reduced motion holds it steady.
+    const flicker = town || this.reduced ? 0 : Math.sin(this.tick * 7.3) * .035 + Math.sin(this.tick * 13.1 + 1.7) * .025;
+    this.playerLight.intensity=town ? 3.5 : CAVE_HERO_LIGHT.intensity * (1 + flicker);
     this.playerLight.distance=town ? 8 : CAVE_HERO_LIGHT.distance;
     this.torchLights.forEach((light,index)=>{light.visible=town && index<4;});
     if (!town) return;
@@ -1428,7 +1606,21 @@ export class World {
       this.bloom.enabled=this.ao.enabled=this.antialias.enabled=cinematic;
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
     }
+    this.syncAmbientDust();
     this.resize();
+  }
+  /**
+   * Town keeps its pollen. Cinematic adds cool cave dust and volcano embers
+   * around the hero; Balanced and Auto caves stay flat and still.
+   */
+  syncAmbientDust() {
+    const level = this.state?.level ?? 0, town = level === 0;
+    this.dust.visible = town || (this.cinematicRendering() && !this.reduced);
+    const material = this.dust.material;
+    if (town) { material.color.setHex(0xf1d8a0); material.opacity = .5; material.size = .027; }
+    else if (level > 15) { material.color.setHex(0xff8a3d); material.opacity = .75; material.size = .05; }
+    else { material.color.setHex(0xa9c7cf); material.opacity = .32; material.size = .032; }
+    if (this.dust.visible && this.state) this.dust.position.set(this.state.x, 0, this.state.y);
   }
   adaptQuality(now, frameMs) {
     if (this.quality !== "auto" || this.frameSamples.length < 20) return;
@@ -1478,8 +1670,16 @@ export class World {
     } else this.viewEasing = true;
     this.invalidate();
   }
+  // Shake rides on the framing offset in screen space, so follow, picking and
+  // cutaways never see a perturbed camera position.
   applyViewOffset() {
-    this.camera.setViewOffset(innerWidth, innerHeight, this.viewOffset.x, this.viewOffset.y, innerWidth, innerHeight);
+    this.camera.setViewOffset(innerWidth, innerHeight, this.viewOffset.x + this.fxOffset.x, this.viewOffset.y + this.fxOffset.y, innerWidth, innerHeight);
+  }
+  stepShake(now) {
+    const was = this.fxOffset.x !== 0 || this.fxOffset.y !== 0;
+    const live = this.trauma.offset(now, this.fxOffset, 10, this.reduced ? 0 : this.feel.shake ?? .7);
+    if ((live || was) && this.viewOffset) this.applyViewOffset();
+    return live;
   }
   stepViewOffset(dt) {
     if (!this.viewEasing) return;
@@ -1611,7 +1811,7 @@ export class World {
   }
   captureCamera() {
     this.heldCameraOffset = this.camera.position.clone().sub(this.controls.target);
-    writeCameraPrefs(this.heldCameraOffset);
+    writeCameraPrefs(this.heldCameraOffset, this.level);
     return this.heldCameraOffset;
   }
   applyHeldCamera(target) {
@@ -1632,7 +1832,8 @@ export class World {
   }
   /* New game / load: north yaw, preferred zoom/elevation from prior sessions. */
   beginExpeditionCamera(target = null) {
-    const prefs = readCameraPrefs();
+    const prefs = readCameraPrefs(this.state?.level ?? 0);
+    this.cameraRegion = cameraRegion(this.state?.level ?? 0);
     this.heldCameraOffset = northCameraOffset(
       prefs?.radius ?? GAME_CAMERA_DIST,
       prefs?.elevation ?? GAME_CAMERA_Y,
@@ -1655,6 +1856,9 @@ export class World {
     if (old && this.level != null) this.captureCamera();
     this.state = state;
     this.hoverDirty = true;
+    // Snapshot tiles are reused objects, but the old index still says which
+    // squares were already charted: loot appearing there was dropped, not found.
+    const knownBefore = this.tileIndex;
     this.tileIndex = new Map(state.tiles.map((tile) => [tile.y * state.width + tile.x, tile]));
     this.controls.autoRotate = false;
     const isNew = this.level !== state.level;
@@ -1671,6 +1875,7 @@ export class World {
       destroy(this.actors);
       this.monsters.clear();
       this.effects.clear();
+      this.clearFeel();
       this.ambientRats?.clear();
       this.lamps = []; this.lampRev = (this.lampRev || 0) + 1;
       this.wallHeightAt.length = 0;
@@ -1679,6 +1884,17 @@ export class World {
       this.structureKey = null;
       this.level = state.level;
       this.lastPlayer = null;
+      // Crossing between town and caves restores that region's zoom, keeping the yaw.
+      const region = cameraRegion(state.level);
+      if (this.cameraRegion && this.cameraRegion !== region && this.heldCameraOffset) {
+        const prefs = readCameraPrefs(state.level);
+        if (prefs) {
+          const yaw = Math.atan2(this.heldCameraOffset.x, this.heldCameraOffset.z);
+          const north = northCameraOffset(prefs.radius, prefs.elevation);
+          this.heldCameraOffset.set(Math.sin(yaw) * north.z, north.y, Math.cos(yaw) * north.z);
+        }
+      }
+      this.cameraRegion = region;
       this.walkPhase = 0; this.walkStartedAt = undefined;
       const town = state.level === 0,
         volcano = state.level > 15;
@@ -1689,7 +1905,7 @@ export class World {
       this.applyLevelLighting();
       this.applyFloorMaterials();
       this.water.visible = town;
-      this.dust.visible = town;
+      this.syncAmbientDust();
       this.paths = this.townPaths(state.tiles);
       this.staticKey = null;
       this.structureKey = null;
@@ -1971,6 +2187,10 @@ export class World {
         g.add(text);
       }
       const dynamic = !!art || t.store || [7, 17, 5, 13, 56, 93].includes(t.id);
+      if (art && !isNew && !this.reduced && knownBefore.has(t.y * state.width + t.x) && prev?.sig?.split(":")[0] !== String(t.id)) {
+        const nearKill = this.impact.corpses.some(({ pivot }) => Math.max(Math.abs(pivot.position.x - t.x), Math.abs(pivot.position.z - t.y)) <= 1);
+        this.impact.pop(g, this.actionNow(), nearKill && !this.reduced ? 160 : 0);
+      }
       if (dynamic) {
         this.props.add(g);
         if (t.store && ![54, 55, 56].includes(t.id)) {
@@ -2086,10 +2306,19 @@ export class World {
     }
     for (const [uid, actor] of this.monsters)
       if (!creatures.has(uid)) {
+        // Only a blow the engine reported as fatal leaves a falling corpse;
+        // anything that just left sight (teleport, invisibility) vanishes.
+        const mark = this.killMarks.get(uid);
         actor.mesh.removeFromParent();
-        destroy(actor.mesh);
+        if (mark) {
+          this.killMarks.delete(uid);
+          const from = mark.from || { x: this.player.position.x, z: this.player.position.z };
+          this.impact.corpse(actor.mesh, mark.at, { x: actor.target.x - from.x, z: actor.target.z - from.z },
+            { reduced: this.reduced, flash: mark.flash, onDone: destroy });
+        } else destroy(actor.mesh);
         this.monsters.delete(uid);
       }
+    if (this.killMarks.size > 16) this.killMarks.clear();
   }
   /**
    * Creatures cross a tile on the hero's step curve. One that moved last turn
@@ -2146,10 +2375,11 @@ export class World {
       const nearby = old && old.level === state.level && Math.max(Math.abs(state.x-old.x),Math.abs(state.y-old.y))===1;
       this.startFollow(target,nearby ? {x:state.x,y:state.y,level:state.level} : null);
     }
+    // Embers mark a wound; spending a spell is not one.
     if (
       old &&
       old.level === state.level &&
-      (state.hp < old.hp || state.mana < old.mana)
+      state.hp < old.hp
     ) {
       this.burstAge = 0;
       this.burstStartedAt = performance.now();
@@ -2375,7 +2605,7 @@ export class World {
   reset() {
     if (this.state) {
       this.footstepPending=null;
-      const prefs = readCameraPrefs();
+      const prefs = readCameraPrefs(this.state.level);
       this.heldCameraOffset = northCameraOffset(
         prefs?.radius ?? GAME_CAMERA_DIST,
         prefs?.elevation ?? GAME_CAMERA_Y,
@@ -2607,15 +2837,18 @@ export class World {
       this.heroSampling = true;
       this.heroLast.copy(this.player.position);
     } else this.heroSampling = false;
+    const act = this.actionClock.now(now);
     if (this.playerTarget) {
       this.playerLight.position
         .copy(this.player.position)
         .add(this.scratchOffset.set(0, this.state?.level ? CAVE_HERO_LIGHT.height : 1.4, 0.2));
-      this.heroLimbLive = this.poseHero(now);
-      this.heroAnimation.update(now);
+      this.heroLimbLive = this.poseHero(now, act);
+      this.heroAnimation.update(act);
       this.heroLimbLive ||= this.heroAnimation.active;
-      this.keepBodyOutOfRock();
+      if (this.collapsedAt == null) this.keepBodyOutOfRock();
     }
+    const impactLive = this.impact.update(act);
+    const holding = this.actionClock.holding(now);
     if (!this.reduced) {
       this.dust.rotation.y = Math.sin(this.tick * 0.055) * 0.08;
     }
@@ -2636,6 +2869,7 @@ export class World {
     ) this.markShadowUpdate();
     this.stepCameraTween(now);
     this.stepViewOffset(dt);
+    const shaking = this.stepShake(now) | this.stepLens(now);
     this.renderer.info.reset();
     this.scratchCam.copy(this.camera.position);
     // Orbit damping is per frame in three.js; scale it so 120 Hz glides like 60 Hz.
@@ -2647,16 +2881,31 @@ export class World {
       this.hasMotion = true;
     if (this.camera.position.distanceToSquared(this.scratchCam) > 1e-8) this.hasMotion = true;
     if (this.cameraTween || this.viewEasing) this.hasMotion = true;
+    if (impactLive || shaking || holding) this.hasMotion = true;
     const camTurned = !this.lastCamQuatValid || !this.lastCamQuat.equals(this.camera.quaternion);
     if (camTurned) {
       this.lastCamQuat.copy(this.camera.quaternion);
       this.lastCamQuatValid = true;
     }
-    for (const { mesh, target, start, glide } of this.monsters.values()) {
+    for (const actor of this.monsters.values()) {
+      const { mesh, target, start, glide } = actor;
       const progress = this.reduced ? 1 : glide.progress(now);
       const moving = progress < 1;
       if (!moving) mesh.position.copy(target);
       else mesh.position.lerpVectors(start, target, progress);
+      // Flinch away from a landed blow, or lunge at the hero, then spring back.
+      const kick = actor.kick;
+      if (kick) {
+        const t = act - kick.at, lunge = kick.kind === "lunge", span = lunge ? 240 : 260;
+        if (t >= span) actor.kick = null;
+        else if (t > 0) {
+          const out = lunge ? 90 : 60, reach = lunge ? .2 : .14;
+          const k = t < out ? Math.sin(Math.PI * t / out / 2) : Math.cos(Math.PI * (t - out) / (span - out) / 2) ** 2;
+          mesh.position.x += kick.x * reach * k;
+          mesh.position.z += kick.z * reach * k;
+        }
+        this.hasMotion = true;
+      }
       const body = mesh.userData.body;
       if (body) {
         const base = mesh.userData.hover || 0;
@@ -2701,6 +2950,8 @@ export class World {
     }
     if (this.state?.level === 0) this.updateCutaways(Math.min(elapsed, .1));
     if (this.qualityPending) this.applyQualityWhenSettled();
+    // DOM overlays (damage numbers, nameplates) follow the camera of this frame.
+    for (const hook of this.frameHooks) hook(this);
     this.applyPixelGrid();
     try {
       if (this.composer && this.cinematicRendering()) {
