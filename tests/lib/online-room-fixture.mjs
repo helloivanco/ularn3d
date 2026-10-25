@@ -1,7 +1,7 @@
 /** Service boundary fixture. Browsers run the real UI, log follower and engine. */
 export const onlineRoomFixture = () => {
   const room = { id: 'test-room', join_code: 'ABC234', status: 'lobby', seed: 2, action_seq: 0, hide_spectator_chat: false };
-  const members = [], messages = [], actions = [], clients = [];
+  const members = [], messages = [], actions = [], clients = [], verified = [];
   const calls = new Map(), failures = new Set(), rejections = new Set(), gates = new Map();
   const hold = name => {
     let release;
@@ -40,6 +40,7 @@ export const onlineRoomFixture = () => {
           break;
         case 'join_room':
           if (args.p_code !== room.join_code) data = { ok: false, error: 'room_not_found' };
+          else if (room.password && args.p_password !== room.password) data = { ok: false, error: 'bad_password' };
           else {
             if (!mine()) {
               const slot = args.p_role === 'spectator' ? null : members.filter(member => member.role !== 'spectator').length;
@@ -109,6 +110,7 @@ export const onlineRoomFixture = () => {
             await notify('room_members');
           }
           break;
+        case 'verified_scores': return verified;
         case 'subscribe': return true;
       }
       return { data, error: null };
@@ -119,6 +121,7 @@ export const onlineRoomFixture = () => {
       window.__onlineClient = {
         auth: { getSession: async () => ({ data: { session: { access_token: 'test-token', user: { id: userId } } } }) },
         rpc: (name, args) => window.__onlineCall(name, args),
+        from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: await window.__onlineCall('verified_scores'), error: null }) }) }) }),
         channel: () => {
           const channel = {
             on(type, options, handler) { if (type === 'postgres_changes') handlers.push({ table: options.table, handler }); return channel; },
@@ -133,5 +136,5 @@ export const onlineRoomFixture = () => {
     await page.goto('/play/');
     await page.waitForFunction(() => window.ularnOnline);
   };
-  return { attach, hold, failNext: name => failures.add(name), throwNext: name => rejections.add(name), count: name => calls.get(name) || 0, members, actions };
+  return { attach, hold, failNext: name => failures.add(name), throwNext: name => rejections.add(name), count: name => calls.get(name) || 0, room, members, actions, verified };
 };

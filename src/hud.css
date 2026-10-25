@@ -77,13 +77,13 @@
   .playing .dpad { grid-template-columns: repeat(3,32px); }
 }
 @media (max-width: 700px) {
-  .playing { --dock-height: 268px; --map-width: min(684px, calc(100vw - 24px)); }
+  .playing { --dock-height: 294px; --map-width: min(684px, calc(100vw - 24px)); }
   .playing .topbar { padding: 0 12px; }
   .playing .map-panel { left: 12px; top: 60px; padding: 6px; z-index: 4; max-height: calc(100dvh - var(--dock-height) - 16px); overflow: visible; }
   .playing #minimap { max-height: calc(100dvh - var(--dock-height) - 136px); }
-  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 58px 40px 36px 88px; gap: 8px; padding: 10px; }
+  .playing .adventure-bar { inset: auto 8px 8px; grid-template-columns: minmax(0,1fr) 104px; grid-template-rows: 66px 54px 41px 88px; gap: 8px; padding: 10px; }
   .playing .hero-panel { grid-column: 1; grid-row: 1; border: none; padding: 0; }
-  .playing .hero-heading { margin-bottom: 7px; }
+  .playing .hero-heading { margin-bottom: 5px; }
   .playing .hero-heading h2 { font-size: 13px; }
   .playing .hero-heading p { display: none; }
   .playing .hero-seal { font-size: 22px; }
@@ -94,13 +94,15 @@
   .playing #journal-lines { height: 17px; margin: 0; font-size: 9px; }
   .playing #CONTEXT { max-height: 24px; }
   .playing #info-boxes { grid-column: 1; grid-row: 2; }
-  .playing #stat-box { padding: 0 8px 0 0; border: 0; border-right: 1px solid var(--border); gap: 2px; }
+  /* The five attributes need more room than the experience title. */
+  .playing #stat-box { flex-grow: 1.4; padding: 0 8px 0 0; border: 0; border-right: 1px solid var(--border); gap: 2px; }
   .playing #xp-box { padding: 0 0 0 8px; border: 0; gap: 2px; }
   .playing #spell-count,
   .playing #xp-count { font-size: 12px; }
   .playing #attributes,
   .playing #xp-title { padding: 0; border: 0; font-size: 9px; }
   .playing #attributes b { font-size: 11px; }
+  .playing #attributes { gap: 1px 6px; }
   .playing .movement { grid-column: 2; grid-row: 1 / 4; }
   .playing .movement > span { font-size: 6px; }
   .playing .dpad { grid-template-columns: repeat(3,30px); gap: 4px; }
@@ -265,7 +267,13 @@
   font-weight: 700;
 }
 .online-form label { display: grid; gap: 4px; font-size: 12px; }
+.online-form label[hidden] { display: none; }
+.online-form label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; }
+.online-form input[type="checkbox"] { width: auto; flex: none; margin: 0; padding: 0; }
 .online-form input, .online-form select { background: #101c20; color: #e7efe9; border: 1px solid #cbb07970; padding: 8px; }
+.online-options { border: 1px solid #cbb07933; border-radius: 6px; padding: 8px 10px; }
+.online-options summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.online-options[open] > :not(summary) { margin-top: 8px; }
 #chat-panel, #chat-toggle {
   position: fixed; right: 12px; bottom: calc(var(--dock-height, 64px) + 24px); z-index: 7;
   background: rgba(16, 28, 32, 0.97); color: #e7efe9;

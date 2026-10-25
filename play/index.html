@@ -288,8 +288,8 @@
             <span data-icon="chest"></span>Open<kbd>o</kbd></button
           ><button data-key="t">
             <span data-icon="take"></span>Take<kbd>t</kbd></button
-          ><button data-key=".">
-            <span data-icon="hourglass"></span>Wait<kbd>·</kbd></button
+          ><button id="explore" data-key="X" title="Auto explore until something needs your attention (X)">
+            <span data-icon="compass"></span>Explore<kbd>X</kbd></button
           ><button id="auto-loot" aria-pressed="true" title="Toggle auto-loot (F2). Gold is always collected."><span data-icon="take"></span><span class="button-label">Auto-loot on</span><kbd>F2</kbd></button
           ><button id="inventory-pin" aria-pressed="true" title="Toggle pinned inventory (F3)"><span data-icon="backpack"></span><span class="button-label">Pin inventory</span><kbd>F3</kbd></button
           ><button id="save"><span data-icon="save"></span>Save</button>
@@ -321,7 +321,7 @@
         <div class="run-clock" title="Time remaining"><span data-icon="hourglass"></span><strong id="time-left">400</strong> mobuls</div>
         </div>
         <div class="bottom-hint">
-          Arrow keys to move <span>·</span> Click a tile to travel
+          Arrow keys to move <span>·</span> X to explore <span>·</span> Click a tile to travel
           <span>·</span> Drag to orbit / scroll to zoom
         </div>
       </div>
@@ -392,8 +392,9 @@
             <h3>Explore & fight</h3>
             <p>
               Arrow keys or the direction pad move you. Step into a creature to
-              attack. Click a known tile to travel; travel stops at danger. Time
-              advances with actions, not while you think.
+              attack. <kbd>X</kbd> or Explore charts the floor until a creature
+              or something new needs you. Click a known tile to travel; travel
+              stops at danger. Time advances with actions, not while you think.
             </p>
           </section>
           <section>
@@ -401,7 +402,8 @@
             <p>
               Stand on a landmark and use its contextual button.
               <kbd>E</kbd> enters buildings, <kbd>&gt;</kbd> descends, and
-              <kbd>&lt;</kbd> ascends. Use <kbd>o</kbd> to open doors and
+              <kbd>&lt;</kbd> ascends. Away from stairs you have seen, the same
+              keys walk you there. Use <kbd>o</kbd> to open doors and
               chests.
             </p>
           </section>

@@ -9,7 +9,7 @@ import { publicBoard } from "../../supabase/functions/_shared/submit.js";
 import { sendChatMessage } from "./rooms.js";
 import { beginRun, enterRoom, hostRoom, listPublicRooms, markReady, resumeRoom, leaveRoom, kickMember, transferHost } from "./rooms.js";
 import { formatEndScreenBoard } from "./end-board.js";
-import { createLiveRoom, fetchPublicScores, loadScores } from "./live.js";
+import { createLiveRoom, fetchPublicScores } from "./live.js";
 
 const panel = (title, body) => {
   const dialog = document.createElement("dialog");
@@ -27,6 +27,14 @@ const panel = (title, body) => {
 const statusOf = (dialog) => dialog.querySelector(".online-status");
 const ROOM_SESSION_KEY = "ularn.online.room.v2";
 const selectedCharacter = () => document.querySelector('.class-choice[aria-pressed="true"]')?.textContent?.trim() || "Adventurer";
+// Online forms start from the name and calling chosen on the title screen.
+const prefill = (form, prefix) => {
+  const name = form.querySelector(`#${prefix}-name`);
+  if (!name.value.trim()) name.value = document.getElementById("hero-name")?.value?.trim().slice(0, 16).trim() || "";
+  const calling = form.querySelector(`#${prefix}-character`);
+  if (calling) calling.value = selectedCharacter();
+};
+const nameProblem = (problem) => problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters, numbers or spaces.";
 
 const withPending = async (dialog, action, label, message, work) => {
   if (dialog.getAttribute("aria-busy") === "true") return;
@@ -59,29 +67,37 @@ export const mountOnlineUi = () => {
   const menuNote = document.createElement("p");
   menuNote.textContent = unavailable
     ? "Online unavailable"
-    : "Host a room, join with a code, or watch a public game.";
+    : "Host a room and share the link, or join a friend with their code.";
   const hostButton = button("Host a room");
+  hostButton.classList.add("primary");
   const joinButton = button("Join with a code");
   const joinDialog = panel("Join", document.createElement("form"));
   const joinForm = joinDialog.querySelector(".online-body");
   joinForm.classList.add("online-form");
+  // Most rooms are open. The password appears once a room asks for one.
+  const joinPassword = field("Room password", "join-password", "");
+  joinPassword.hidden = true;
   joinForm.append(
     field("Code", "join-code", ""),
-    field("Password (optional)", "join-password", ""),
-    field("Display name", "join-name", "Ada"),
+    field("Display name", "join-name", ""),
     characterField("join-character"),
+    joinPassword,
   );
   const joinSubmit = button("Join room");
+  joinSubmit.classList.add("primary");
   joinForm.append(joinSubmit);
   const watchDialog = panel("Watch", document.createElement("form"));
   const watchForm = watchDialog.querySelector(".online-body");
   watchForm.classList.add("online-form");
+  const watchPassword = field("Room password", "watch-password", "");
+  watchPassword.hidden = true;
   watchForm.append(
     field("Code", "watch-code", ""),
-    field("Password (optional)", "watch-password", ""),
-    field("Display name", "watch-name", "Cid"),
+    field("Display name", "watch-name", ""),
+    watchPassword,
   );
   const watchSubmit = button("Watch room");
+  watchSubmit.classList.add("primary");
   watchForm.append(watchSubmit);
   const scoreBanner = document.createElement("p");
   scoreBanner.id = "score-banner";
@@ -95,16 +111,26 @@ export const mountOnlineUi = () => {
   const hostDialog = panel("Host", document.createElement("form"));
   const hostForm = hostDialog.querySelector(".online-body");
   hostForm.classList.add("online-form");
-  hostForm.append(
-    field("Display name", "host-name", "Ada"),
-    characterField("host-character"),
-    field("Password (optional)", "host-password", ""),
-    field("Max players (2–4)", "host-max", "4"),
-  );
   const publicLabel = document.createElement("label");
   publicLabel.innerHTML = `<input id="host-public" type="checkbox" checked /> Public room`;
+  const hostOptions = document.createElement("details");
+  hostOptions.className = "online-options";
+  const hostOptionsSummary = document.createElement("summary");
+  hostOptionsSummary.textContent = "Room options";
+  hostOptions.append(
+    hostOptionsSummary,
+    field("Password (optional)", "host-password", ""),
+    field("Max players (2–4)", "host-max", "4"),
+    publicLabel,
+  );
   const createButton = button("Create lobby");
-  hostForm.append(publicLabel, createButton);
+  createButton.classList.add("primary");
+  hostForm.append(
+    field("Display name", "host-name", ""),
+    characterField("host-character"),
+    hostOptions,
+    createButton,
+  );
 
   const lobby = panel("Lobby", document.createElement("div"));
   for (const dialog of [hostDialog, joinDialog, watchDialog]) {
@@ -229,8 +255,9 @@ export const mountOnlineUi = () => {
       item.textContent = formatBrowseRoom(room).label;
       const join = button("Join");
       const watch = button("Watch");
-      join.addEventListener("click", () => { joinButton.click(); joinForm.querySelector("#join-code").value = room.join_code; });
-      watch.addEventListener("click", () => { watchButton.click(); watchForm.querySelector("#watch-code").value = room.join_code; });
+      const { locked } = formatBrowseRoom(room);
+      join.addEventListener("click", () => { joinButton.click(); joinForm.querySelector("#join-code").value = room.join_code; joinPassword.hidden = !locked; });
+      watch.addEventListener("click", () => { watchButton.click(); watchForm.querySelector("#watch-code").value = room.join_code; watchPassword.hidden = !locked; });
       item.append(join, watch);
       list.append(item);
     }
@@ -271,7 +298,7 @@ export const mountOnlineUi = () => {
       catch { statusOf(lobby).textContent = `Share this room code: ${codeText}`; }
     });
     const town = document.createElement("p");
-    town.textContent = started ? "Everyone controls their own adventurer. Friends can join this expedition with the code." : "Each player selects Ready to play. Then the host starts the expedition.";
+    town.textContent = started ? "Everyone controls their own adventurer. Friends can join this expedition with the code." : "Send the invite link to a friend. Players are ready when they arrive, and the host starts the expedition.";
     const list = document.createElement("ul");
     list.className = "lobby-members";
     for (const member of members.filter(member => !member.banned)) {
@@ -365,50 +392,66 @@ export const mountOnlineUi = () => {
   };
   roomButton.addEventListener("click", () => { lobbyStamp = ""; showLobby(roomMembers, lobbyCode, true); });
 
-  const showBoard = (rows) => {
+  // Everyone: the same global board solo and room players finish onto.
+  // Verified co-op: short room runs the server replayed for itself.
+  const globalRows = async () => {
+    const board = await window.ularnScoreService?.highscores?.(true, "3d");
+    if (!board) return null;
+    return [...board.winners, ...board.visitors].slice(0, 50).map((row) => ({
+      name: row.who,
+      score: row.score,
+      detail: `${row.character} · ${row.winner ? "Winner" : `${String(row.what || "").replace(/<[^>]*>/g, "")} on ${row.level}`}`,
+      yours: row.gameID === window.gameID,
+    }));
+  };
+  const coopRows = async () => {
+    const supabase = await getSupabase();
+    const session = supabase ? await supabase.auth.getSession() : null;
+    const result = await fetchPublicScores(session?.data?.session?.user?.id);
+    return result.ok ? publicBoard(result.rows).map((row) => ({ ...row, detail: "verified" })) : null;
+  };
+  let boardRequest = 0;
+  const showBoard = async (tab = "global", preloaded = null) => {
+    const request = ++boardRequest;
     const body = board.querySelector(".online-body");
     body.replaceChildren();
     const tabs = document.createElement("div");
     tabs.className = "chat-tabs";
-    for (const label of ["Solo", "Co-op", "All time", "This week", "Today"]) {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.textContent = label;
-      tab.className = label === "Solo" || label === "All time" ? "acting" : "";
-      tabs.append(tab);
+    for (const [key, label] of [["global", "Everyone"], ["coop", "Verified co-op"]]) {
+      const choice = document.createElement("button");
+      choice.type = "button";
+      choice.textContent = label;
+      choice.className = key === tab ? "acting" : "";
+      choice.setAttribute("aria-pressed", String(key === tab));
+      choice.addEventListener("click", () => showBoard(key));
+      tabs.append(choice);
     }
+    const note = document.createElement("p");
+    note.textContent = "Loading the leaderboard…";
     const table = document.createElement("ol");
     table.className = "board-list";
-    publicBoard(rows).forEach((row, index) => {
+    body.append(tabs, note, table);
+    if (!board.open) board.showModal();
+    let rows = preloaded;
+    try { rows ??= tab === "global" ? await globalRows() : await coopRows(); } catch { rows = null; }
+    if (request !== boardRequest) return;
+    note.textContent = !rows ? "Could not load the leaderboard. Please try again."
+      : !rows.length ? (tab === "global" ? "No finished expeditions yet." : "No verified co-op scores yet.")
+        : tab === "global" ? "Solo and multiplayer expeditions, winners first." : "Short co-op runs the server replayed to check.";
+    for (const row of rows || []) {
       const item = document.createElement("li");
       if (row.yours) item.className = "yours";
-      item.textContent = `${index + 1}. ${row.name} · ${row.score}${row.verified ? " · verified" : ""}`;
+      item.textContent = `${row.name} · ${Number(row.score).toLocaleString()} · ${row.detail}`;
       table.append(item);
-    });
-    if (!publicBoard(rows).length) {
-      const empty = document.createElement("p");
-      empty.textContent = "No verified scores yet.";
-      body.append(empty);
     }
-    body.append(tabs, table);
-    board.showModal();
   };
 
+  // Every room player's own score reaches the global board at the end.
+  // The verified co-op board is a bonus, so a replay it cannot finish is not an error.
   const showScore = (result) => {
-    if (result?.pending) { scoreBanner.hidden = false; scoreBanner.textContent = "Expedition ended. Checking the party’s score…"; return; }
-    const verified = result?.verified === true;
-    const reason = result?.reason || result?.error;
-    const text = verified
-      ? `Verified score: ${result.score}`
-      : reason === "too_fast"
-        ? "Score rejected: that run finished too quickly to count."
-        : reason === "unavailable"
-          ? "Score rejected: online unavailable."
-          : reason === "replay_failed" || reason === "replay_cpu_cap"
-            ? "Score rejected: the run could not be replayed."
-            : `Score rejected: ${reason || "the run was not accepted."}`;
+    if (result?.verified !== true) return;
     scoreBanner.hidden = false;
-    scoreBanner.textContent = text;
+    scoreBanner.textContent = `Verified co-op score: ${Number(result.score).toLocaleString()}`;
   };
 
   const ingestChat = (payload, replace) => {
@@ -416,7 +459,7 @@ export const mountOnlineUi = () => {
     else if (payload && !Array.isArray(payload)) chat.receive(mapChatRows([payload])[0]);
   };
 
-  const connectLive = async ({ id, code, role, slot, name }) => {
+  const connectLive = async ({ id, code, role, slot, name, autoReady = false }) => {
     roomId = id;
     displayName = name;
     selfRole = role || "player";
@@ -506,6 +549,10 @@ export const mountOnlineUi = () => {
       lobby.close();
       return opened;
     }
+    // Choosing Host or Join already says "I want to play". Ready stays one click to undo.
+    if (autoReady && !started && selfRole !== "spectator" && !live.ready()) {
+      try { await live.toggleReady(); } catch { /* The Ready button remains available. */ }
+    }
     showLobby(roomMembers, code, !started);
     try { localStorage.setItem(ROOM_SESSION_KEY, JSON.stringify({ id, code, name })); } catch {}
     chat.open();
@@ -514,7 +561,7 @@ export const mountOnlineUi = () => {
 
   hostButton.addEventListener("click", () => {
     menu.close();
-    hostForm.querySelector("#host-character").value = selectedCharacter();
+    if (!hostedRoom) prefill(hostForm, "host");
     hostDialog.showModal();
   });
   const rememberChat = (rows) => {
@@ -522,10 +569,10 @@ export const mountOnlineUi = () => {
     chat.open();
   };
 
-  const joinProblem = (error) => {
+  const joinProblem = (error, askedForPassword) => {
     if (error === "unavailable" || error === "unauthenticated") return "Online unavailable";
     if (error === "room_not_found") return "That code does not match a room.";
-    if (error === "bad_password") return "That password is wrong.";
+    if (error === "bad_password") return askedForPassword ? "That password is wrong." : "This room needs a password. Ask the host for it.";
     if (error === "room_full") return "That room is already full.";
     if (error === "run_over") return "That expedition has ended. Ask the host for a new room, or join as a spectator.";
     return "Could not join that room.";
@@ -534,33 +581,42 @@ export const mountOnlineUi = () => {
   const enter = async (form, role) => {
     const prefix = role === "spectator" ? "watch" : "join";
     const dialog = role === "spectator" ? watchDialog : joinDialog;
+    const passwordField = role === "spectator" ? watchPassword : joinPassword;
+    const code = form.querySelector(`#${prefix}-code`).value.trim().toUpperCase();
+    if (!/^[A-Z2-9]{6}$/.test(code)) {
+      statusOf(dialog).textContent = "Enter the 6-character room code.";
+      return;
+    }
     const name = form.querySelector(`#${prefix}-name`).value;
     const problem = displayNameError(name);
     if (problem) {
-      statusOf(dialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
+      statusOf(dialog).textContent = nameProblem(problem);
       return;
     }
     const submit = role === "spectator" ? watchSubmit : joinSubmit;
     await withPending(dialog, submit, "Joining room…", "Joining the room…", async () => {
+      const askedForPassword = !passwordField.hidden;
       const joined = await enterRoom({
-        code: form.querySelector(`#${prefix}-code`).value,
+        code,
         password: form.querySelector(`#${prefix}-password`).value,
         role,
         displayName: name,
         character: form.querySelector(`#${prefix}-character`)?.value || selectedCharacter(),
       });
       if (!joined?.ok) {
-        statusOf(dialog).textContent = joinProblem(joined?.error);
+        statusOf(dialog).textContent = joinProblem(joined?.error, askedForPassword);
+        if (joined?.error === "bad_password") passwordField.hidden = false;
         return;
       }
       submit.textContent = "Connecting…";
       statusOf(dialog).textContent = "Joined the room. Connecting to the lobby…";
       const opened = await connectLive({
         id: joined.room_id,
-        code: form.querySelector(`#${prefix}-code`).value.trim().toUpperCase(),
+        code,
         role: joined.role || role,
         slot: joined.slot,
         name,
+        autoReady: true,
       });
       if (!opened?.ok) {
         statusOf(dialog).textContent = opened?.error === "old_room" ? "This room uses an older game version. Ask the host to create a new room." : "Could not connect to the lobby. Please try again.";
@@ -578,7 +634,7 @@ export const mountOnlineUi = () => {
       return;
     }
     menu.close();
-    joinForm.querySelector("#join-character").value = selectedCharacter();
+    prefill(joinForm, "join");
     joinDialog.showModal();
   });
   joinSubmit.addEventListener("click", (event) => {
@@ -602,16 +658,12 @@ export const mountOnlineUi = () => {
       return;
     }
     menu.close();
+    prefill(watchForm, "watch");
     watchDialog.showModal();
   });
-  boardButton.addEventListener("click", async () => {
-    if (unavailable) {
-      statusOf(menu).textContent = "Online unavailable";
-      return;
-    }
-    const supabase = await getSupabase();
-    const session = supabase ? await supabase.auth.getSession() : null;
-    showBoard(await loadScores(session?.data?.session?.user?.id));
+  boardButton.addEventListener("click", () => {
+    menu.close();
+    showBoard("global");
   });
   let hostedRoom = null;
   createButton.addEventListener("click", async (event) => {
@@ -620,7 +672,7 @@ export const mountOnlineUi = () => {
     const name = hostForm.querySelector("#host-name").value;
     const problem = displayNameError(name);
     if (problem) {
-      statusOf(hostDialog).textContent = problem === "filtered" ? "That name is not allowed." : "Use 3–16 letters.";
+      statusOf(hostDialog).textContent = nameProblem(problem);
       return;
     }
     if (unavailable) {
@@ -628,7 +680,7 @@ export const mountOnlineUi = () => {
       return;
     }
     const max = Number(hostForm.querySelector("#host-max").value);
-    if (!Number.isInteger(max) || max < 2 || max > 4) { statusOf(hostDialog).textContent = "Choose between 2 and 4 players."; return; }
+    if (!Number.isInteger(max) || max < 2 || max > 4) { hostOptions.open = true; statusOf(hostDialog).textContent = "Choose between 2 and 4 players."; return; }
     await withPending(hostDialog, createButton, hostedRoom ? "Connecting…" : "Creating room…", hostedRoom ? "Connecting to your lobby…" : "Creating your room. This may take a few seconds…", async () => {
       if (!hostedRoom) {
         const created = await hostRoom({
@@ -653,6 +705,7 @@ export const mountOnlineUi = () => {
         role: "host",
         slot: 0,
         name: hostedRoom.name,
+        autoReady: true,
       });
       if (!opened?.ok) {
         statusOf(hostDialog).textContent = "Room created, but the connection failed. Select Retry connection.";
@@ -682,9 +735,9 @@ export const mountOnlineUi = () => {
       ]);
     }
     if (kind === "leaderboard") {
-      showBoard([
-        { name: "Ada", score: 4820, verified: true, yours: true },
-        { name: "Bea", score: 3510, verified: true },
+      showBoard("global", [
+        { name: "Ada", score: 4820, detail: "Wizard · killed by a troll on 6", yours: true },
+        { name: "Bea", score: 3510, detail: "Rogue · killed by a gnome on 3" },
       ]);
     }
     if (kind === "spectator") {
@@ -747,14 +800,26 @@ export const mountOnlineUi = () => {
     });
   };
   reconnect.addEventListener("click", restore);
-  setTimeout(() => {
+  const openInvite = (code, note) => {
+    if (menu.open) menu.close();
+    if (unavailable) { statusOf(menu).textContent = "Online unavailable"; menu.showModal(); return; }
+    prefill(joinForm, "join");
+    joinForm.querySelector("#join-code").value = code;
+    statusOf(joinDialog).textContent = note || "You were invited to a room. Check your name and calling, then join.";
+    joinDialog.showModal();
+  };
+  setTimeout(async () => {
     const notice = sessionStorage.getItem("ularn.room.notice");
+    const invited = new URL(location.href).searchParams.get("room")?.toUpperCase();
+    const invite = /^[A-Z2-9]{6}$/.test(invited || "") ? invited : null;
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem(ROOM_SESSION_KEY)); } catch {}
     if (notice) { sessionStorage.removeItem("ularn.room.notice"); statusOf(menu).textContent = notice; menu.showModal(); }
-    else if (localStorage.getItem(ROOM_SESSION_KEY)) restore();
-    else {
-      const invited = new URL(location.href).searchParams.get("room")?.toUpperCase();
-      if (/^[A-Z2-9]{6}$/.test(invited || "")) { joinForm.querySelector("#join-code").value = invited; joinDialog.showModal(); }
-    }
+    // A new invite wins over an old room; the old place simply expires.
+    else if (saved?.id && (!invite || invite === saved.code)) {
+      await restore();
+      if (invite && !live && !localStorage.getItem(ROOM_SESSION_KEY)) openInvite(invite, statusOf(menu).textContent);
+    } else if (invite) openInvite(invite);
   }, 0);
 
   return {

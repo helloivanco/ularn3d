@@ -19,8 +19,7 @@ const activeRoom = async (page, browser, includeSpectator = false) => {
     await client.getByRole('button', { name: role === 'player' ? 'Join room' : 'Watch room', exact: true }).click();
     await expect(client.locator('.room-code')).toBeVisible();
   }
-  await page.locator('#lobby-ready').click();
-  await guest.locator('#lobby-ready').click();
+  // Hosting and joining both mark the player ready.
   await expect(page.locator('#lobby-start')).toBeEnabled();
   await page.locator('#lobby-start').click();
   for (const client of [page, guest, ...(watcher ? [watcher] : [])]) {

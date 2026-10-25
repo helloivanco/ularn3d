@@ -40,6 +40,8 @@ const paths = {
   rotateRight: '<path d="M21 10a9 9 0 1 0-2 8m2-14v6h-6"/>',
   center:
     '<circle cx="12" cy="12" r="6"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="1"/>',
+  compass:
+    '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/><path d="M12 3v2m0 14v2M3 12h2m14 0h2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   north: '<path d="M12 20V4m-6 6 6-6 6 6"/>',

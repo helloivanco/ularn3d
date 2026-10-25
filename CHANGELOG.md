@@ -4,6 +4,19 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.3.82 — Auto explore, scores that stick, quicker multiplayer
+
+- Press X or the new Explore button to chart a floor automatically. It stops when a creature appears or something needs you, and picks up loot when auto-loot is on
+- Away from the stairs, > and < walk you to stairs you have already found, then a second press takes them. G travels to an object by its symbol
+- Auto explore stays off in multiplayer rooms, where every step is shared with your party
+- On phones, your spells, attributes, gold, armor and weapon no longer overlap each other or the journal
+- When a multiplayer expedition ends, every player gets their own result on the global leaderboard, however long the run was
+- A finished score the leaderboard refuses no longer holds up the scores after it
+- The multiplayer Leaderboard shows everyone's expeditions, with a separate tab for verified co-op runs
+- Invite links open a filled-in join form with your name and calling, even if you were in another room before
+- Hosting or joining marks you ready, so the host can start as soon as a friend arrives
+- The password box only appears for rooms that need one, and host settings sit under Room options
+
 ## 1.3.81 — Torchlit caves in Cinematic
 
 - In Cinematic, the caves glow warmly around you and fade toward the edges of the view, with a soft vignette. Nearby creatures and treasure catch your light

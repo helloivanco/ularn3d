@@ -109,6 +109,8 @@ let journalSignature = "", statsSignature = "";
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const HUD_STATS = ["STR", "INT", "WIS", "CON", "DEX"];
 const HERO_NAME_KEY = "ularn3d.heroName";
+// Exploring and travel shortcuts run many private steps; a room shares every step.
+const ROOM_EXPLORE_NOTE = "Auto explore is off in multiplayer rooms. Click a tile to travel instead.";
 const readRememberedHeroName = () => {
   try {
     const dedicated = localStorage.getItem(HERO_NAME_KEY);
@@ -533,6 +535,8 @@ function update() {
   world?.update(state);
   if (window.ularnOnline?.inMatch?.()) {
     document.querySelectorAll('#hud [data-key]').forEach(button => { button.disabled = !!state.roomBlocked; });
+    $("explore").disabled = true;
+    $("explore").title = ROOM_EXPLORE_NOTE;
     $("auto-loot").disabled = !!state.roomBlocked;
     const auraToggle = document.querySelector('#party-hud .aura-toggle');
     if (auraToggle) auraToggle.disabled = !!state.roomBlocked;
@@ -692,7 +696,7 @@ function update() {
   $("score-sync-status").hidden = !state.scoreboard;
   if (state.scoreboard) {
     const sync=state.scoreSync;
-    $("score-sync-status").textContent = !sync.configured ? "Global records are not configured." : sync.pending ? `${sync.pending} completed score${sync.pending===1?"":"s"} saved locally, waiting to sync.` : sync.latestSyncedGame===state.gameID ? "This expedition’s score is saved globally." : "Completed expeditions are shared automatically when online.";
+    $("score-sync-status").textContent = !sync.configured ? "Global records are not configured." : sync.pending ? `${sync.pending} completed score${sync.pending===1?"":"s"} saved locally, waiting to sync.` : sync.latestSyncedGame===state.gameID ? "This expedition’s score is saved globally." : sync.state==="error" && sync.error ? sync.error : "Completed expeditions are shared automatically when online.";
   }
   if (previousGold != null && state.gold > previousGold && state.bank === previousBank && !state.over) sound("coins");
   syncTerminalEndActions(state);
@@ -801,7 +805,9 @@ function sendCommand(key, shift = false) {
   if (document.activeElement?.id === "chat-input") return;
   if (window.ularnOnline?.inMatch?.()) {
     if (window.ularnOnline.acceptsInput?.() === false && !state?.over) return;
-    return window.ularnOnline.sendInput?.(shift && key.length === 1 ? key.toUpperCase() : key);
+    const input = shift && key.length === 1 ? key.toUpperCase() : key;
+    if (["X", "G", "{", "}"].includes(input) && !state?.prompt) { toast(ROOM_EXPLORE_NOTE); return; }
+    return window.ularnOnline.sendInput?.(input);
   }
   if (!state || graphicsLost) return;
   engine.key(key, shift);
