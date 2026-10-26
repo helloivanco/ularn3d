@@ -4,6 +4,16 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.4.1 — Always a next step
+
+- A prompt under your hero shows the next step: what the tile underfoot allows and its key, a creature in reach to attack, or where to head next, such as the stairs you have found, the caves, or home with the cure. Click or tap it to do it
+- The title answers Enter at once. Continue names your saved hero, their depth and level, and the time they have left
+- Going deeper than any earlier expedition is marked on the floor card and with a notice
+- Controllers work on every screen. The stick or d-pad moves and attacks, A takes the next step, X explores, Y opens your pack and Menu pauses. In menus the d-pad moves between buttons and A chooses. The Field Guide lists every button
+- Keyboard focus shows a gold ring, and the run recap takes focus so Tab reaches Try again first
+- On phones, notices and messages sit above the new prompt instead of over it
+- The recap no longer names a hero's calling twice when the hero is named after it, and says “1 mobul”. The classic rules are unchanged
+
 ## 1.4.0 — Every blow lands
 
 - Hits flash the creature and knock it back, damage numbers rise from the blow, and a nameplate shows how wounded your foe is, never its exact health

@@ -763,6 +763,27 @@ window.ularn = {
       return false;
     }
   },
+  // Read-only: who and where the saved expedition is, for the title's Continue.
+  saveSummary() {
+    try {
+      const saved = JSON.parse(LZString.decompressFromUTF16(localStorage.getItem(SAVE_KEY_3D)))?.state;
+      if (!saved?.player || saved.GAMEOVER || !Number.isInteger(saved.level)) return null;
+      // The title runs before setGameConfig; 3D is always Ularn, whose limit is 40000.
+      const limit = typeof TIMELIMIT === "number" ? TIMELIMIT : 40000;
+      return {
+        name: String(saved.logname || ""), character: String(saved.player.char_picked || ""),
+        level: saved.level, rank: saved.player.LEVEL,
+        timeLeft: Math.max(0, Math.ceil((limit - (saved.gtime || 0)) / 100)),
+      };
+    } catch {
+      return null;
+    }
+  },
+  // Which kind of answer the open prompt wants, so a controller can give it.
+  promptKind() {
+    if (!blocking_callback) return null;
+    return blocking_callback === getdirectioninput ? "direction" : "choice";
+  },
   // Read-only species list for the bestiary; templates are never touched.
   species() {
     return ULARN_monsterlist.slice(1).map((monster, index) => ({

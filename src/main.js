@@ -23,6 +23,8 @@ import { monsterCardInfo } from "./monster-descriptions.js";
 import { mountOnlineUi } from "./online/ui.js";
 import { tilesInFog } from "./online/spectator.js";
 import { auraControl } from "./cooperation-aura.js";
+import { nextStep } from "./next-step.js";
+import { mountGamepad } from "./gamepad.js";
 mountIcons();
 const onlineUi = mountOnlineUi();
 window.ularnOnline = onlineUi;
@@ -123,6 +125,7 @@ document.body.classList.toggle("reduce-motion", feel.motion === "reduced");
 // Cross-run records live apart from the expedition save; rooms never write them.
 let profile = loadProfile(localStorage);
 let runMemory = { lowHp: false };
+let depthRecord = Infinity, recordPassed = false;
 const DRAGONS = new Set([25, 48, 49, 53, 54, 56]), DEMONS = new Set([57, 58, 59, 60, 61, 62, 63, 64, 65]);
 const RETRY_KEY = "ularn3d.retry";
 let endingSequence = false, endingTimer = null, recordedEnding = null, recapDeltas = null;
@@ -394,7 +397,19 @@ $("save-notice").hidden = !hasExpedition;
 if (hasExpedition) {
   $("class-label").textContent = "NEW EXPEDITION · CHOOSE YOUR CALLING";
   $("begin").firstChild.textContent = "Start new expedition ";
+  // Continue says who is waiting below, and where.
+  const saved = engine.saveSummary?.();
+  if (saved) {
+    $("continue-summary").textContent = [
+      saved.name && saved.name !== saved.character ? saved.name : "", saved.character,
+      saved.level ? (saved.level > 15 ? `Volcano ${saved.level - 15}` : `Depth ${saved.level}`) : "In town",
+      `level ${saved.rank}`, `${saved.timeLeft} mobuls left`,
+    ].filter(Boolean).join(" · ");
+    $("continue-summary").hidden = false;
+  }
 }
+// Enter answers the title at once: Continue when a run is saved, otherwise Begin.
+(hasExpedition ? $("continue") : $("begin")).focus({ preventScroll: true });
 const showMonsterCard = (card, info, event) => {
   const art = card.querySelector(".monster-card-art");
   const name = card.querySelector(".monster-card-name");
@@ -648,6 +663,12 @@ function update() {
   state = fog
     ? { ...next, tiles: tilesInFog(next.tiles, fog), mapRev: `${next.mapRev ?? ""}:${fog.size}` }
     : next;
+  // A run measures itself against the deepest floor of every earlier run.
+  if (previous?.gameID !== state.gameID) {
+    depthRecord = !recordsRoom() && profile.runs > 0 ? profile.deepest : Infinity;
+    feedbackHud.recordDepth = depthRecord;
+    recordPassed = (state.deepest ?? 0) > depthRecord;
+  }
   // Floors change under the veil; slain creatures are marked before the world
   // drops their actors; level-ups and floor cards follow the rebuilt world.
   const veil = director.begin(previous, state);
@@ -660,6 +681,11 @@ function update() {
   if (!previous || previous.actorRev !== state.actorRev || previous.level !== state.level) noteSightings(state);
   if (previous && !state.over && (previous.level !== state.level || previous.rank !== state.rank || previous.gold !== state.gold ||
     previous.hasEye !== state.hasEye || previous.hasCure !== state.hasCure || previous.hp !== state.hp)) notifyFeats(checkFeatsNow({}));
+  if (previous?.gameID === state.gameID && !state.over && !recordPassed && state.level > depthRecord && state.deepest > previous.deepest) {
+    recordPassed = true;
+    const line = depthRecord > 0 ? `Deeper than any expedition before. Your record was ${depthName(depthRecord)}.` : "Deeper than any expedition before.";
+    setTimeout(() => { feedbackHud.notice({ icon: "stairs", title: "Deepest yet", line }); sound("feat"); }, reduced ? 0 : 900);
+  }
   if (previous && !previous.over && state.over) beginEnding(state);
   if (state.over) recordEnding(state);
   if (window.ularnOnline?.inMatch?.()) {
@@ -881,6 +907,7 @@ function update() {
       );
     }
   }
+  syncNextStep();
   drawMap();
   syncHeard(next);
   if (ularnPerf.enabled) {
@@ -925,6 +952,59 @@ function syncRunClock(snapshot) {
   clock?.classList.toggle("critical", !snapshot.over && left < 20);
   clock?.classList.toggle("low", !snapshot.over && left >= 20 && left < 50);
 }
+
+// ---------- The next step: what this tile allows, else where the run goes ----------
+let stepSignature = "", stepActions = [];
+// Direction keys read as the arrows most players press.
+const STEP_GLYPHS = { y: "↖", k: "↑", u: "↗", h: "←", l: "→", b: "↙", j: "↓", n: "↘" };
+const enginePref = (name) => typeof window.getPref !== "function" || window.getPref(name) !== false;
+// The engine's own contextual buttons for this tile, with the keys they press.
+const engineContext = () => [...$("CONTEXT").querySelectorAll("input")].map((button) => ({
+  id: button.id.replace(/^engine-/, ""), key: button.key, label: button.value, disabled: button.disabled,
+}));
+function syncNextStep() {
+  const room = !!window.ularnOnline?.inMatch?.();
+  const step = endingSequence || state.roomBlocked || window.ularnOnline?.spectating?.() ? null
+    : nextStep(state, engineContext(), { room, travelKeys: enginePref("explore_stairs"), explore: enginePref("explore_toggle") });
+  const pad = document.body.classList.contains("pad-active");
+  const signature = step ? JSON.stringify([step.kind, pad, step.actions.map((a) => [a.key, a.label, a.detail, a.target?.x, a.target?.y])]) : "";
+  if (signature === stepSignature) return;
+  const arrived = !!step && step.kind !== "goal" && !stepSignature.startsWith(`["${step.kind}"`);
+  stepSignature = signature;
+  stepActions = step?.actions || [];
+  const box = $("next-step");
+  box.hidden = !step;
+  if (!step) { box.replaceChildren(); return; }
+  box.classList.toggle("on-tile", step.kind === "tile");
+  box.classList.toggle("on-foe", step.kind === "foe");
+  box.replaceChildren(...step.actions.map((action, index) => {
+    const live = !!(action.key || action.target);
+    const el = document.createElement(live ? "button" : "div");
+    el.className = `step-action${live ? "" : " is-hint"}`;
+    if (live) { el.type = "button"; el.dataset.step = String(index); }
+    const key = pad && index === 0 && live ? "A" : STEP_GLYPHS[action.key] || action.key;
+    if (key) { const kbd = document.createElement("kbd"); kbd.textContent = key; el.append(kbd); }
+    else if (live) { const icon = document.createElement("span"); icon.className = "step-icon"; icon.innerHTML = iconMarkup("compass"); el.append(icon); }
+    const verb = document.createElement("strong"); verb.textContent = action.label; el.append(verb);
+    if (action.detail) { const detail = document.createElement("span"); detail.className = "step-detail"; detail.textContent = action.detail; el.append(detail); }
+    if (live) el.title = action.key ? `${action.label} (${action.key})` : action.label;
+    return el;
+  }));
+  if (arrived && !reduced) box.animate([{ scale: ".94", opacity: .4 }, { scale: "1", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" });
+}
+// Clicking, tapping or pad A presses the same ordinary key, or walks the known route.
+function runStep(index = 0) {
+  const action = stepActions[index];
+  if (!action || !state) return false;
+  if (action.key) command(action.key);
+  else if (action.target) travel(action.target);
+  else return false;
+  return true;
+}
+$("next-step").addEventListener("click", (event) => {
+  const button = event.target.closest(".step-action[data-step]");
+  if (button) runStep(Number(button.dataset.step));
+});
 
 // ---------- Ending: the fall or the triumph, then the recap ----------
 function beginEnding(snapshot) {
@@ -989,13 +1069,14 @@ function syncRecap(snapshot) {
   $("recap-portrait").src = `/art/classes/${String(snapshot.character || "adventurer").toLowerCase()}.webp`;
   $("recap-eyebrow").textContent = snapshot.winner ? "VICTORY" : "YOU HAVE FALLEN";
   $("recap-title").textContent = snapshot.winner ? "The cure is home" : what ? `${what[0].toUpperCase()}${what.slice(1)}` : "Your expedition ended";
-  $("recap-line").textContent = `${snapshot.name}, ${snapshot.title || "adventurer"} · ${snapshot.character} · level ${snapshot.rank}`;
+  // A hero named after their calling is not introduced twice.
+  $("recap-line").textContent = [`${snapshot.name}, ${snapshot.title || "adventurer"}`, snapshot.name !== snapshot.character ? snapshot.character : "", `level ${snapshot.rank}`].filter(Boolean).join(" · ");
   const deepest = Math.max(snapshot.deepest ?? 0, ending.deepest ?? 0);
   $("recap-stats").replaceChildren(
     recapStat("Score", Number(ending.score || 0).toLocaleString()),
     recapStat("Deepest", depthName(deepest), deepest !== snapshot.level ? `ended at ${depthName(snapshot.level)}` : ""),
     recapStat("Creatures slain", String(snapshot.kills ?? 0)),
-    recapStat("Turns", Number(snapshot.moves || 0).toLocaleString(), `${ending.timeused ?? 0} mobuls`),
+    recapStat("Turns", Number(snapshot.moves || 0).toLocaleString(), `${ending.timeused ?? 0} ${(ending.timeused ?? 0) === 1 ? "mobul" : "mobuls"}`),
   );
   // A first run beats nothing yet; the rank line already says so.
   const chips = [], best = recapDeltas?.of > 1 ? recapDeltas.newBest : null;
@@ -1005,6 +1086,8 @@ function syncRecap(snapshot) {
   if (best && recapDeltas.callingBest && !chips.length && ending.score > 0) chips.push(`Best ${snapshot.character} run`);
   $("recap-chips").replaceChildren(...chips.map((text) => { const chip = document.createElement("span"); chip.textContent = text; return chip; }));
   $("recap-rank").textContent = recapDeltas?.of > 1 ? `#${recapDeltas.rank} of your ${recapDeltas.of} recorded expeditions` : recapDeltas ? "Your first recorded expedition" : "";
+  // Focus lands on the recap, so Tab reaches Try again first; R, C and Enter keep their keys.
+  if (!recap.contains(document.activeElement)) recap.focus({ preventScroll: true });
 }
 // One key back into the caves: same name, calling and difficulty.
 function tryAgain() {
@@ -1427,6 +1510,8 @@ function updateViewport() {
   const top = portrait ? Math.max(map.bottom, tools.bottom) + 12 : topbar.bottom + 34;
   const bottom = Math.max(top + 40, dock.top - 16);
   world.setViewportRect({ left: Math.min(left, right - 80), right, top, bottom });
+  // The next-step prompt centres under the hero, not the window.
+  document.body.style.setProperty("--view-center", `${Math.round((Math.min(left, right - 80) + right) / 2)}px`);
 }
 const viewportObserver = new ResizeObserver(updateViewport);
 viewportObserver.observe(document.querySelector(".adventure-bar"));
@@ -1435,6 +1520,42 @@ viewportObserver.observe(document.querySelector(".camera-tools"));
 window.addEventListener("resize", () => { gameMap.resize(); updateViewport(); });
 
 window.addEventListener("pagehide", () => audio.suspend());
+
+// ---------- Controller: every screen answers a pad ----------
+const shown = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
+const titleChoice = () => (shown($("continue")) ? $("continue") : $("begin"));
+const PAD_ACTIONS = {
+  step: () => runStep(0), cancel: () => stopTravel(), explore: () => command("X"), inventory: () => command("i"),
+  "rotate-left": () => world?.rotate(-1), "rotate-right": () => world?.rotate(1),
+  "zoom-out": () => world?.zoom(1.22), "zoom-in": () => world?.zoom(0.82), center: () => world?.reset(),
+  map: () => { stopTravel(); gameMap.open(); }, menu: () => { stopTravel(); $("pause-dialog").showModal(); }, wait: () => command("."),
+};
+mountGamepad({
+  surface() {
+    const dialog = document.querySelector("dialog[open]");
+    if (dialog) return { kind: "menu", root: dialog, preferred: dialog.querySelector(".button.primary, [aria-selected=true], .close-dialog") };
+    if (!state || !document.body.classList.contains("playing")) {
+      if ($("welcome").hidden) return { kind: "menu", root: document.body };
+      return { kind: "menu", root: document.querySelector(".entry-layout"), preferred: titleChoice(), start: () => titleChoice().click() };
+    }
+    if (endingSequence) return { kind: "menu", root: $("fx-layer"), start: finishEnding };
+    if (!$("engine-modal").hidden) return { kind: "menu", root: document.querySelector(".terminal-card"), preferred: shown($("try-again")) ? $("try-again") : null };
+    if (state.prompt) return engine.promptKind?.() === "direction" ? { kind: "direction" } : { kind: "menu", root: $("interaction") };
+    return state.maze && !state.over ? { kind: "play" } : null;
+  },
+  move(key) { if (movementAllowed()) { stopTravel(); held.start(key, "pad"); } },
+  release() { held.release("pad"); },
+  press: (key) => command(key),
+  act: (name) => PAD_ACTIONS[name]?.(),
+  back() {
+    const dialog = document.querySelector("dialog[open]");
+    if (dialog) dialog.close();
+    else if (endingSequence) finishEnding();
+    else if (state) command("escape");
+  },
+  connected: () => toast("Controller ready. A takes the next step and Menu pauses."),
+  activeChanged: () => { stepSignature = ""; if (state) syncNextStep(); },
+});
 
 // Try again: the previous page stored the hero; start straight back in the caves.
 (() => {

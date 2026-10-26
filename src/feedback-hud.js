@@ -21,6 +21,8 @@ export const woundBand = (hp, hpMax) => {
 export class FeedbackHud {
   constructor({ root = document.body, world, getState, settings, reduced = false }) {
     this.world = world; this.getState = getState; this.settings = settings; this.reduced = reduced;
+    // The deepest floor of earlier runs; main.js sets it as each run begins.
+    this.recordDepth = Infinity;
     this.vignette = root.querySelector("#hurt-vignette");
     this.veilEl = root.querySelector("#transition-veil");
     this.deathEl = root.querySelector("#death-veil");
@@ -171,13 +173,14 @@ export class FeedbackHud {
     el.querySelector(".banner-chips").replaceChildren();
     this.show(el, 2200, "banner");
   }
-  depthCard({ region, depth, cause, first }) {
-    const el = this.card;
+  depthCard({ region, depth, cause, first, level }) {
+    const el = this.card, record = !!first && level > this.recordDepth;
     el.querySelector(".depth-region").textContent = region;
     el.querySelector(".depth-title").textContent = depth;
     el.querySelector(".depth-line").textContent = cause === "trapdoor" ? "You fell through a trap door"
-      : cause === "teleport" ? "Teleported" : first ? "New depth" : "";
+      : cause === "teleport" ? "Teleported" : record ? "Deeper than ever before" : first ? "New depth" : "";
     el.classList.toggle("first-visit", !!first);
+    el.classList.toggle("record", record);
     this.show(el, 1700, "card");
   }
   // Floor changes happen under black, then the new floor fades in.
