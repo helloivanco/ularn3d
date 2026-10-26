@@ -335,6 +335,27 @@ act_open_chest = function (x, y) {
   if (chest && !itemAt(x, y)?.matches(OCHEST)) emitAction3D("chest", location, { exploded: player.HP < hp });
   return result;
 };
+// Fountains, altars and thrones: each act_* runs only once the engine has
+// confirmed the feature is underfoot, so the call itself is the action.
+// Observe-only: arguments and results pass through untouched.
+for (const [name, kind, act] of [["act_drink_fountain", "fountain", "drink"], ["act_wash_fountain", "fountain", "wash"],
+  ["act_desecrate_altar", "altar", "desecrate"], ["act_sit_throne", "throne", "sit"], ["act_sit_dead_throne", "throne", "sit"],
+  ["act_remove_gems", "throne", "gems"]]) {
+  const original = globalThis[name];
+  if (typeof original !== "function") continue;
+  globalThis[name] = function (...args) {
+    const location = { level, from: { x: player.x, y: player.y } }, result = original.apply(this, args);
+    emitAction3D(kind, location, { act });
+    return result;
+  };
+}
+// A prayer counts once the engine accepts it (not on cancel or overdraft).
+const originalPrayAudio3D = act_donation_pray;
+act_donation_pray = function (offering) {
+  const location = { level, from: { x: player.x, y: player.y } }, result = originalPrayAudio3D(offering);
+  if (offering != ESC && prayed === 1) emitAction3D("altar", location, { act: "pray" });
+  return result;
+};
 const originalHitMonster3D = hitmonster;
 hitmonster = function (x, y) {
   const monster = monsterAt(x, y);

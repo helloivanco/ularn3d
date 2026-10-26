@@ -4,8 +4,19 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
-## 1.4.1 — Always a next step
+## 1.5.0 — Sights, sound and a next step
 
+- Every surface is repainted in far finer detail: hand-cut flagstones that never repeat across a room, laid wall courses, a meadow of grass, overlapping slate roofs and weathered planks. The volcano floor is now cooled basalt with glowing cracks
+- In Cinematic, the stones near you catch your lantern light on their edges
+- Every trap looks like what it is: arrow plates, trapdoors, teleport rune circles, dart traps and pits. Thrones show their jewels until you pry them off, mirrors reflect, and the sphere of annihilation is a black void
+- Altars, statues, chests and the gelatinous cube are remodelled. McDope's wares and the amulet of life preservation have their own models, and the cure potion glows once you know it
+- Loot rests on the floor with a soft shadow. Diamonds, blades and pale potions are no longer missing pieces, and rings lose the white patch in their middle
+- Ularn has a new original orchestral score: strings, horns, woodwinds, harp, celesta and choir, built around one theme you will start to recognise
+- The town plays a pastoral tune with something uneasy underneath. The caves are a slow hymn of stone and shadow, and from floor 8 the deep halls grow darker still. The volcano churns with an ominous riff and low brass
+- The music rises as danger nears: a pulse when a creature is close, then brass and timpani when you are surrounded or trading blows
+- Short orchestral cues mark levelling up, each new depth you reach, finding the cure, death and victory
+- Fountains, altars and thrones have their own sounds, and spells and stairs vary a little each time
+- Music still loads one region at a time and plays offline in the desktop app
 - A prompt under your hero shows the next step: what the tile underfoot allows and its key, a creature in reach to attack, or where to head next, such as the stairs you have found, the caves, or home with the cure. Click or tap it to do it
 - The title answers Enter at once. Continue names your saved hero, their depth and level, and the time they have left
 - Going deeper than any earlier expedition is marked on the floor card and with a notice
