@@ -66,32 +66,33 @@ test("every spell and weapon has a distinct sound and voices are released", asyn
   await expect(page.locator("#sound")).toBeVisible();
   await expect(page.locator("#sound")).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => page.evaluate(() => window.ularnAudio?.music?.kind || "")).toBe("town");
-  const stepped = await page.evaluate(() => {
-    const heard = [];
+  // The footstep sounds when the foot plants in the render loop, a moment
+  // after the move, so listen until then rather than only during paint().
+  const moved = await page.evaluate(() => {
+    const heard = (window.__heardSteps = []);
     const original = window.ularnAudio.play.bind(window.ularnAudio);
+    window.__restorePlay = () => { window.ularnAudio.play = original; };
     window.ularnAudio.play = (kind, detail) => {
       heard.push(kind);
       return original(kind, detail);
     };
-    try {
-      const here = ularn.snapshot();
-      const next = here.tiles.find(
-        (tile) =>
-          !tile.wall &&
-          !tile.closed &&
-          Math.max(Math.abs(tile.x - here.x), Math.abs(tile.y - here.y)) === 1,
-      );
-      if (!next) return { heard, moved: false };
-      player.x = next.x;
-      player.y = next.y;
-      paint();
-      return { heard, moved: true };
-    } finally {
-      window.ularnAudio.play = original;
-    }
+    const here = ularn.snapshot();
+    const next = here.tiles.find(
+      (tile) =>
+        !tile.wall &&
+        !tile.closed &&
+        Math.max(Math.abs(tile.x - here.x), Math.abs(tile.y - here.y)) === 1,
+    );
+    if (!next) return false;
+    player.x = next.x;
+    player.y = next.y;
+    paint();
+    return true;
   });
-  expect(stepped.moved).toBe(true);
-  expect(stepped.heard).toEqual(["step"]);
+  expect(moved).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__heardSteps.length)).toBeGreaterThan(0);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => { window.__restorePlay(); return window.__heardSteps; })).toEqual(["step"]);
   const result = await page.evaluate(async () => {
     const { GameAudio, spellProfile, weaponProfile, weaponSoundKeys } = await import("/src/audio.js");
     const profiles = spelname.map((name, id) => JSON.stringify(spellProfile({name, id})));

@@ -56,7 +56,7 @@ function letterTexture(letter, ink, paper) {
 let mirrorGlassMaterial;
 function mirrorGlass() {
   if (mirrorGlassMaterial) return mirrorGlassMaterial;
-  if (typeof document?.createElement !== "function") return (mirrorGlassMaterial = matBasic(0xa9c2c7, { toneMapped: false }));
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return (mirrorGlassMaterial = matBasic(0xa9c2c7, { toneMapped: false }));
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 128;

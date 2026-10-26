@@ -14,7 +14,7 @@ const SPOKES = Float32Array.from({ length: BURST * 3 }, (_, i) => {
 let glowTexture = null;
 // Without a DOM (unit tests building the pool) the flash is a plain soft quad.
 const softGlow = () => {
-  if (glowTexture || typeof document?.createElement !== "function") return glowTexture;
+  if (glowTexture || typeof document === "undefined" || typeof document.createElement !== "function") return glowTexture;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d"), gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);

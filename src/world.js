@@ -1746,6 +1746,7 @@ export class World {
             0.025,
             0.99,
           );
+    const town = new THREE.Group();
     for (const [id, x, z, s] of [
       [69, -2, 4, 1.4],
       [12, 1, 0, 1.25],
@@ -1755,11 +1756,23 @@ export class World {
       [54, 8, -6, 1.5],
     ]) {
       const b = building(id);
-      batch(b);
       b.position.set(x, 0, z);
       b.scale.setScalar(s);
-      this.props.add(b);
+      town.add(b);
     }
+    // The title never fades or cuts away a building, so all six merge by
+    // shared material: one draw per material instead of one per building.
+    // Labels keep their placement by baking each building's transform first.
+    town.updateMatrixWorld(true);
+    const labels = [];
+    town.traverse((o) => { if (o.isSprite) labels.push(o); });
+    for (const sprite of labels) {
+      sprite.matrixWorld.decompose(sprite.position, sprite.quaternion, sprite.scale);
+      sprite.removeFromParent();
+    }
+    batch(town);
+    labels.forEach((sprite) => town.add(sprite));
+    this.props.add(town);
     for (let i = 0; i < 100; i++) {
       const x = noise(i, 9) * 25 - 10,
         y = noise(i, 10) * 21 - 10;
