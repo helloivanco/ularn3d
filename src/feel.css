@@ -81,6 +81,7 @@
   background: radial-gradient(ellipse at center, #050b0dcc 0%, #050b0d88 45%, transparent 72%); }
 .depth-card { top: 22%; }
 .depth-card.first-visit .depth-line { color: #f0d79a; font-style: normal; font: 700 11px/1 var(--font-ui); letter-spacing: 3px; text-transform: uppercase; }
+.depth-card.record .depth-line { color: #ffd27a; text-shadow: 0 0 14px #ff9b3d88; }
 
 #notice-stack { position: fixed; top: 110px; right: 18px; z-index: var(--z-notice); display: grid; gap: 8px; pointer-events: none; justify-items: end; }
 .notice { display: flex; align-items: center; gap: 11px; min-width: 230px; max-width: 320px; padding: 10px 14px 10px 10px;
@@ -141,6 +142,8 @@
 /* ---------- Run recap ---------- */
 .run-recap { display: grid; gap: 16px; padding: 6px 2px 14px; }
 .run-recap[hidden] { display: none; }
+/* Focus rests on the recap so Tab reaches Try again; the panel itself is not a control. */
+.run-recap:focus { outline: none; }
 .recap-head { display: flex; gap: 16px; align-items: center; }
 .recap-portrait { width: 80px; height: 96px; object-fit: cover; border-radius: 6px; flex: none;
   background: #0b1417; box-shadow: 0 0 0 1px #d7bc8340, 0 8px 22px #0009; filter: grayscale(.55) brightness(.9); }
@@ -212,7 +215,8 @@
   .floater-kill > span { font-size: 19px; }
   .banner-title, .depth-title { font-size: 32px; }
   .feel-banner, .depth-card { top: 30%; max-width: 90vw; min-width: 0; }
-  #notice-stack { top: auto; bottom: calc(var(--dock-height, 200px) + 20px); right: 12px; left: 12px; justify-items: stretch; }
+  /* Clear of the next-step prompt above the dock. */
+  #notice-stack { top: auto; bottom: calc(var(--dock-height, 200px) + 64px); right: 12px; left: 12px; justify-items: stretch; }
   .notice { min-width: 0; max-width: none; }
   .recap-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .playing #attributes { gap: 2px; }

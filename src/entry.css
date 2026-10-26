@@ -76,3 +76,9 @@
 @media (max-height: 600px) and (min-aspect-ratio: 4/3) {
   .entry-layout { inset: 56px 0 12px; }
 }
+/* Continue names the saved hero and where they wait. */
+#welcome.entry-shell #continue .continue-copy { display: grid; gap: 4px; font-size: inherit; font-weight: 600; text-align: left; }
+#welcome.entry-shell #continue .continue-copy small { font-size: 10px; font-weight: 400; letter-spacing: .2px; color: #142124b8; }
+/* The setup column scrolls, so focus rings sit inside full-width buttons. */
+#welcome.entry-shell button:focus-visible, .pad-active #welcome.entry-shell button:focus { outline-offset: -4px; }
+#welcome.entry-shell .primary:focus-visible, .pad-active #welcome.entry-shell .primary:focus { outline-color: #142124; }

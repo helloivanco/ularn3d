@@ -148,7 +148,7 @@
         </h1>
         <div id="return-expedition" class="return-expedition" hidden>
           <button type="button" id="continue" class="button primary" hidden>
-            Continue expedition <span data-icon="east"></span>
+            <span class="continue-copy">Continue expedition<small id="continue-summary" hidden></small></span> <span data-icon="east"></span>
           </button>
         </div>
         <form id="start-form">
@@ -347,6 +347,7 @@
         </div>
         <div class="run-clock" title="Time remaining"><span data-icon="hourglass"></span><strong id="time-left">400</strong> mobuls</div>
         </div>
+        <div id="next-step" class="next-step" role="group" aria-label="Next step" hidden></div>
         <div class="bottom-hint">
           Arrow keys to move <span>·</span> X to explore <span>·</span> Click a tile to travel
           <span>·</span> Drag to orbit / scroll to zoom
@@ -380,7 +381,7 @@
             <button id="local-scores" aria-pressed="false">Local records</button>
           </div>
           <p id="score-sync-status" role="status" hidden></p>
-          <section id="run-recap" class="run-recap" hidden aria-labelledby="recap-title">
+          <section id="run-recap" class="run-recap" hidden aria-labelledby="recap-title" tabindex="-1">
             <div class="recap-head">
               <img id="recap-portrait" class="recap-portrait" alt="" width="80" height="96" />
               <div>
@@ -475,6 +476,17 @@
               <kbd>c</kbd> cast. <kbd>F2</kbd> toggles auto-loot for items
               (gold is always collected); <kbd>F3</kbd>
               pins your inventory. The town’s stores, bank, and college can help.
+            </p>
+          </section>
+          <section id="guide-controller">
+            <h3>Controller</h3>
+            <p>
+              The stick or d-pad moves and attacks. <kbd>A</kbd> takes the
+              next step shown above your controls, <kbd>X</kbd> explores,
+              <kbd>Y</kbd> opens your pack, <kbd>B</kbd> cancels, and the
+              left stick button waits a turn. Bumpers turn the camera,
+              triggers zoom, View opens the map and Menu pauses. In menus the
+              d-pad moves between buttons and <kbd>A</kbd> chooses.
             </p>
           </section>
           <section>
