@@ -471,11 +471,18 @@ function build(definition) {
       for(let i=0;i<6;i++){const tooth=cone(core,bone,-.21+i*.084,.43,-.237,.025,.12,4);tooth.rotation.z=Math.PI;}
       eyePair(core,.455,-.241,.11,0xe1b05e);
     }else{
-      box(core,color,0,.4,0,.73,.76,.73,{transparent:true,opacity:.38,roughness:.25,depthWrite:false});
-      for(const x of[-.29,.29])rod(core,light,[x,.75,-.29],[x,.75,.29],.025);
-      for(const z of[-.29,.29])rod(core,light,[-.29,.75,z],[.29,.75,z],.025);
-      for(let i=0;i<3;i++)rod(core,bone,[-.12+i*.1,.25+i*.1,-.09],[.12-i*.05,.34+i*.09,.11],.033);
-      ellipsoid(core,bone,.12,.4,.06,.075,1,.85,.8);
+      // A slumped block of jelly: a translucent body that sags at the base,
+      // a denser core with digested bones, and a wet sheen on top. No rod
+      // frame, which read as a picture frame from the overhead camera.
+      const jelly={transparent:true,opacity:.42,roughness:.12,metalness:.05,depthWrite:false};
+      const slab=box(core,color,0,.37,0,.74,.7,.74,jelly);slab.name="cube-jelly";
+      box(core,color,0,.07,0,.84,.13,.84,{...jelly,opacity:.3});
+      box(core,dark,0,.33,0,.46,.42,.46,{transparent:true,opacity:.35,roughness:.3,depthWrite:false});
+      for(let i=0;i<3;i++)rod(core,bone,[-.12+i*.1,.2+i*.1,-.09],[.12-i*.05,.29+i*.09,.11],.03);
+      ellipsoid(core,bone,.13,.36,.05,.07,1,.85,.8);
+      orb(core,0x8a7a5a,-.16,.18,.12,.045);
+      const sheen=box(core,0xffffff,-.12,.725,-.12,.38,.01,.24);
+      sheen.material=matBasic(0xe9fff8,{transparent:true,opacity:.28,toneMapped:false,depthWrite:false});sheen.castShadow=false;
     }
   } else if(family==="demon"){
     const rank=Math.max(0,id-57), brute=[57,60,61,65].includes(id), regal=[59,63,64].includes(id);

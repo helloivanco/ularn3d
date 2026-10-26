@@ -44,8 +44,10 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   const maps=await page.evaluate(async()=>{
     const {texture}=await import("/src/materials.js");
     const values=[];
-    for(const kind of ["stone","grass","wood","roof"]){
-      const small=texture(kind).image, large=texture(kind,512).image;
+    for(const kind of ["flags","basalt","stone","grass","wood","roof"]){
+      // The color map is the 512 relief source itself; a 128 draw still lands on the same pattern.
+      if(texture(kind).image!==texture(kind,512).image||texture(kind).image.width!==512)values.push({kind,cached:false,error:Infinity});
+      const small=texture(kind,128).image, large=texture(kind,512).image;
       const sample=document.createElement("canvas");sample.width=sample.height=128;
       sample.getContext("2d").drawImage(large,0,0,128,128);
       const a=small.getContext("2d").getImageData(0,0,128,128).data,b=sample.getContext("2d").getImageData(0,0,128,128).data;
@@ -102,13 +104,13 @@ test("Cinematic caves glow around the hero while Auto caves stay flat and unlit"
   await page.evaluate(()=>{newcavelevel(1);paint();});
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
   const cave=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(cave.caveGlow).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBe(1);
+  expect(cave.caveGlow).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBe(1);
   // The glow keeps the unlit, mapped cave materials.
   expect(cave.floorMaterial).toBe("MeshBasicMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
   await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("auto");
   await page.locator("#resume-game").click();
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().composer)).toBe(false);
   const flat=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(flat.caveGlow).toBe(false);expect(flat.vignette).toBe(false);
+  expect(flat.caveGlow).toBe(false);expect(flat.caveRelief).toBe(false);expect(flat.vignette).toBe(false);
   expect(flat.playerLight).toBe(false);expect(flat.pointLights).toBe(0);expect(flat.ambient).toBeGreaterThanOrEqual(1.4);
 });

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { lootShade } from "./models.js";
 
 // Presentation-only floor artwork. Engine item IDs, args, names, stats, and
 // classic Amiga `o{id}.png` tiles remain unchanged.
@@ -153,27 +154,30 @@ export function itemArtPath(id, arg = 0, known = true) {
   return ITEM_ART[id] || null;
 }
 
-// Generated sprites often sit on a pale rounded card. Flood-fill that plate
-// from the edges so the item floats on the dungeon floor without a white halo.
-// Hit testing still uses the original plane, so click targets do not shrink.
-export function stripPaleSpriteBackground(imageData, sat = 30, lumaMin = 168, alphaCut = 10) {
+// Generated sprites often sit on a pale card, sometimes a baked checkerboard.
+// Flood-fill that plate from the edges so the item floats on the dungeon floor
+// without a white halo. The fill is 4-connected and only takes neutral pixels,
+// so it cannot slip through a one-pixel diagonal outline into white diamond
+// facets, steel blades or a lavender bottle. Hit testing still uses the
+// original plane, so click targets do not shrink.
+export function stripPaleSpriteBackground(imageData, sat = 12, lumaMin = 168, alphaCut = 10) {
   const { data, width: w, height: h } = imageData;
   const n = w * h;
   const mark = new Uint8Array(n);
   const stack = [];
-  const isPale = (i) => {
-    const o = i * 4;
+  const spread = (o) => {
     const r = data[o],
       g = data[o + 1],
-      b = data[o + 2],
-      a = data[o + 3];
-    if (a < alphaCut) return true;
-    const max = r > g ? (r > b ? r : b) : g > b ? g : b;
-    const min = r < g ? (r < b ? r : b) : g < b ? g : b;
-    return max - min <= sat && (r + g + b) / 3 >= lumaMin;
+      b = data[o + 2];
+    return (r > g ? (r > b ? r : b) : g > b ? g : b) - (r < g ? (r < b ? r : b) : g < b ? g : b);
+  };
+  const luma = (o) => (data[o] + data[o + 1] + data[o + 2]) / 3;
+  const isPale = (i) => {
+    const o = i * 4;
+    return data[o + 3] < alphaCut || (spread(o) <= sat && luma(o) >= lumaMin);
   };
   const push = (i) => {
-    if (i < 0 || i >= n || mark[i] || !isPale(i)) return;
+    if (mark[i] || !isPale(i)) return;
     mark[i] = 1;
     stack.push(i);
   };
@@ -187,23 +191,62 @@ export function stripPaleSpriteBackground(imageData, sat = 30, lumaMin = 168, al
   }
   while (stack.length) {
     const i = stack.pop();
-    const x = i % w,
-      y = (i / w) | 0;
+    const x = i % w;
     if (x > 0) push(i - 1);
     if (x + 1 < w) push(i + 1);
-    if (y > 0) push(i - w);
-    if (y + 1 < h) push(i + w);
-    if (x > 0 && y > 0) push(i - w - 1);
-    if (x + 1 < w && y > 0) push(i - w + 1);
-    if (x > 0 && y + 1 < h) push(i + w - 1);
-    if (x + 1 < w && y + 1 < h) push(i + w + 1);
+    if (i >= w) push(i - w);
+    if (i + w < n) push(i + w);
   }
+  clearEnclosedCheckers(imageData, mark, alphaCut);
   for (let i = 0; i < n; i++) {
     if (!mark[i]) continue;
     const o = i * 4;
     data[o] = data[o + 1] = data[o + 2] = data[o + 3] = 0;
   }
   return imageData;
+}
+
+// Ring and belt holes keep the generator's two-tone checker, out of reach of
+// the edge fill. Clear an enclosed region only when it is a sharp neutral
+// checker ringed mostly by dark or saturated item pixels; polished highlights
+// and glass sit inside more bright material and stay.
+function clearEnclosedCheckers({ data, width: w, height: h }, mark, alphaCut) {
+  const n = w * h;
+  const spread = (o) => Math.max(data[o], data[o + 1], data[o + 2]) - Math.min(data[o], data[o + 1], data[o + 2]);
+  const luma = (o) => (data[o] + data[o + 1] + data[o + 2]) / 3;
+  const isCard = (i) => data[i * 4 + 3] >= alphaCut && spread(i * 4) <= 6 && luma(i * 4) >= 200;
+  const seen = new Uint8Array(n);
+  const minSize = Math.round(n * 0.0045);
+  for (let start = 0; start < n; start++) {
+    if (mark[start] || seen[start] || !isCard(start)) continue;
+    const part = [start];
+    seen[start] = 1;
+    let light = 0, mid = 0, pairs = 0, sharp = 0, rim = 0, solid = 0;
+    for (let k = 0; k < part.length; k++) {
+      const i = part[k], x = i % w, l = luma(i * 4);
+      if (l >= 244) light++;
+      else if (l <= 236) mid++;
+      for (const j of [x > 0 ? i - 1 : -1, x + 1 < w ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= n || mark[j]) continue;
+        if (!isCard(j)) {
+          rim++;
+          if (luma(j * 4) < 150 || spread(j * 4) > 40) solid++;
+          continue;
+        }
+        if (j > i) {
+          pairs++;
+          if (Math.abs(luma(j * 4) - l) >= 12) sharp++;
+        }
+        if (!seen[j]) {
+          seen[j] = 1;
+          part.push(j);
+        }
+      }
+    }
+    const size = part.length;
+    const checker = sharp / Math.max(1, pairs) >= 0.12 && light / size >= 0.15 && mid / size >= 0.15;
+    if (size >= minSize && checker && solid / Math.max(1, rim) >= 0.35) for (const i of part) mark[i] = 1;
+  }
 }
 
 /**
@@ -256,6 +299,29 @@ function stripLoadedTexture(texture) {
   texture.needsUpdate = true;
 }
 
+// The potion that cures your child is the reason for the descent. Once it is
+// known, it stands in a soft warm glow (never while it is still unidentified).
+const CURE_ART = "/art/items/potion-cure-dianthroritis.png";
+let cureGlow;
+function cureGlowMaterial() {
+  if (cureGlow) return cureGlow;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const c = canvas.getContext("2d");
+  const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,226,150,0.85)");
+  g.addColorStop(0.45, "rgba(255,196,110,0.32)");
+  g.addColorStop(1, "rgba(255,180,90,0)");
+  c.fillStyle = g;
+  c.fillRect(0, 0, 64, 64);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  cureGlow = new THREE.MeshBasicMaterial({
+    map, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending,
+  });
+  return cureGlow;
+}
+
 export function itemSprite(tile, invalidate = () => {}) {
   const known = tile?.known !== false;
   const path = itemArtPath(tile?.id, tile?.arg ?? 0, known);
@@ -291,7 +357,16 @@ export function itemSprite(tile, invalidate = () => {}) {
   artwork.name = "item-art";
   artwork.position.y = 0.42;
   artwork.scale.set(width, width, 1);
-  group.add(artwork);
+  // A soft contact shade, like the one creatures stand on, so loot rests on the floor.
+  group.add(lootShade(0.36), artwork);
+  if (path === CURE_ART) {
+    const glow = new THREE.Mesh(plane, cureGlowMaterial());
+    glow.name = "cure-glow";
+    glow.position.z = -0.02;
+    glow.scale.setScalar(1.6);
+    glow.renderOrder = -1;
+    artwork.add(glow);
+  }
   group.userData.artwork = artwork;
   group.userData.artPath = path;
   group.userData.artWidth = width;
@@ -336,6 +411,8 @@ export function itemArtCatalog() {
 export function releaseItemArtResources(clearCache = false) {
   textures.forEach((texture) => texture.dispose());
   materials.forEach((material) => material.dispose());
+  cureGlow?.map.dispose();
+  cureGlow?.dispose();
   plane.dispose();
   if (clearCache) {
     textures.clear();

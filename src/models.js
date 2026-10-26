@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mat, matBasic, surface, noise } from "./materials.js";
+import { mat, matBasic, surface, noise, placedTexture } from "./materials.js";
 import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { compact, disposeGeometry, featherContact } from "./graphics-utils.js";
@@ -53,6 +53,35 @@ function letterTexture(letter, ink, paper) {
   letterMaps.set(key, map);
   return map;
 }
+let mirrorGlassMaterial;
+function mirrorGlass() {
+  if (mirrorGlassMaterial) return mirrorGlassMaterial;
+  if (typeof document?.createElement !== "function") return (mirrorGlassMaterial = matBasic(0xa9c2c7, { toneMapped: false }));
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 128;
+  const c = canvas.getContext("2d");
+  const sky = c.createLinearGradient(0, 0, 32, 128);
+  sky.addColorStop(0, "#eef5f4");
+  sky.addColorStop(0.5, "#a3bcc2");
+  sky.addColorStop(1, "#4d6872");
+  c.fillStyle = sky;
+  c.fillRect(0, 0, 64, 128);
+  for (const [x0, w, a] of [[6, 14, 0.38], [26, 5, 0.22]]) {
+    c.fillStyle = `rgba(255,255,255,${a})`;
+    c.beginPath();
+    c.moveTo(x0, 128);
+    c.lineTo(x0 + w, 128);
+    c.lineTo(x0 + w + 44, 0);
+    c.lineTo(x0 + 44, 0);
+    c.closePath();
+    c.fill();
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.userData.shared = true;
+  return (mirrorGlassMaterial = matBasic(0xffffff, { map, toneMapped: false }));
+}
 function letterPlate(group, letter, ink, paper, x, y, z, w, h, rx = -Math.PI / 2) {
   const plate = new THREE.Mesh(
     geometry("letter-plate", () => new THREE.PlaneGeometry(1, 1)),
@@ -78,8 +107,8 @@ function mesh(group, geo, material, x, y, z, sx = 1, sy = 1, sz = 1) {
 export function box(g, color, x, y, z, w, h, d, extra) {
   return mesh(g, boxGeo, mat(color, extra), x, y, z, w, h, d);
 }
-export function block(g, kind, color, x, y, z, w, h, d) {
-  return mesh(g, boxGeo, surface(kind, color), x, y, z, w, h, d);
+export function block(g, kind, color, x, y, z, w, h, d, extra) {
+  return mesh(g, boxGeo, surface(kind, color, extra), x, y, z, w, h, d);
 }
 export function orb(g, color, x, y, z, r, extra) {
   return mesh(g, sphereGeo, mat(color, extra), x, y, z, r, r, r);
@@ -122,6 +151,14 @@ const CONTACT_DISC = new THREE.MeshBasicMaterial({
   toneMapped: false,
   vertexColors: true,
 });
+const LOOT_SHADE = new THREE.MeshBasicMaterial({
+  color: 0x0c1210,
+  transparent: true,
+  opacity: 0.56,
+  depthWrite: false,
+  toneMapped: false,
+  vertexColors: true,
+});
 const HERO_OUTLINE = new THREE.MeshBasicMaterial({
   color: 0x101816,
   side: THREE.BackSide,
@@ -145,6 +182,22 @@ export function contactDisc(radius = 0.46) {
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.renderOrder = 1;
+  return mesh;
+}
+/** Floor loot's shade: a solid core out to half the radius, then a feathered
+ *  rim. A sprite stands over the center, so a cone fade would hide its dark
+ *  part behind the art. Not a shadow map. */
+export function lootShade(radius = 0.32) {
+  const mesh = contactDisc(radius);
+  mesh.geometry = geometry("loot-shade", () => {
+    const shape = new THREE.RingGeometry(0, 1, 24, 2);
+    const position = shape.getAttribute("position"), colors = new Float32Array(position.count * 4);
+    for (let i = 0; i < position.count; i++)
+      colors.set([1, 1, 1, Math.hypot(position.getX(i), position.getY(i)) < 0.75 ? 1 : 0], i * 4);
+    shape.setAttribute("color", new THREE.BufferAttribute(colors, 4));
+    return shape;
+  });
+  mesh.material = LOOT_SHADE;
   return mesh;
 }
 
@@ -623,6 +676,7 @@ export function hero(character = "Adventurer") {
   }
   if (kit.scale) body.scale.set(...kit.scale);
   const mark = ring(root, 0xe6d091, .38, .012);
+  mark.name = "hero-mark";
   mark.material = mat(0xe6d091, { emissive: 0x8a7040, emissiveIntensity: .16, metalness: .12, roughness: .62 });
   addHeroOutline(body);
   return root;
@@ -751,6 +805,9 @@ function windowDetail(g, x, y, z, w = 0.25, h = 0.33) {
 }
 function roof(g, color, y, w, d, h) {
   for (const side of [-1, 1]) {
+    // A slab's u runs along its slope (toward the ridge on the left side, the
+    // eave on the right). A quarter turn lays the slate courses along the ridge
+    // with their lips toward the eave.
     const slab = block(
       g,
       "roof",
@@ -761,6 +818,7 @@ function roof(g, color, y, w, d, h) {
       Math.hypot(w / 2, h),
       0.085,
       d,
+      { map: placedTexture("roof", side < 0 ? "slope-left" : "slope-right", { rotation: (side * Math.PI) / 2 }) },
     );
     slab.rotation.z = -side * Math.atan2(h, w / 2);
   }
@@ -1088,20 +1146,35 @@ export function itemModel(tile) {
     return g;
   }
   if (id === 1) {
-    box(g, 0x788a81, 0, 0.1, 0, 0.85, 0.2, 0.7);
-    box(g, 0xabb19b, 0, 0.43, 0, 0.58, 0.65, 0.42);
-    box(g, 0xc3c3a3, 0, 0.8, 0, 0.82, 0.12, 0.66);
-    orb(g, 0xc6aeed, 0, 1.02, 0, 0.12, {
-      emissive: 0x9d6ac6,
-      emissiveIntensity: 1,
-    });
+    // A holy altar: dressed stone, a violet runner, two lit candles and the
+    // floating orb of the classic tile.
+    block(g, "stone", 0x7f8f86, 0, 0.11, 0, 0.88, 0.22, 0.7);
+    block(g, "stone", 0xaeb5a0, 0, 0.42, 0, 0.6, 0.42, 0.44);
+    block(g, "stone", 0xc8c6ab, 0, 0.68, 0, 0.84, 0.1, 0.64);
+    box(g, 0x5e3a6e, 0, 0.735, 0, 0.24, 0.012, 0.66);
+    for (const z of [-0.33, 0.33]) box(g, 0xd4b062, 0, 0.6, z, 0.24, 0.16, 0.012, { metalness: 0.6, roughness: 0.35 });
+    for (const x of [-0.31, 0.31]) {
+      cylinder(g, 0xe6dcc2, x, 0.81, -0.17, 0.035, 0.15);
+      orb(g, 0xffd182, x, 0.92, -0.17, 0.032, { emissive: 0xffbd54, emissiveIntensity: 3 });
+    }
+    orb(g, 0xc6aeed, 0, 1.04, 0.04, 0.11, { emissive: 0x9d6ac6, emissiveIntensity: 1 });
     return g;
   }
   if (id === 44) {
-    box(g, 0x80643c, 0, 0.22, 0, 0.58, 0.44, 0.39);
-    box(g, 0xba9c56, 0, 0.3, 0.21, 0.09, 0.22, 0.03);
-    for (const x of [-0.21, 0.21])
-      box(g, 0xc1a464, x, 0.24, 0, 0.05, 0.48, 0.41);
+    // Iron-bound chest: plank body, barrel lid, straps and a brass lock.
+    block(g, "wood", 0x7b5a34, 0, 0.19, 0, 0.6, 0.34, 0.4);
+    const lid = block(g, "wood", 0x86643a, 0, 0.36, 0, 0.6, 0.4, 0.4);
+    lid.geometry = geometry("chest-lid", () => new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1, false, 0, Math.PI));
+    lid.rotation.z = Math.PI / 2;
+    lid.scale.set(0.4, 0.6, 0.4);
+    const iron = { metalness: 0.6, roughness: 0.45 };
+    for (const x of [-0.2, 0.2]) {
+      box(g, 0x3a3935, x, 0.19, 0, 0.05, 0.35, 0.42, iron);
+      const strap = cylinder(g, 0x3a3935, x, 0.36, 0, 0.206, 0.05, 10, iron);
+      strap.rotation.z = Math.PI / 2;
+    }
+    box(g, 0xd0a94e, 0, 0.33, 0.205, 0.1, 0.12, 0.02, { metalness: 0.7, roughness: 0.3 });
+    box(g, 0x1c1712, 0, 0.32, 0.217, 0.022, 0.045, 0.006);
     return g;
   }
   if (id === 42) {
@@ -1142,11 +1215,30 @@ export function itemModel(tile) {
     return g;
   }
   if (id === 2 || id === 79) {
-    box(g, 0xa29367, 0, 0.4, 0, 0.55, 0.15, 0.45);
-    box(g, 0x8a7954, 0, 0.74, 0.22, 0.58, 0.8, 0.1);
-    for (const x of [-0.22, 0.22])
-      box(g, 0x9c875b, x, 0.25, 0, 0.09, 0.5, 0.38);
-    orb(g, 0x739990, 0, 1.08, 0.15, 0.09);
+    // The handsome jewel-encrusted throne. Prying the gems loose turns it into
+    // the engine's "massive throne", which keeps the seat but shows empty sockets.
+    const jewels = id === 2;
+    const gilt = { metalness: 0.7, roughness: 0.3 };
+    block(g, "stone", 0x7e7a68, 0, 0.07, 0, 0.8, 0.14, 0.68);
+    box(g, 0x8a6f3e, 0, 0.32, -0.02, 0.56, 0.16, 0.46);
+    box(g, 0x7a2f36, 0, 0.415, 0, 0.48, 0.03, 0.38);
+    box(g, 0x8a6f3e, 0, 0.82, -0.23, 0.58, 0.92, 0.1);
+    box(g, 0x7a2f36, 0, 0.78, -0.175, 0.42, 0.62, 0.012);
+    for (const x of [-0.31, 0.31]) {
+      box(g, 0x8a6f3e, x, 0.46, -0.02, 0.08, 0.14, 0.48);
+      box(g, 0xd4b062, x, 0.54, 0.2, 0.09, 0.04, 0.09, gilt);
+      orb(g, 0xd4b062, x * 0.95, 1.33, -0.23, 0.05, gilt);
+    }
+    box(g, 0xd4b062, 0, 1.29, -0.23, 0.66, 0.05, 0.12, gilt);
+    const sockets = [[0, 1.15], [-0.15, 0.98], [0.15, 0.98], [0, 0.82]];
+    const stones = [0xd9455a, 0x3cbf7a, 0x4a7fe0, 0xe6f2ff];
+    sockets.forEach(([x, y], i) => {
+      box(g, 0xd4b062, x, y, -0.172, 0.09, 0.09, 0.012, gilt);
+      if (jewels) {
+        const gem = orb(g, stones[i], x, y, -0.158, 0.042, { emissive: stones[i], emissiveIntensity: 0.55, metalness: 0.2, roughness: 0.15 });
+        gem.name = "throne-jewel";
+      } else box(g, 0x14100c, x, y, -0.166, 0.05, 0.05, 0.008);
+    });
     return g;
   }
   // Pits, dart traps, and express elevators each keep a distinct silhouette.
@@ -1168,7 +1260,7 @@ export function itemModel(tile) {
     }
     return g;
   }
-  if (id === 74) {
+  if (id === 74 || id === 73) {
     g.userData.trapKind = "dart";
     // Pressure plate with a ring of vertical darts — no pit silhouette.
     box(g, 0x6a735f, 0, 0.02, 0, 0.72, 0.035, 0.72);
@@ -1237,6 +1329,100 @@ export function itemModel(tile) {
     cylinder(g, 0x1a4a48, 0, 0.08, 0, 0.08, 0.5, 6);
     return g;
   }
+  if (id === 66 || id === 67) {
+    g.userData.trapKind = "arrow";
+    // A pressure plate set into the floor, scored with an arrowhead.
+    box(g, 0x45483f, 0, 0.012, 0, 0.64, 0.025, 0.64);
+    box(g, 0x6e7266, 0, 0.03, 0, 0.5, 0.02, 0.5);
+    unlitAccent(g, 0xd8b56a, 0, 0.043, 0.05, 0.035, 0.01, 0.3, "arrow-shaft");
+    for (const side of [-1, 1]) {
+      const barb = unlitAccent(g, 0xd8b56a, side * 0.045, 0.043, -0.13, 0.035, 0.01, 0.13, "arrow-head");
+      barb.rotation.y = side * 0.75;
+    }
+    for (const [x, z] of [[-0.27, 0], [0.27, 0], [0, -0.27], [0, 0.27]]) box(g, 0x16180f, x, 0.04, z, x ? 0.02 : 0.12, 0.01, z ? 0.02 : 0.12);
+    return g;
+  }
+  if (id === 75 || id === 76) {
+    g.userData.trapKind = "trapdoor";
+    // A wooden hatch on iron straps over a dark gap.
+    box(g, 0x070909, 0, 0.008, 0, 0.66, 0.016, 0.66);
+    for (const x of [-0.155, 0.155]) block(g, "wood", 0x6e5536, x, 0.032, 0, 0.29, 0.03, 0.6);
+    for (const z of [-0.19, 0.19]) box(g, 0x34342f, 0, 0.05, z, 0.6, 0.012, 0.05, { metalness: 0.6, roughness: 0.45 });
+    const pull = ring(g, 0x8f7a52, 0.055, 0.058);
+    pull.position.x = 0.2;
+    return g;
+  }
+  if (id === 9 || id === 78) {
+    g.userData.trapKind = "teleport";
+    // A rune circle humming with violet light, unlike the cyan town portal.
+    cylinder(g, 0x1c1826, 0, 0.01, 0, 0.42, 0.012, 12);
+    ring(g, 0x9b6cf0, 0.4, 0.03);
+    ring(g, 0x9b6cf0, 0.24, 0.032);
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      const rune = unlitAccent(g, 0xc9a8ff, Math.cos(a) * 0.32, 0.034, Math.sin(a) * 0.32, 0.07, 0.008, 0.02, "teleport-rune");
+      rune.rotation.y = -a;
+    }
+    return g;
+  }
+  if (id === 82) {
+    g.userData.hazard = "annihilation";
+    // The sphere of annihilation: a lightless void ringed by a violet horizon.
+    cylinder(g, 0x07050a, 0, 0.012, 0, 0.36, 0.012, 12);
+    const core = new THREE.Mesh(geometry("annihilation-core", () => new THREE.IcosahedronGeometry(1, 2)), matBasic(0x000000));
+    core.name = "annihilation-core";
+    core.position.y = 0.44;
+    core.scale.setScalar(0.28);
+    g.add(core);
+    for (const tilt of [0.55, -0.55]) {
+      const halo = ring(g, 0x8a4dd6, 0.36, 0.44);
+      halo.rotation.x = -Math.PI / 2 + tilt;
+      halo.rotation.z = tilt;
+    }
+    return g;
+  }
+  // Dealer McDope's wares and the amulet of life preservation.
+  if (id === 95) {
+    cylinder(g, 0xe9e4d8, 0, 0.14, 0, 0.09, 0.22, 10);
+    cylinder(g, 0xc84a3c, 0, 0.27, 0, 0.096, 0.05, 10);
+    box(g, 0xf4d35e, 0, 0.14, -0.086, 0.1, 0.09, 0.012);
+    for (const [x, z] of [[0.15, 0.05], [0.19, -0.04], [-0.15, 0.08]]) orb(g, 0xf2f0e8, x, 0.025, z, 0.03).scale.y = 0.015;
+    return g;
+  }
+  if (id === 96) {
+    const inks = [0xe25a7a, 0xf0c64a, 0x55b4e0, 0x8bd16a];
+    for (let x = 0; x < 3; x++) for (let z = 0; z < 3; z++)
+      box(g, inks[(x + z * 2) % inks.length], (x - 1) * 0.1, 0.015, (z - 1) * 0.1, 0.092, 0.01, 0.092);
+    return g;
+  }
+  if (id === 97) {
+    box(g, 0x4a3320, 0, 0.06, 0, 0.28, 0.1, 0.18);
+    box(g, 0xd8d2c0, 0, 0.062, 0, 0.29, 0.106, 0.07);
+    return g;
+  }
+  if (id === 98) {
+    for (const [x, z, s] of [[-0.09, 0.03, 1], [0.08, -0.04, 0.8], [0.02, 0.1, 0.65]]) {
+      cylinder(g, 0xeee6d2, x, 0.09 * s, z, 0.03 * s, 0.18 * s, 6);
+      const cap = orb(g, 0xa8452e, x, 0.19 * s, z, 0.1 * s);
+      cap.scale.y = 0.055 * s;
+      for (const [dx, dz] of [[0.04, 0], [-0.03, 0.03], [0, -0.04]]) orb(g, 0xf3ecdc, x + dx * s, 0.235 * s, z + dz * s, 0.014 * s);
+    }
+    return g;
+  }
+  if (id === 99) {
+    cylinder(g, 0xcfe3e8, 0.07, 0.11, 0, 0.05, 0.2, 8, { transparent: true, opacity: 0.55, roughness: 0.1 });
+    cylinder(g, 0x2b2a2a, 0.07, 0.225, 0, 0.052, 0.035, 8);
+    cone(g, 0xf4f2ee, -0.09, 0.04, 0.03, 0.1, 0.08, 8);
+    return g;
+  }
+  if (id === 101) {
+    const gilt = { metalness: 0.7, roughness: 0.3 };
+    const chain = ring(g, 0xd4b062, 0.2, 0.03);
+    chain.position.z = 0.08;
+    cylinder(g, 0xd4b062, 0, 0.04, -0.12, 0.09, 0.04, 10, gilt);
+    orb(g, 0xe04a5e, 0, 0.075, -0.12, 0.065, { emissive: 0xc0304a, emissiveIntensity: 0.7, roughness: 0.2 }).scale.y = 0.04;
+    return g;
+  }
   if (/pit|trap/.test(n)) {
     g.userData.trapKind = "trap";
     cylinder(g, 0x091213, 0, 0.015, 0, 0.4, 0.025);
@@ -1263,35 +1449,39 @@ export function itemModel(tile) {
     return g;
   }
   if (id === 8) {
-    cylinder(g, 0x8a988b, 0, 0.12, 0, 0.32, 0.24);
+    // A great marble statue: a hero figure in pale stone on a stepped plinth.
+    block(g, "stone", 0x8c958a, 0, 0.06, 0, 0.8, 0.12, 0.8);
+    block(g, "stone", 0xc3c1b0, 0, 0.21, 0, 0.6, 0.18, 0.6);
     const h = hero();
-    h.scale.setScalar(0.75);
-    h.position.y = 0.25;
+    h.scale.setScalar(0.95);
+    h.position.y = 0.3;
+    const marble = mat(0xaeab9f, { roughness: 0.6 });
+    const extras = [];
     h.traverse((o) => {
-      if (o.isMesh) o.material = mat(0x9ba897);
+      if (["hero-outline", "contact-disc", "hero-mark"].includes(o.name)) extras.push(o);
+      else if (o.isMesh) o.material = marble;
     });
+    extras.forEach((o) => o.removeFromParent());
     g.add(h);
     return g;
   }
-  if (id === 1) {
-    block(g, "stone", 0x879589, 0, 0.18, 0, 0.6, 0.36, 0.5);
-    block(g, "stone", 0xb2bca7, 0, 0.4, 0, 0.84, 0.15, 0.66);
-    for (const x of [-0.28, 0.28]) {
-      cylinder(g, 0xd9c8a2, x, 0.58, 0, 0.045, 0.25);
-      orb(g, 0xffd182, x, 0.74, 0, 0.04, {
-        emissive: 0xffbd54,
-        emissiveIntensity: 3,
-      });
-    }
-    return g;
-  }
   if (id === 11) {
-    block(g, "wood", 0x8a764e, 0, 0.6, 0, 0.56, 1.1, 0.1);
-    box(g, 0x9fc5c5, 0, 0.64, -0.06, 0.43, 0.84, 0.025, {
-      metalness: 0.9,
-      roughness: 0.08,
-    });
-    for (const x of [-0.22, 0.22]) box(g, 0x88704d, x, 0.12, 0, 0.1, 0.24, 0.3);
+    // A gilded standing mirror. A reflective metal plane renders black where
+    // there is no environment map, so the glass is a painted, unlit reflection.
+    block(g, "wood", 0x6e5a3e, 0, 0.62, 0, 0.6, 1.18, 0.08);
+    const gilt = { metalness: 0.7, roughness: 0.32 };
+    for (const y of [0.05, 1.19]) box(g, 0xd4b062, 0, y, 0, 0.64, 0.05, 0.1, gilt);
+    for (const x of [-0.3, 0.3]) box(g, 0xd4b062, x, 0.62, 0, 0.04, 1.18, 0.1, gilt);
+    orb(g, 0xd4b062, 0, 1.25, 0, 0.05, gilt);
+    for (const side of [-1, 1]) {
+      const glass = new THREE.Mesh(geometry("mirror-glass", () => new THREE.PlaneGeometry(1, 1)), mirrorGlass());
+      glass.name = "mirror-glass";
+      glass.position.set(0, 0.63, side * 0.042);
+      glass.rotation.y = side > 0 ? 0 : Math.PI;
+      glass.scale.set(0.48, 1.0, 1);
+      g.add(glass);
+    }
+    for (const x of [-0.24, 0.24]) box(g, 0x5c4a33, x, 0.08, 0, 0.1, 0.16, 0.34);
     return g;
   }
   if ((id >= 32 && id <= 39) || id === 40 || id === 45) {
