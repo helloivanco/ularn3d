@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.4.2 — An orchestral score
+
+- Ularn has a new original orchestral score: strings, horns, woodwinds, harp, celesta and choir, built around one theme you will start to recognise
+- The town plays a pastoral tune with something uneasy underneath. The caves are a slow hymn of stone and shadow, and from floor 8 the deep halls grow darker still. The volcano churns with an ominous riff and low brass
+- The music rises as danger nears: a pulse when a creature is close, then brass and timpani when you are surrounded or trading blows
+- Short orchestral cues mark levelling up, each new depth you reach, finding the cure, death and victory
+- Fountains, altars and thrones have their own sounds, and spells and stairs vary a little each time
+- Music still loads one region at a time and plays offline in the desktop app. The classic rules are unchanged
+
 ## 1.4.0 — Every blow lands
 
 - Hits flash the creature and knock it back, damage numbers rise from the blow, and a nameplate shows how wounded your foe is, never its exact health

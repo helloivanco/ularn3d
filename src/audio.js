@@ -1,4 +1,4 @@
-import { SCORE, audioSettings } from "./audio-score.js";
+import { SCORE, STINGERS, audioSettings, musicRegion } from "./audio-score.js";
 
 const WEAPONS = {
   unarmed: [90, 45, "sine", 0.11, 0.7],
@@ -78,13 +78,24 @@ const rateForSpell = (spell) => {
 
 // Game-feel cues. Decorative ones yield to a busy mix; ambient ones (the
 // heartbeat loop, pointer ticks) stay out of the accepted-effect history.
-const CUES = new Set(["kill", "spellImpact", "levelup", "arrive", "feat", "heartbeat", "hover", "confirm", "whiff"]);
+const CUES = new Set(["kill", "spellImpact", "levelup", "arrive", "cure", "feat", "heartbeat", "hover", "confirm", "whiff", "fountain", "altar", "throne"]);
 // Ambient cues never become the "last effect": a feat chime or the heartbeat
 // arriving later must not mask the action sound that actually just played.
 const DECORATIVE = new Set(["heartbeat", "hover", "whiff"]), AMBIENT = new Set(["heartbeat", "hover", "feat"]);
-const STINGER_DUCKS = { levelup: [.35, 1400], feat: [.6, 800], arrive: [.5, 900] };
+const STINGER_DUCKS = { levelup: [.35, 1400], feat: [.6, 800], arrive: [.5, 900], cure: [.4, 1400] };
+// Orchestral stingers hold the score down for their full phrase.
+const ORCHESTRAL_DUCKS = { levelup: [.32, 2600], descend: [.38, 3200], cure: [.28, 4200] };
+// The masters sit at -18 LUFS; this trim keeps in-game music at the quiet
+// level the earlier -20.3 LUFS beds played at with a 0.08 trim.
+const MUSIC_TRIM = .061;
+// Stingers sit 6 dB above the bed so a level-up or a new depth reads over the
+// ducked score, still on the music slider.
+const STINGER_TRIM = MUSIC_TRIM * 2;
 const noteHz = (note) => 440 * 2 ** ((note - 69) / 12);
 const bounded = (value, fallback, low, high) => { const n = Number(value ?? fallback); return Math.max(low, Math.min(high, Number.isFinite(n) ? n : fallback)); };
+const ramp = (value, low, high) => { const t = Math.max(0, Math.min(1, (value - low) / (high - low))); return t * t * (3 - 2 * t); };
+// Spell shimmer pitches: E-minor pentatonic, so casts ring with the score.
+const PENTATONIC = [76, 79, 81, 83, 86];
 
 // Music is pre-rendered; gameplay only moves gain envelopes and short FX voices.
 export class GameAudio {
@@ -112,7 +123,9 @@ export class GameAudio {
     if (!this.graph) {
       this.master = ctx.createGain(); this.master.gain.value = .8;
       this.musicGain = ctx.createGain(); this.effectsGain = ctx.createGain(); this.duckGain = ctx.createGain();
-      this.musicGain.gain.value = this.settings.music * .08; this.effectsGain.gain.value = this.settings.effects;
+      this.musicGain.gain.value = this.settings.music * MUSIC_TRIM; this.effectsGain.gain.value = this.settings.effects;
+      // Stingers follow the music volume but bypass the duck and the muffle they cause.
+      this.stingerGain = ctx.createGain(); this.stingerGain.gain.value = this.settings.music * STINGER_TRIM;
       this.compressor = ctx.createDynamicsCompressor();
       Object.assign(this.compressor.threshold, { value: -12 }); this.compressor.knee.value = 18;
       this.compressor.ratio.value = 6; this.compressor.attack.value = .006; this.compressor.release.value = .2;
@@ -121,6 +134,7 @@ export class GameAudio {
       this.clearHz = Math.min(20000, ctx.sampleRate / 2); this.musicFilter.frequency.value = this.clearHz;
       this.ducks = []; this.heartbeat = 0;
       this.musicGain.connect(this.musicFilter); this.musicFilter.connect(this.duckGain); this.duckGain.connect(this.master); this.effectsGain.connect(this.master);
+      this.stingerGain.connect(this.master);
       this.master.connect(this.compressor); this.compressor.connect(ctx.destination);
       this.reverb = ctx.createConvolver(); this.wet = ctx.createGain(); this.wet.gain.value = .12;
       const impulse = ctx.createBuffer(2, Math.floor(ctx.sampleRate * .8), ctx.sampleRate);
@@ -154,7 +168,8 @@ export class GameAudio {
     const previous = this.settings; this.settings = audioSettings({ ...previous, ...settings });
     if (this.context && this.graph) {
       const now = this.context.currentTime;
-      this.musicGain.gain.setTargetAtTime(this.settings.music * .08, now, .05);
+      this.musicGain.gain.setTargetAtTime(this.settings.music * MUSIC_TRIM, now, .05);
+      this.stingerGain.gain.setTargetAtTime(this.settings.music * STINGER_TRIM, now, .05);
       this.effectsGain.gain.setTargetAtTime(this.settings.effects, now, .03);
     }
     if (!this.settings.enabled) { this.error = ""; this.suspend(); }
@@ -171,19 +186,41 @@ export class GameAudio {
   setMenu(menu) { if (this.menu === !!menu) return; this.menu = !!menu; this.updateTension(); this.updateDuck(); this.syncHeartbeat(); }
   async load(name) {
     if (!this.cache.has(name)) this.cache.set(name, (async () => {
-      const response = await fetch(`/audio/${name}.wav`);
+      const response = await fetch(`/audio/${name}.flac`);
       if (!response.ok) throw new Error("Music unavailable");
       return this.prepare().decodeAudioData(await response.arrayBuffer());
     })().catch((error) => { this.cache.delete(name); throw error; }));
     return this.cache.get(name);
   }
+  // One sprite holds every orchestral stinger. It loads after the first
+  // region plays; until then (or if it fails) the synthesized cues stand in.
+  loadStingers() {
+    this.stingerLoad ??= (async () => {
+      const response = await fetch("/audio/stingers.flac");
+      if (!response.ok) throw new Error("Stingers unavailable");
+      this.stingers = await this.prepare().decodeAudioData(await response.arrayBuffer());
+    })().catch(() => { this.stingerLoad = null; });
+    return this.stingerLoad;
+  }
+  // A newer stinger takes over: the one still sounding fades within ~0.3 s.
+  stinger(name) {
+    const slot = STINGERS[name];
+    if (!slot || !this.stingers || !this.graph || this.settings.music === 0 || this.voices.size >= this.maxVoices) return false;
+    const ctx = this.context, now = ctx.currentTime, source = ctx.createBufferSource(), gain = ctx.createGain(), entry = { source, gain };
+    if (this.activeStinger) { this.activeStinger.gain.gain.setTargetAtTime(0, now, .08); try { this.activeStinger.source.stop(now + .4); } catch {} }
+    source.buffer = this.stingers; source.connect(gain); gain.connect(this.stingerGain);
+    this.voices.add(source); this.lastStinger = name; this.activeStinger = entry;
+    source.onended = () => { source.disconnect(); gain.disconnect(); this.voices.delete(source); source.onended = null; if (this.activeStinger === entry) this.activeStinger = null; };
+    source.start(now, slot[0], slot[1]);
+    return true;
+  }
   async startMusic() {
     if (this.deferMusic || this.ended || !this.unlocked || this.paused || !this.settings.enabled || this.settings.music === 0 || this.context?.state !== "running") return;
-    const region = this.region;
+    const region = this.region, file = SCORE[region].bed;
     if (this.activeTrack?.region === region || this.loadingRegion === region) return;
     const epoch = ++this.musicEpoch; this.loadingRegion = region; this.status = "loading"; this.notify();
     try {
-      const [bed, stem] = await Promise.all([this.load(region), this.load(`${region}-tension`)]);
+      const [bed, stem] = await Promise.all([this.load(file), this.load(`${file}-tension`)]);
       if (epoch !== this.musicEpoch || this.paused || !this.settings.enabled || this.settings.music === 0) return;
       this.loadingRegion = null;
       const ctx = this.context, now = ctx.currentTime, offset = (this.offset || 0) % bed.duration;
@@ -193,15 +230,23 @@ export class GameAudio {
         node.gain.gain.cancelScheduledValues(now); node.gain.gain.setTargetAtTime(0, now, .35); node.source.stop(now + 1.8);
       }
       const create = (buffer, kind) => {
-        const source = ctx.createBufferSource(), gain = ctx.createGain(); source.buffer = buffer; source.loop = true;
-        source.connect(gain); gain.connect(this.musicGain); gain.gain.value = 0;
-        const node = { source, gain, kind, region, cleanup: () => { try { source.stop(); } catch {} source.onended = null; source.disconnect(); gain.disconnect(); this.musicSources.delete(node); } };
+        const source = ctx.createBufferSource(), gain = ctx.createGain(), parts = []; source.buffer = buffer; source.loop = true;
+        gain.connect(this.musicGain); gain.gain.value = 0;
+        const node = { source, gain, kind, region, cleanup: () => { try { source.stop(); } catch {} source.onended = null; source.disconnect(); for (const part of parts) part.disconnect(); gain.disconnect(); this.musicSources.delete(node); } };
+        if (kind === "tension") {
+          // Both intensity layers ride one source: channel 0 "stir", channel 1 "fray".
+          const split = ctx.createChannelSplitter(2); node.layers = [ctx.createGain(), ctx.createGain()];
+          source.connect(split); parts.push(split, ...node.layers);
+          node.layers.forEach((layer, channel) => { layer.gain.value = 0; split.connect(layer, channel); layer.connect(gain); });
+        } else source.connect(gain);
         source.onended = node.cleanup; this.musicSources.add(node); source.start(now, offset % buffer.duration); return node;
       };
-      this.activeTrack = { region, bed: create(bed, "bed"), stem: create(stem, "tension"), startedAt: now, offset, duration: bed.duration };
-      this.activeTrack.bed.gain.gain.setTargetAtTime(1, now, .45); this.updateTension();
+      this.activeTrack = { region, bed: create(bed, "bed"), stem: create(stem, "tension"), startedAt: now, offset, duration: bed.duration, layers: [0, 0] };
+      for (const node of [this.activeTrack.bed, this.activeTrack.stem]) node.gain.gain.setTargetAtTime(1, now, .45);
+      this.updateTension();
       this.status = "playing"; this.error = ""; this.notify();
-      for (const key of this.cache.keys()) if (key !== region && key !== `${region}-tension`) this.cache.delete(key);
+      for (const key of this.cache.keys()) if (key !== file && key !== `${file}-tension`) this.cache.delete(key);
+      this.loadStingers();
     } catch {
       if (epoch !== this.musicEpoch) return;
       this.loadingRegion = null; this.musicLoadError = true; this.status = "error"; this.error = "Music could not load. Effects remain available; tap Sound to retry."; this.notify();
@@ -217,12 +262,14 @@ export class GameAudio {
     for (const source of [...this.voices]) { try { source.stop(); } catch {} source.onended?.(); }
     this.play(kind);
   }
+  // Vertical intensity: "stir" (pulse) answers one nearby creature, "fray"
+  // (brass, timpani, tremolo) joins as danger grows or blows are traded.
   updateTension() {
     if (!this.activeTrack || !this.context) return;
-    const value = Math.max(this.threat, this.impactThreat) * (this.menu ? .35 : .65);
+    const value = Math.max(this.threat, this.impactThreat) * (this.menu ? .5 : 1);
     if (this.activeTrack.tension === value) return;
-    this.activeTrack.tension = value;
-    this.activeTrack.stem.gain.gain.setTargetAtTime(value, this.context.currentTime, .45);
+    this.activeTrack.tension = value; this.activeTrack.layers = [ramp(value, .05, .45), ramp(value, .4, .95)];
+    this.activeTrack.stem.layers?.forEach((layer, i) => layer.gain.setTargetAtTime(this.activeTrack.layers[i], this.context.currentTime, .45));
   }
   combat() {
     this.impactThreat = .85; this.updateTension(); clearTimeout(this.tensionTimer);
@@ -279,7 +326,7 @@ export class GameAudio {
   get music() { return this.bed; }
   get enabled() { return this.settings.enabled; }
   prefetch() { /* Assets load after the first playback gesture. */ }
-  syncBed(level) { this.scene(level === 0 ? "town" : level > 15 ? "volcano" : "caves", this.threat); }
+  syncBed(level) { this.scene(musicRegion(level), this.threat); }
   enable(level = 0) { this.configure({ enabled: true }); this.syncBed(level); return this.resume(); }
   hold() { return this.suspend(); }
   async sampleEffect(kind, { rate = 1, delay = 0, volume = .1 } = {}) {
@@ -342,11 +389,16 @@ export class GameAudio {
       }
       this.combat(); this.duck();
     } else if (kind === "spell") {
-      const p = spellProfile(detail.spell);
-      this.sampleEffect("spell", { rate: rateForSpell(detail.spell), volume: .055 });
-      for (let i = 0; i < p.pulses; i++) this.voice({ frequency: p.frequency * 2 ** (i * 3 / 12), end: p.frequency * p.endRatio, type: p.type, duration: p.duration, delay: i * p.interval, volume: .075, pan });
-      if (["fire", "electric", "dark"].includes(p.family)) this.voice({ frequency: p.family === "electric" ? 3300 : 450, end: 90, duration: p.duration, noise: true, volume: .15, resonance: .7, pan });
-      else this.voice({ frequency: p.frequency * 2.01, end: p.frequency * 2.01, duration: .6, delay: .08, volume: .035, pan });
+      // Same pulse timing as ever; each cast varies a little in pitch and
+      // level, and gentler families ring a shimmer from the score's key.
+      const p = spellProfile(detail.spell), tune = 1 + (this.random() * 2 - 1) * .03, level = 1 + (this.random() * 2 - 1) * .1;
+      this.sampleEffect("spell", { rate: rateForSpell(detail.spell) * tune, volume: .055 * level });
+      for (let i = 0; i < p.pulses; i++) this.voice({ frequency: p.frequency * 2 ** (i * 3 / 12) * tune, end: p.frequency * p.endRatio * tune, type: p.type, duration: p.duration, delay: i * p.interval, volume: .075 * level, pan });
+      if (["fire", "electric", "dark"].includes(p.family)) this.voice({ frequency: (p.family === "electric" ? 3300 : 450) * tune, end: 90, duration: p.duration, noise: true, volume: .15 * level, resonance: .7, pan });
+      else {
+        this.voice({ frequency: p.frequency * 2.01 * tune, end: p.frequency * 2.01 * tune, duration: .6, delay: .08, volume: .035 * level, pan });
+        this.voice({ frequency: noteHz(PENTATONIC[(Number(detail.spell?.id) || 0) % 5] + 12), duration: .9, delay: .05, volume: .014 * level, pan: -pan, attack: .004 });
+      }
       this.combat(); this.duck();
     } else if (kind === "hurt") {
       this.voice({ frequency: 110, end: 45, duration: .18, volume: .2 });
@@ -376,14 +428,23 @@ export class GameAudio {
     } else if (kind === "coins") {
       for (let i = 0; i < 3; i++) this.voice({ frequency: 1300 + i * 250, end: 1100 + i * 250, duration: .09, delay: i * .025, volume: .02,wet:false });
     } else if (kind === "stairs") {
-      this.sampleEffect("stairs", { volume: .055 });
-      this.voice({ frequency: 140, end: 65, noise: true, duration: .22, volume: .085 });
-      this.voice({ frequency: detail.down ? 220 : 165, end: detail.down ? 110 : 330, duration: .45, delay: .1, volume: .028 });
+      // Footfalls keep their timing; pitch and level vary per flight, and a
+      // low draught of air follows the direction of travel.
+      const tune = 1 + (this.random() * 2 - 1) * .04, level = 1 + (this.random() * 2 - 1) * .1;
+      this.sampleEffect("stairs", { volume: .055 * level, rate: tune });
+      this.voice({ frequency: 140 * tune, end: 65, noise: true, duration: .22, volume: .085 * level });
+      this.voice({ frequency: (detail.down ? 220 : 165) * tune, end: (detail.down ? 110 : 330) * tune, duration: .45, delay: .1, volume: .028 * level });
+      this.voice({ frequency: detail.down ? 900 : 260, end: detail.down ? 170 : 900, noise: true, duration: .42, delay: .06, volume: .022 * level, resonance: .8, attack: .12 });
     } else if (kind === "victory" || kind === "death") {
-      this.stopMusic(); const notes = kind === "victory" ? [64, 67, 71, 76] : [52, 51, 47, 40];
+      this.stopMusic(); if (this.stinger(kind)) return;
+      const notes = kind === "victory" ? [64, 67, 71, 76] : [52, 51, 47, 40];
       notes.forEach((note, i) => this.voice({ frequency: 440 * 2 ** ((note - 69) / 12), end: 440 * 2 ** ((note - 69) / 12), duration: 1.8, delay: i * .2, type: kind === "death" ? "triangle" : "sine", volume: .1 }));
     } else if (CUES.has(kind)) {
-      this.cue(kind, detail, pan);
+      // A first visit to a floor, a level-up and the cure get the orchestra
+      // when it has loaded and music is on; otherwise the synthesized cue.
+      const orchestral = kind === "arrive" ? (detail.first ? "descend" : null) : ORCHESTRAL_DUCKS[kind] ? kind : null;
+      if (orchestral && this.stinger(orchestral)) this.duckFor(...ORCHESTRAL_DUCKS[orchestral]);
+      else this.cue(kind, detail, pan);
     } else {
       this.voice({ frequency: 1200, end: 700, noise: true, duration: .045, volume: .045, wet: false });
       this.voice({ frequency: 330, end: 440, duration: .08, volume: .025, wet: false });
@@ -443,6 +504,32 @@ export class GameAudio {
       at({ frequency: noteHz(76), duration: .16, delay: .07, volume: .03, wet: false, attack: .004 });
     } else if (kind === "whiff") {
       at({ frequency: 2200, end: 650, noise: true, duration: .18, volume: .045, resonance: .6, wet: false, attack: .035 });
+    } else if (kind === "cure") {
+      // Fallback for the orchestral cure: the motif turned to E major, as bells.
+      [64, 68, 71, 69, 68, 66, 76].forEach((note, i) => at({ frequency: noteHz(note + 12), duration: i === 6 ? 1.4 : .45, delay: i * .14, volume: .04, attack: .004 }));
+    } else if (kind === "fountain") {
+      // Water: a short pour and a few bubbles rising as they shrink.
+      at({ frequency: 900, end: 2300, noise: true, duration: .42, volume: .032, resonance: 1.1, attack: .05 });
+      for (let i = 0; i < 4; i++) { const f = 480 + this.random() * 420; at({ frequency: f, end: f * 1.9, duration: .07, delay: .05 + i * .08 + this.random() * .03, volume: .02, attack: .004 }); }
+      if (detail.act === "wash") at({ frequency: 2600, end: 1100, noise: true, duration: .3, delay: .18, volume: .018, resonance: .9 });
+    } else if (kind === "altar") {
+      if (detail.act === "desecrate") {
+        // Stone cracks and something answers from below, a tritone apart.
+        at({ frequency: 420, end: 60, noise: true, duration: .5, volume: .07, resonance: .7 });
+        at({ frequency: noteHz(40), end: noteHz(38), type: "triangle", duration: 1.1, delay: .05, volume: .05, attack: .08 });
+        at({ frequency: noteHz(46), end: noteHz(45), type: "triangle", duration: .9, delay: .12, volume: .03, attack: .1 });
+      } else {
+        // A prayer: a soft open fifth and a high bell.
+        [64, 71, 76].forEach((note, i) => at({ frequency: noteHz(note), duration: 1.5, delay: i * .07, volume: .02, attack: .3 }));
+        at({ frequency: noteHz(88), duration: 1.2, delay: .12, volume: .016, attack: .003 });
+        at({ frequency: noteHz(88) * 2.76, duration: .5, delay: .12, volume: .005, attack: .003 });
+      }
+    } else if (kind === "throne") {
+      // Stone settling under weight, then a regal low fifth; gems glint.
+      at({ frequency: 320, end: 110, noise: true, duration: .34, volume: .05, resonance: .8, wet: false });
+      at({ frequency: noteHz(40), type: "sawtooth", duration: 1, delay: .12, volume: .022, attack: .18 });
+      at({ frequency: noteHz(47), type: "sawtooth", duration: .95, delay: .16, volume: .016, attack: .2 });
+      if (detail.act === "gems") for (let i = 0; i < 3; i++) at({ frequency: 1700 + i * 380, end: 1500 + i * 380, duration: .12, delay: .3 + i * .05, volume: .016, wet: false });
     }
     if (STINGER_DUCKS[kind]) this.duckFor(...STINGER_DUCKS[kind]);
   }
@@ -464,11 +551,12 @@ export class GameAudio {
       playingRegion: this.activeTrack?.region || null,
       region: this.region, effectVoices: this.voices.size, maxVoices: this.maxVoices, musicSources: this.musicSources.size,
       cachedTracks: this.cache.size, threat: Math.max(this.threat, this.impactThreat), effectsPlayed: this.effectsCount, lastEffect: this.history.at(-1) || null,
-      heartbeat: this.heartbeat, duck: this.duckLevel() };
+      heartbeat: this.heartbeat, duck: this.duckLevel(), layers: this.activeTrack?.layers ?? [0, 0],
+      stingersReady: !!this.stingers, lastStinger: this.lastStinger || null };
   }
   async dispose() {
     await this.suspend();
     if (this.context && this.context.state !== "closed") await this.context.close();
-    this.cache.clear(); this.context = null; this.graph = null;
+    this.cache.clear(); this.stingers = null; this.stingerLoad = null; this.context = null; this.graph = null;
   }
 }

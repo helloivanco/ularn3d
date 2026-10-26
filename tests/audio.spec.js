@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { SCORE, STINGERS } from "../src/audio-score.js";
 
 async function start(page) {
   await page.addInitScript(() => localStorage.setItem("ularn3d.quality", "balanced"));
@@ -18,16 +19,49 @@ async function room(page, depth = 1) {
   }, depth);
 }
 
-test("original music beds and stems have matching loop lengths, headroom and clean seams", () => {
+test("the score's beds, layers and stingers are mastered, loop-aligned and within budget", () => {
   const manifest = JSON.parse(readFileSync("public/audio/score.json", "utf8"));
-  for (const region of ["title", "town", "caves", "volcano"]) {
-    expect(manifest[region].seconds).toBe(manifest[`${region}-tension`].seconds);
-    for (const name of [region, `${region}-tension`]) {
-      const data = readFileSync(`public/audio/${name}.wav`), meta = manifest[name];
-      expect(data.toString("ascii", 0, 4)).toBe("RIFF"); expect(data.toString("ascii", 8, 12)).toBe("WAVE");
-      expect(meta.rms).toBeGreaterThan(.025); expect(meta.peak).toBeLessThan(.6); expect(meta.seam).toBeLessThan(.015);
-      expect(data.readUInt32LE(40)).toBe(data.length - 44);
+  const regions = [...new Set(Object.values(SCORE).map((entry) => entry.bed))];
+  expect(regions.sort()).toEqual(["caves", "deep", "town", "volcano"]);
+  for (const region of regions) {
+    const { seconds, bed, stem, intensity } = manifest.regions[region];
+    for (const file of [bed, stem]) {
+      const data = readFileSync(`public/audio/${file.file}`);
+      expect(data.toString("ascii", 0, 4)).toBe("fLaC"); expect(data.length).toBe(file.bytes);
+      // Bed and stem loop over the same span, each to within half a sample.
+      expect(Math.abs(file.frames / file.sampleRate - seconds)).toBeLessThanOrEqual(.5 / file.sampleRate + 1e-9);
     }
+    expect(stem.channels).toBe(2); expect(stem.layers).toEqual(["stir", "fray"]);
+    expect(Math.abs(bed.lufs + 18)).toBeLessThan(.5);
+    for (const peak of [bed.truePeakDb, stem.truePeakDb, intensity.fullTruePeakDb]) expect(peak).toBeLessThanOrEqual(-1);
+    expect(intensity.stir).toBeGreaterThan(intensity.rest + 1); expect(intensity.full).toBeGreaterThan(intensity.stir + 1.5);
+    expect(bed.bytes + stem.bytes).toBeLessThan(9.5e6);
+  }
+  for (const [name, [start, duration]] of Object.entries(STINGERS)) {
+    const cue = manifest.stingers.cues[name];
+    expect([cue.start, cue.duration], name).toEqual([start, duration]);
+    expect(start + duration).toBeLessThanOrEqual(manifest.stingers.seconds + 1e-6);
+    expect(cue.truePeakDb).toBeLessThanOrEqual(-1);
+  }
+  expect(Object.keys(STINGERS).sort()).toEqual(["cure", "death", "descend", "levelup", "victory"]);
+  expect(manifest.totalBytes).toBeLessThan(36e6);
+});
+
+test("the browser decodes the FLAC score bit-exactly", async ({ page }) => {
+  const manifest = JSON.parse(readFileSync("public/audio/score.json", "utf8"));
+  await page.goto("/play/");
+  for (const entry of [manifest.regions.town.bed, manifest.regions.town.stem, manifest.stingers]) {
+    const decoded = await page.evaluate(async ({ file, rate }) => {
+      const buffer = await new OfflineAudioContext(1, 1, rate).decodeAudioData(await (await fetch(`/audio/${file}`)).arrayBuffer());
+      // Chromium scales positive samples by 1/32767; take whichever inverse is exact.
+      return { frames: buffer.length, sums: Array.from({ length: buffer.numberOfChannels }, (_, c) => {
+        const d = buffer.getChannelData(c); let s = 0;
+        for (let i = 0; i < d.length; i++) { const a = Math.round(d[i] * 32768), v = Math.fround(a / 32768) === d[i] ? a : Math.round(d[i] * 32767); s = (s + v * ((i % 9973) + 1)) % 2147483647; }
+        return s;
+      }) };
+    }, { file: entry.file, rate: entry.sampleRate });
+    expect(decoded.sums, entry.file).toEqual(entry.checksum);
+    if (entry.frames) expect(decoded.frames).toBe(entry.frames);
   }
 });
 
@@ -36,7 +70,12 @@ test("Play unlocks audible music, spatial FX and synchronized region transitions
   expect(first.contextState).toBe("running"); expect(first.musicSources).toBe(2);
   await room(page); await expect.poll(() => page.evaluate(() => ularnAudio.metrics().playingRegion)).toBe("caves");
   await page.evaluate(() => { setMonster(35, 8, createMonster(GNOME)); paint(); });
-  expect((await page.evaluate(() => ularnAudio.metrics())).threat).toBeGreaterThan(0);
+  const near = await page.evaluate(() => ularnAudio.metrics());
+  expect(near.threat).toBeGreaterThan(0); expect(near.layers[0]).toBeGreaterThan(.5); expect(near.layers[1]).toBe(0);
+  await page.evaluate(() => { setMonster(36, 9, createMonster(GNOME)); setMonster(35, 7, createMonster(GNOME)); paint(); });
+  expect((await page.evaluate(() => ularnAudio.metrics())).layers).toEqual([1, 1]);
+  await room(page, 9); await expect.poll(() => page.evaluate(() => ularnAudio.metrics().playingRegion)).toBe("deep");
+  expect((await page.evaluate(() => ularnAudio.metrics())).layers).toEqual([0, 0]);
   await room(page, 16); await room(page, 2); await room(page, 16);
   await expect.poll(() => page.evaluate(() => ularnAudio.metrics().playingRegion)).toBe("volcano");
   expect((await page.evaluate(() => ularnAudio.metrics())).musicSources).toBeLessThanOrEqual(4);
@@ -113,7 +152,7 @@ test("audio context failure leaves gameplay working and an explicit gesture can 
 
 test("missing music never disables FX or retries on every gameplay action", async ({ page }) => {
   let requests = 0;
-  await page.route("**/audio/*.wav", (route) => { requests++; return route.fulfill({ status: 404, body: "Missing" }); });
+  await page.route("**/audio/*.flac", (route) => { requests++; return route.fulfill({ status: 404, body: "Missing" }); });
   await page.goto("/play/"); await expect(page.locator("#loading")).toBeHidden(); await page.locator("#begin").click();
   await expect.poll(() => page.evaluate(() => ularnAudio.metrics().status)).toBe("error");
   const count = requests; await page.keyboard.press("."); await page.keyboard.press(".");
@@ -186,4 +225,45 @@ test("footsteps are short, quiet, varied and rate limited without using gameplay
     expect(footstep.peak).toBeLessThan(.03);
     expect(footstep.tail).toBeLessThan(.0001);
   }
+});
+
+test("orchestral stingers duck the score, fall back with music off and end the expedition", async ({ page }) => {
+  await start(page);
+  await expect.poll(() => page.evaluate(() => ularnAudio.metrics().stingersReady)).toBe(true);
+  const played = await page.evaluate(async () => {
+    const out = [], wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    for (const [kind, detail] of [["levelup", {}], ["arrive", { depth: 3, first: true }], ["cure", {}]]) {
+      ularnAudio.play(kind, detail); await wait(30);
+      out.push([kind, ularnAudio.metrics().lastStinger, ularnAudio.metrics().duck]);
+    }
+    ularnAudio.play("arrive", { depth: 3 }); await wait(30);
+    out.push(["revisit", ularnAudio.metrics().lastStinger, ularnAudio.metrics().lastEffect]);
+    return out;
+  });
+  expect(played[0].slice(0, 2)).toEqual(["levelup", "levelup"]); expect(played[0][2]).toBeLessThan(.5);
+  expect(played[1].slice(0, 2)).toEqual(["arrive", "descend"]);
+  expect(played[2].slice(0, 2)).toEqual(["cure", "cure"]);
+  expect(played[3]).toEqual(["revisit", "cure", "arrive"]);
+  const muted = await page.evaluate(() => { ularnAudio.configure({ music: 0 }); ularnAudio.play("levelup"); return ularnAudio.metrics(); });
+  expect(muted.lastStinger).toBe("cure"); expect(muted.lastEffect).toBe("levelup");
+  const ending = await page.evaluate(async () => {
+    ularnAudio.configure({ music: .55 }); ularnAudio.finish("victory");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return ularnAudio.metrics();
+  });
+  expect(ending.lastStinger).toBe("victory"); expect(ending.musicSources).toBe(0); expect(ending.effectVoices).toBe(1);
+});
+
+test("fountains and altars sound only when the engine performs them", async ({ page }) => {
+  await start(page); await room(page);
+  const before = await page.evaluate(() => ularnAudio.metrics().effectsPlayed);
+  // Pin the draught to "nothing happens" so the hero stays put.
+  await page.evaluate(() => { window.audioTestRandom = rnd; rnd = (n) => n === 1501 ? 1500 : n === 100 ? 30 : n === 12 ? 11 : audioTestRandom(n); setItem(player.x, player.y, createObject(OEMPTY)); drink_fountain(); });
+  expect((await page.evaluate(() => ularnAudio.metrics())).effectsPlayed).toBe(before);
+  await page.evaluate(() => { setItem(player.x, player.y, createObject(OFOUNTAIN)); drink_fountain(); rnd = audioTestRandom; });
+  await expect.poll(() => page.evaluate(() => ularnAudio.metrics().lastEffect)).toBe("fountain");
+  await page.evaluate(() => { setItem(player.x, player.y, createObject(OALTAR)); act_donation_pray(ESC); });
+  expect((await page.evaluate(() => ularnAudio.metrics())).lastEffect).toBe("fountain");
+  await page.evaluate(() => act_donation_pray(0));
+  await expect.poll(() => page.evaluate(() => ularnAudio.metrics().lastEffect)).toBe("altar");
 });

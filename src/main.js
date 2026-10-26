@@ -12,7 +12,7 @@ import { lineKind } from "./journal.js";
 import { Bestiary } from "./bestiary.js";
 import { spellKind } from "./combat-effects.js";
 import { itemArtImage } from "./item-art.js";
-import { audioSettings } from "./audio-score.js";
+import { audioSettings, musicRegion } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
 import { HeldMovement, movementKey, findRoute, isHostile, keyOffset, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
@@ -191,7 +191,7 @@ window.addEventListener("ularn:footstep",({detail}) => {
   sound("step",{foot:detail.right?"right":"left",surface:detail.level===0 && !world?.paths.has(`${detail.x},${detail.y}`) ? "grass" : detail.level>15 ? "ash" : "stone"});
 });
 window.addEventListener("ularn:action", ({detail}) => {
-  if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest"].includes(detail.kind)) sound(detail.kind,detail);
+  if (!state?.over && detail.level === state?.level && ["loot","potion","read","chest","fountain","altar","throne"].includes(detail.kind)) sound(detail.kind,detail);
   director?.onAction(detail);
 });
 window.addEventListener("ularn:combat", ({ detail }) => {
@@ -826,7 +826,7 @@ function update() {
   if (!movementAllowed() || (previous && previous.level !== state.level)) stopTravel();
   if (!state.over) {
     const danger = state.tiles.filter(tile => isHostile(tile) && Math.max(Math.abs(tile.x-state.x), Math.abs(tile.y-state.y)) <= 6).length;
-    audio.scene(state.level === 0 ? "town" : state.level > 15 ? "volcano" : "caves", Math.min(1,danger/3));
+    audio.scene(musicRegion(state.level), Math.min(1,danger/3));
   }
   if (previous && !previous.over && state.over) audio.finish(state.winner ? "victory" : "death");
   $("scoreboard-controls").hidden = !state.scoreboard;
