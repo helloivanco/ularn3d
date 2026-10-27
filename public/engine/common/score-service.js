@@ -6,6 +6,7 @@
   const REJECTED_PREFIX = 'ularn.global.rejected.v1.';
   const TABLE = 'ularn_scores';
   const columns = 'game_id,edition,ularn,winner,player_name,character,difficulty,score,time_used,moves,fate,level_name,created_at';
+  const WEEK_LABEL = /^\d{4}_\d{1,2}$/;
   let flushing = null;
   let retryTimer = null;
   let retryDelay = 30000;
@@ -85,6 +86,8 @@
         extra: score.extra,
         explored: score.explored,
         gender: score.gender,
+        // Weekly challenge runs carry their ISO week, e.g. "2026_43".
+        ...(WEEK_LABEL.test(score.gotw) ? { gotw: score.gotw } : {}),
       },
     };
     if (!/^[\w+-]{1,100}$/.test(row.game_id) ||
@@ -174,12 +177,15 @@
     };
   }
 
-  async function highscores(ularn = true, edition = '3d') {
+  // With a week label, only that week's weekly challenge runs.
+  async function highscores(ularn = true, edition = '3d', week = null) {
     try {
+      if (week != null && !WEEK_LABEL.test(week)) throw new Error('Invalid week.');
       await flush();
       const [winners, visitors] = await Promise.all([true, false].map(async winner => {
         const response = await request({
           select: columns, edition: `eq.${edition}`, ularn: `eq.${ularn}`, winner: `eq.${winner}`,
+          ...(week ? { 'details->>gotw': `eq.${week}` } : {}),
           order: winner ? 'difficulty.desc,time_used.asc,score.desc,game_id.asc' : 'difficulty.desc,score.desc,time_used.desc,game_id.asc',
           limit: '72',
         });

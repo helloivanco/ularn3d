@@ -410,6 +410,59 @@ if (hasExpedition) {
 }
 // Enter answers the title at once: Continue when a run is saved, otherwise Begin.
 (hasExpedition ? $("continue") : $("begin")).focus({ preventScroll: true });
+// Weekly challenge: one dungeon for everyone this ISO week. The first run on
+// this browser counts for the weekly board; later runs are practice.
+const weekly = engine.weekly();
+const closesIn = (closesAt) => {
+  const minutes = Math.max(1, Math.round((closesAt - Date.now()) / 60000));
+  if (minutes >= 2880) return `${Math.floor(minutes / 1440)} days`;
+  if (minutes >= 120) return `${Math.floor(minutes / 60)} hours`;
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+};
+const plainFate = (fate) => String(fate || "").replace(/<[^>]*>/g, "");
+{
+  const result = weekly.attempt?.result;
+  $("weekly").hidden = false;
+  $("weekly-title").textContent = `Weekly challenge · Week ${weekly.week}`;
+  $("weekly-rules").textContent = `One dungeon for everyone, as a ${weekly.character} on difficulty ${weekly.difficulty}. Closes in ${closesIn(weekly.closesAt)}.`;
+  $("weekly-start").textContent = weekly.saved ? (weekly.saved.practice ? "Continue practice" : "Continue") : weekly.attempt ? "Practice" : "Play";
+  $("weekly-status").textContent = weekly.saved && !weekly.saved.practice
+    ? "Your counted run is in progress."
+    : weekly.attempt
+      ? `${result ? `Your run: ${result.score.toLocaleString()}, ${result.winner ? "a winner" : `${plainFate(result.fate)} on ${result.level}`}.` : "You have used this week's counted run."} Practice runs are not recorded.`
+      : "One counted run per week on this browser.";
+  if (weekly.saved && !weekly.saved.practice)
+    $("save-notice").textContent = "A new expedition replaces your weekly run, and this week's counted run ends with it.";
+}
+let weeklyBoardRequest = 0;
+async function showWeeklyBoard() {
+  const request = ++weeklyBoardRequest;
+  const list = $("weekly-board-list");
+  $("weekly-board-title").textContent = `Weekly board · Week ${weekly.week}`;
+  $("weekly-board-note").textContent = "Loading this week's runs…";
+  list.replaceChildren();
+  if (!$("weekly-dialog").open) $("weekly-dialog").showModal();
+  const board = await window.ularnScoreService?.highscores?.(true, "3d", weekly.label);
+  if (request !== weeklyBoardRequest) return;
+  if (!board) {
+    $("weekly-board-note").textContent = "Could not load the weekly board. Please try again.";
+    return;
+  }
+  const rows = [...board.winners, ...board.visitors];
+  const yours = (row) => !!weekly.attempt && row.gameID === weekly.attempt.gameID;
+  $("weekly-board-note").textContent = !rows.length
+    ? "No runs have finished this week yet."
+    : weekly.attempt?.result && !rows.some(yours)
+      ? "Your run is not on this list yet. A finished run uploads when you are online."
+      : `${weekly.character} · difficulty ${weekly.difficulty}. Winners first by time, then everyone else by score.`;
+  for (const row of rows) {
+    const item = document.createElement("li");
+    if (yours(row)) item.className = "yours";
+    item.textContent = `${row.who} · ${Number(row.score).toLocaleString()} · ${row.winner ? `won in ${row.timeused} mobuls` : `${plainFate(row.what)} on ${row.level}`}${yours(row) ? " ← You" : ""}`;
+    list.append(item);
+  }
+}
+$("weekly-board").addEventListener("click", showWeeklyBoard);
 const showMonsterCard = (card, info, event) => {
   const art = card.querySelector(".monster-card-art");
   const name = card.querySelector(".monster-card-name");
@@ -547,11 +600,12 @@ function checkFeatsNow(context) {
   if (result.profile !== profile) { profile = result.profile; persistProfile(); }
   return result.unlocked;
 }
-async function start(resume) {
+async function start(resume, weeklyRun = false) {
   if (window.ularnOnline?.inRoom?.()) { window.ularnOnline.openRoom(); return; }
   activateAudio();
   $("begin").disabled = true;
   $("continue").disabled = true;
+  $("weekly-start").disabled = true;
   try {
     const heroName = $("hero-name").value;
     rememberHeroName(heroName);
@@ -560,6 +614,7 @@ async function start(resume) {
       character,
       difficulty: $("difficulty").value,
       resume,
+      weekly: weeklyRun,
     });
     $("welcome").hidden = true;
     $("hud").hidden = false;
@@ -572,6 +627,7 @@ async function start(resume) {
     $("start-error").textContent = error.message;
     $("begin").disabled = false;
     $("continue").disabled = false;
+    $("weekly-start").disabled = false;
   }
 }
 $("start-form").addEventListener("submit", (e) => {
@@ -579,6 +635,7 @@ $("start-form").addEventListener("submit", (e) => {
   start(false);
 });
 $("continue").addEventListener("click", () => start(true));
+$("weekly-start").addEventListener("click", () => start(!!weekly.saved, true));
 let townOptions = "";
 let journalSynced = 0;
 let journalLogRev = -1;
@@ -857,13 +914,14 @@ function update() {
   if (previous && !previous.over && state.over) audio.finish(state.winner ? "victory" : "death");
   $("scoreboard-controls").hidden = !state.scoreboard;
   $("global-scores").setAttribute("aria-pressed", String(!state.localScores));
+  $("global-scores").textContent = state.weekly ? "Weekly board" : "Global scores";
   $("local-scores").setAttribute("aria-pressed", String(state.localScores));
   $("score-details").hidden = !state.scoreboard;
   if (state.scoreboard) $("score-details").textContent = $("STATS").textContent;
   $("score-sync-status").hidden = !state.scoreboard;
   if (state.scoreboard) {
     const sync=state.scoreSync;
-    $("score-sync-status").textContent = !sync.configured ? "Global records are not configured." : sync.pending ? `${sync.pending} completed score${sync.pending===1?"":"s"} saved locally, waiting to sync.` : sync.latestSyncedGame===state.gameID ? "This expedition’s score is saved globally." : sync.state==="error" && sync.error ? sync.error : "Completed expeditions are shared automatically when online.";
+    $("score-sync-status").textContent = state.weekly?.practice ? "Practice runs are not recorded." : !sync.configured ? "Global records are not configured." : sync.pending ? `${sync.pending} completed score${sync.pending===1?"":"s"} saved locally, waiting to sync.` : sync.latestSyncedGame===state.gameID ? "This expedition’s score is saved globally." : sync.state==="error" && sync.error ? sync.error : "Completed expeditions are shared automatically when online.";
   }
   if (previousGold != null && state.gold > previousGold && state.bank === previousBank && !state.over) sound("coins");
   syncTerminalEndActions(state);

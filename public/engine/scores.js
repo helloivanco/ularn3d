@@ -417,7 +417,7 @@ function printScore(p, local = scoreboardLocal, latest = false) {
   if (latest) {
     const board = p.winner ? winners : losers;
     const index = board.findIndex(entry => entry.gameID === p.gameID);
-    const position = index < 0 ? '' : `<span class="score-latest-position">${scoreboardLocal ? 'Local' : 'Global'} ${p.winner ? 'winners' : 'visitors'} · #${index + 1}</span>`;
+    const position = index < 0 ? '' : `<span class="score-latest-position">${scoreboardLocal ? 'Local' : GOTW ? 'Weekly' : 'Global'} ${p.winner ? 'winners' : 'visitors'} · #${index + 1}</span>`;
     score = `<span class="score-latest-label">Your latest expedition</span>${position}<span class="score-latest-value">${escapeScoreText(Number(p.score).toLocaleString())}<small> score</small></span><span>${escapeScoreText(p.who)} · ${escapeScoreText(p.character)} · Difficulty ${escapeScoreText(p.hardlev)}</span><span>${p.winner ? 'Victory' : formatScoreFate(p.what)} on ${escapeScoreText(p.level)}</span><span class="score-latest-hint">View expedition details →</span>`;
   } else if (isNewScore) {
     score += ` <span class="score-you">← You</span>`;

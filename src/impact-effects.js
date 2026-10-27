@@ -30,6 +30,8 @@ function flashVariant(material, color, intensity) {
   return variant;
 }
 const meshLists = new WeakMap();
+/** Rebuild an object's flash list on its next flash, after its meshes change. */
+export const forgetFlashMeshes = (object) => meshLists.delete(object);
 function flashMeshes(object) {
   let list = meshLists.get(object);
   if (!list) {

@@ -4,6 +4,23 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.6.0 — Living heroes and a weekly challenge
+
+- The title screen has a Weekly challenge: everyone who plays it this week explores the same town, store and dungeon. A new one starts every Monday at 00:00 UTC
+- Each week sets the calling and difficulty for everyone, whatever you picked for your own expeditions
+- Your first weekly run on this browser is the one that counts. Continue picks it up like any expedition, and later runs that week are practice that is never recorded
+- The weekly board ranks this week's runs and marks yours. During a weekly run, the in-game scoreboard shows it too
+- Every weekly floor is ready before you set out, so nothing you do on the way down changes what waits there
+- Your hero is now a fully animated character for every calling: idle, walking and running, sword swings, spellcasting, flinching and falling
+- Zombies, wraiths and vampires rise as animated skeletons
+- On wide windows the camera keeps your hero at the center of the screen instead of off to the right of the map and inventory panels
+- Stairs going down are a stairwell sunk into the floor, and stairs going up are solid steps with railings. Nothing floats above them any more, and dead-end rubble no longer looks like spikes
+- Cave corners and dead ends gather barrels, crates, kegs, candles and rubble, and torches burn on the walls. None of it blocks your way or hides loot
+- Chests are banded wooden chests
+- The town has lamp posts along its paths, barrels and crates by the shops, and wildflowers, bushes and stones across the lawns
+- In Cinematic, wall torches throw warm pools of light across the stone and onto you, burning redder in the volcano. Walls cast a soft shade onto the floor and torch flames flicker
+- The first swing on a floor no longer hitches while effects warm up. The classic rules are unchanged
+
 ## 1.5.0 — Sights, sound and a next step
 
 - Every surface is repainted in far finer detail: hand-cut flagstones that never repeat across a room, laid wall courses, a meadow of grass, overlapping slate roofs and weathered planks. The volcano floor is now cooled basalt with glowing cracks

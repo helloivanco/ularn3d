@@ -8,7 +8,7 @@ import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { caveGlowMaterial, caveGlowCenter, releaseCaveGlowResources, VignetteShader, CAVE_HERO_LIGHT } from "./cave-glow.js";
+import { caveGlowMaterial, caveGlowCenter, caveTorches, caveTorchColor, releaseCaveGlowResources, VignetteShader, CAVE_HERO_LIGHT, CAVE_TORCH } from "./cave-glow.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, reliefMap, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
@@ -16,13 +16,15 @@ import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResourc
 import { createCreatureModel } from "./creature-models.js";
 import { itemSprite, faceItem, itemArtMetrics, releaseItemArtResources } from "./item-art.js";
 import { CombatEffects } from "./combat-effects.js";
-import { ImpactEffects } from "./impact-effects.js";
+import { ImpactEffects, forgetFlashMeshes } from "./impact-effects.js";
 import { Trauma, PresentationClock } from "./feedback.js";
 import { StaticTiles } from "./static-world.js";
 import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
 import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
 import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } from "./graphics-utils.js";
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
+import { heroBody, creatureBody, CharacterRig } from "./hero-skin.js";
+import { SetDressing, chestModel } from "./set-dressing.js";
 import { TorchLighting, stabilizeShadow } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
@@ -44,6 +46,7 @@ import {
   cone,
   building,
   itemModel,
+  opensFloor,
   ring,
   fillWieldedWeapon,
   monsterModel,
@@ -89,6 +92,8 @@ const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
+/* The hero leaves screen center only to stay this far (CSS px) clear of a side panel. */
+const FRAME_CLEARANCE = 160;
 /*
  * Auto spends headroom on resolution, from below native up to the screen's
  * own density (Retina included), never above 2×. Tiers above the screen's
@@ -439,6 +444,7 @@ export class World {
     this.grid = { clear: () => terrainFamilies.forEach(mesh => mesh.clear()), get rebuilds() { return terrainFamilies.reduce((sum, mesh) => sum + mesh.rebuilds, 0); } };
     this.player = hero();
     this.heroAnimation = new HeroAnimation(this.scene, this.player);
+    this.dressing = new SetDressing(this.scene, () => this.invalidate());
     this.player.visible = false;
     this.bindHero();
     this.scene.add(this.player);
@@ -653,8 +659,12 @@ export class World {
         this.attackStyle = attackStyle(detail.weapon);
         const visible = !!detail.to && this.state.tiles.some(tile => tile.x === detail.to.x && tile.y === detail.to.y && tile.monster);
         this.heroAnimation.start(detail, actionNow, this.reduced, visible);
+        if (!this.reduced) this.heroRig?.attack(this.attackStyle, detail.weapon?.type);
       }
-      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") { this.castAge = 0; this.castStartedAt = actionNow; }
+      if (this.effects.event(detail, this.reduced) && detail.phase === "cast") {
+        this.castAge = 0; this.castStartedAt = actionNow;
+        if (!this.reduced) this.heroRig?.cast();
+      }
       if ((detail.kind === "weapon" || detail.phase === "cast") && detail.to && detail.from &&
         (detail.to.x !== detail.from.x || detail.to.y !== detail.from.y)) {
         this.player.rotation.y = Math.atan2(detail.to.x - detail.from.x, detail.to.y - detail.from.y) + Math.PI;
@@ -707,8 +717,9 @@ export class World {
         cameraSettling: !!(this.cameraTween || this.viewEasing),
         terrainRebuilds: this.grid.rebuilds, staticChunks: this.staticTiles.chunks.size,
         routePoints: this.routePointCount, routeVisible: false,
-        heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect,
-        ...creatureMetrics(), ...window.ularnPersistence?.metrics(),
+        heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect, viewFocus: this.viewFocus,
+        heroSkin: this.heroRig ? { ...this.heroSkin, clip: this.heroRig.clip } : null,
+        ...creatureMetrics(), ...this.dressing.metrics(), ...window.ularnPersistence?.metrics(),
         idle: performance.now() > this.activeUntil,
         suspended: document.hidden || this.paused || this.lost,
         cameraElevation: Math.atan2(this.camera.position.y - this.controls.target.y,
@@ -775,8 +786,8 @@ export class World {
         cameraRegion: this.cameraRegion || null,
       }),
       beginExpeditionCamera: () => this.beginExpeditionCamera(),
-      creatures: () => [...this.monsters.values()].map(({ mesh, species }) => ({
-        uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile },
+      creatures: () => [...this.monsters.values()].map(({ mesh, species, rig }) => ({
+        uid: mesh.userData.uid, species, tile: { ...mesh.userData.tile }, rigged: !!rig,
         facing: { ...mesh.userData.facing },
         model: mesh.userData.model, family: mesh.userData.family, position: mesh.position.toArray(),
         facingYaw: mesh.rotation.y,
@@ -870,6 +881,8 @@ export class World {
           depthWrite: child.material.depthWrite,
         })),
       })),
+      dressing: () => this.dressing.snapshot(),
+      programs: () => (this.renderer.info.programs || []).map((program) => `${program.name}:${program.cacheKey.length}:${program.id}`),
       ambientRats: () => this.ambientRats?.snapshot() ?? {
         pool: AMBIENT_RAT_POOL,
         enabled: false,
@@ -985,12 +998,14 @@ export class World {
     if (!actor) return;
     this.impact.flash(actor.mesh, now, { delay: this.reduced ? 0 : 105, ms: this.feel.flashes ? 75 : 120, intensity: .85 * flash });
     if (!this.reduced && from) this.kick(actor, "flinch", { x: 2 * actor.target.x - from.x, z: 2 * actor.target.z - from.y }, now + 105);
+    if (!this.reduced) actor.rig?.hit();
     this.invalidate();
   }
   lungeMonster(uid, hero) {
     const actor = this.monsters.get(uid);
     if (!actor || this.reduced) return;
     this.kick(actor, "lunge", { x: hero.x, z: hero.y }, this.actionNow());
+    actor.rig?.attack(actor.attack);
     this.invalidate();
   }
   heroHurt() {
@@ -998,6 +1013,7 @@ export class World {
     this.heroHurtAt = now;
     const flash = this.feel.flashes ? 1 : .35;
     this.impact.flash(this.player, now, { color: 0xff3b2a, intensity: .7 * flash, ms: this.feel.flashes ? 90 : 140 });
+    if (!this.reduced) this.heroRig?.hit();
     this.invalidate();
   }
   levelUp() {
@@ -1019,6 +1035,8 @@ export class World {
   }
   collapse(on = true) {
     this.collapsedAt = on ? this.actionNow() : null;
+    // The procedural body under a rigged hero is hidden, so the rig falls instead.
+    if (on) this.heroRig?.die(); else this.heroRig?.revive();
     if (on && !this.reduced) this.lensTo(this.camera.zoom, 1.2, 1200);
     this.invalidate();
   }
@@ -1098,6 +1116,71 @@ export class World {
     this.heroRightForearm = this.player.getObjectByName("right-forearm");
     this.heroWeaponKey = null;
   }
+  /**
+   * Effects first drawn mid-fight (the sword trail, sparks, the hurt burst,
+   * spell shapes, the level-up column) compile here, under this level's
+   * lights, so the first blow does not stall for a frame or two.
+   */
+  warmShaders() {
+    const hidden = [this.heroAnimation.trail, this.heroAnimation.sparks, this.burst, this.effects.slots[0]?.group, this.impact.ensureHalo().group].filter(Boolean);
+    const shown = hidden.map((object) => object.visible);
+    hidden.forEach((object) => { object.visible = true; });
+    for (const object of hidden) this.renderer.compile(object, this.camera, this.scene);
+    hidden.forEach((object, i) => { object.visible = shown[i]; });
+    // Drivers may link lazily; reading uniforms finishes the link now, during
+    // the level change, rather than on the frame that first draws the effect.
+    for (const program of this.renderer.info.programs || []) program.getUniforms?.();
+  }
+  /**
+   * Wear the rigged body once it loads. The procedural rig keeps posing
+   * invisibly; only its weapon and lantern move to the rigged hands.
+   */
+  dressHero(character) {
+    const player = this.player;
+    heroBody(character).then(({ body, clips, file }) => {
+      if (this.disposed || player !== this.player) return;
+      player.add(body);
+      for (const [slot, part] of [["handslotr", this.heroWeapon], ["handslotl", player.getObjectByName("lantern")]]) {
+        const bone = body.getObjectByName(slot);
+        if (!bone || !part) continue;
+        const mount = new THREE.Group();
+        mount.name = `${part.name}-mount`;
+        // Undo the body's fit scale so props keep their world size.
+        mount.scale.set(1 / body.scale.x, 1 / body.scale.y, 1 / body.scale.z);
+        bone.add(mount);
+        part.position.set(0, 0, 0);
+        part.rotation.set(0, 0, 0);
+        mount.add(part);
+      }
+      this.heroBody.visible = false;
+      this.heroAnimation.skinned = true;
+      // A hurt flash tints the meshes it finds; let it find the rigged ones.
+      forgetFlashMeshes(player);
+      this.heroRig = new CharacterRig(body, clips);
+      this.heroSkin = { file, character };
+      if (this.collapsedAt != null) this.heroRig.die();
+      this.invalidate();
+    }).catch((error) => console.warn("Rigged hero unavailable; keeping the built-in body.", error));
+  }
+  /** Undead swap their procedural body for a rigged one; the actor keeps gliding and turning. */
+  dressCreature(uid, actor) {
+    creatureBody(actor.mesh.userData.model)?.then(({ body, clips, attack }) => {
+      if (this.disposed || this.monsters.get(uid) !== actor) return;
+      const cinematic = this.cinematicRendering();
+      body.traverse((object) => {
+        if (!object.isMesh) return;
+        object.userData.presentationShadows = { cast: object.castShadow, receive: object.receiveShadow };
+        if (!cinematic) object.castShadow = object.receiveShadow = false;
+      });
+      actor.mesh.add(body);
+      const procedural = actor.mesh.getObjectByName("creature-body");
+      if (procedural) procedural.visible = false;
+      forgetFlashMeshes(actor.mesh);
+      actor.rig = new CharacterRig(body, clips);
+      actor.attack = attack;
+      this.invalidate();
+    }).catch((error) => console.warn("Rigged creature unavailable; keeping the built-in body.", error));
+  }
   setLeg(leg, rotationX, lift) {
     if (!leg) return;
     leg.rotation.x = rotationX;
@@ -1113,7 +1196,7 @@ export class World {
   }
   setWeaponGrip(gripZ = 0) {
     const weapon = this.heroWeapon;
-    if (!weapon) return;
+    if (!weapon || this.heroRig) return;
     weapon.rotation.set(weapon.userData.restRotationX || 0, 0, gripZ);
   }
   skipsHeroBody(obj) {
@@ -1586,11 +1669,15 @@ export class World {
     const flicker = town || this.reduced ? 0 : Math.sin(this.tick * 7.3) * .035 + Math.sin(this.tick * 13.1 + 1.7) * .025;
     this.playerLight.intensity=town ? 3.5 : CAVE_HERO_LIGHT.intensity * (1 + flicker);
     this.playerLight.distance=town ? 8 : CAVE_HERO_LIGHT.distance;
-    this.torchLights.forEach((light,index)=>{light.visible=town && index<4;});
-    if (!town) return;
+    // Town lamps, or in caves the wall torches nearest the hero.
+    const count = town ? 4 : CAVE_TORCH.count, volcano = this.state.level > 15;
+    this.torchLights.forEach((light,index)=>{light.visible=index<count; light.color.setHex(volcano ? 0xff6a3a : 0xffa64c);});
+    caveTorchColor.fromArray(volcano ? CAVE_TORCH.color.volcano : CAVE_TORCH.color.caves);
+    this.lighting.peak = town ? 5 : CAVE_TORCH.light;
     // Torch choice depends only on the hero's tile and the lamp set.
-    const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${this.lampRev}` : null;
-    if (key && key !== this.lightKey) { this.lightKey = key; this.lighting.assign(this.lamps,this.playerTarget,4); }
+    const rev = town ? `t${this.lampRev}` : `c${this.dressing.flameRev}`;
+    const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${rev}` : null;
+    if (key && key !== this.lightKey) { this.lightKey = key; this.lighting.assign(town ? this.lamps : this.dressing.flames(),this.playerTarget,count); }
   }
   setQuality(value, persist = true) {
     this.quality = ["auto", "cinematic", "balanced"].includes(value)
@@ -1606,6 +1693,7 @@ export class World {
     this.effectiveTier = this.quality === "auto" ? this.autoTier : this.quality === "cinematic" ? 2 : 1;
     this.applyGpuQuality();
     const cinematic=this.cinematicRendering();
+    this.dressing.setCinematic(cinematic);
     if (cinematic) this.ensureComposer(); else this.disposeComposer();
     if (this.composer) {
       this.bloom.enabled=this.ao.enabled=this.antialias.enabled=cinematic;
@@ -1663,7 +1751,14 @@ export class World {
   }
   setViewportRect(rect) {
     this.viewportRect = { ...rect };
-    const x = innerWidth / 2 - (rect.left + rect.right) / 2, y = innerHeight / 2 - (rect.top + rect.bottom) / 2;
+    // The top bar and dock span the window, so frame between them. Side panels
+    // float over the scene: centering between them would push the hero sideways.
+    const reach = Math.min(FRAME_CLEARANCE, (rect.right - rect.left) / 2);
+    this.viewFocus = {
+      x: Math.min(rect.right - reach, Math.max(rect.left + reach, innerWidth / 2)),
+      y: (rect.top + rect.bottom) / 2,
+    };
+    const x = innerWidth / 2 - this.viewFocus.x, y = innerHeight / 2 - this.viewFocus.y;
     const resized = this.viewSize?.width !== innerWidth || this.viewSize?.height !== innerHeight;
     this.viewSize = { width: innerWidth, height: innerHeight };
     this.viewTarget = { x, y };
@@ -1890,6 +1985,7 @@ export class World {
       this.objects.clear();
       this.tileGeometrySignature = null;
       this.setRoute();
+      for (const actor of this.monsters.values()) actor.rig?.dispose();
       destroy(this.actors);
       this.monsters.clear();
       this.effects.clear();
@@ -1921,6 +2017,7 @@ export class World {
       );
       this.scene.fog.color.copy(this.scene.background);
       this.applyLevelLighting();
+      this.warmShaders();
       this.applyFloorMaterials();
       this.water.visible = town;
       this.syncAmbientDust();
@@ -1992,12 +2089,15 @@ export class World {
     }
     if (this.character !== state.character) {
       this.scene.remove(this.player);
+      this.heroRig?.dispose();
+      this.heroRig = null;
       destroy(this.player);
       this.player = hero(state.character);
       this.heroAnimation.bind(this.player);
       this.character = state.character;
       this.bindHero();
       this.scene.add(this.player);
+      this.dressHero(state.character);
     }
     const ids = new Set();
     let floorIndex = 0,
@@ -2036,7 +2136,7 @@ export class World {
         state.level === 0 && this.paths && !this.paths.has(`${t.x},${t.y}`);
       floorHash =
         (Math.imul(floorHash, 16777619) ^
-          ((t.x + 1) * 73471 + (t.y + 1) * 19349663 + (grass ? 1 : 0))) |
+          ((t.x + 1) * 73471 + (t.y + 1) * 19349663 + (grass ? 1 : 0) + (opensFloor(t) ? 2 : 0))) |
         0;
       if (t.wall) {
         wallCount++;
@@ -2110,7 +2210,7 @@ export class World {
       const sig = `${t.id}:${t.arg ?? 0}:${t.known === false ? "u" : "k"}${t.stair?.blocked ? ":blocked" : ""}${t.doorFacing != null ? `:df${t.doorFacing}` : ""}`;
       const prev = this.objects.get(key);
       const grass = state.level === 0 && !this.paths.has(key);
-      if (rebuildFloors) {
+      if (rebuildFloors && !opensFloor(t)) {
         const color = this.floorVariation(state.level, grass, t.x, t.y);
         this.spinQ.setFromAxisAngle(
           UP,
@@ -2169,6 +2269,7 @@ export class World {
       const art = itemSprite(t, () => this.invalidate());
       const model =
         art ||
+        (t.id === 44 && chestModel()) ||
         itemModel({
           ...t,
           draining:
@@ -2234,6 +2335,9 @@ export class World {
     }
     this.syncMonsterActors(state);
     this.staticTiles.flush();
+    if (rebuildFloors) this.dressing.layout(state.tiles, state.level, state.level ? undefined : this.paths);
+    // Town lamp posts light the plaza like the shop lamps do.
+    for (const { lamp } of this.dressing.town.posts) takeLamp(lamp.x, lamp.y, lamp.z);
     if (rebuildFloors) {
       for (const [m, count] of [
         [this.floor, floorIndex],
@@ -2291,6 +2395,7 @@ export class World {
       creatures.add(uid);
       let actor = this.monsters.get(uid);
       if (actor && actor.species !== monster.id) {
+        actor.rig?.dispose();
         actor.mesh.removeFromParent();
         destroy(actor.mesh);
         this.monsters.delete(uid);
@@ -2318,6 +2423,7 @@ export class World {
         };
         this.monsters.set(uid, actor);
         this.actors.add(mesh);
+        this.dressCreature(uid, actor);
       }
       if (actor.target.x !== tile.x || actor.target.z !== tile.y) this.moveActor(actor, tile);
       actor.mesh.userData.uid = uid;
@@ -2334,9 +2440,11 @@ export class World {
         if (mark) {
           this.killMarks.delete(uid);
           const from = mark.from || { x: this.player.position.x, z: this.player.position.z };
+          // A rigged body falls with the corpse; its skeleton is freed when the corpse is.
+          const { rig } = actor;
           this.impact.corpse(actor.mesh, mark.at, { x: actor.target.x - from.x, z: actor.target.z - from.z },
-            { reduced: this.reduced, flash: mark.flash, onDone: destroy });
-        } else destroy(actor.mesh);
+            { reduced: this.reduced, flash: mark.flash, onDone: (mesh) => { rig?.dispose(); destroy(mesh); } });
+        } else { actor.rig?.dispose(); destroy(actor.mesh); }
         this.monsters.delete(uid);
       }
     if (this.killMarks.size > 16) this.killMarks.clear();
@@ -2542,6 +2650,7 @@ export class World {
     if (layoutChanged || !this.ambientRats.enabled) {
       this.ambientRats.setLayout(this.wallCells, this.state.level, this.wallHeightAt);
     }
+    if (layoutChanged || changed) this.dressing?.wallHeights(this.wallHeightAt);
     if (!changed) return;
     for (const mesh of [this.walls, this.caps]) {
       mesh.instanceMatrix.needsUpdate = true;
@@ -2859,6 +2968,9 @@ export class World {
       this.heroLast.copy(this.player.position);
     } else this.heroSampling = false;
     const act = this.actionClock.now(now);
+    // Rigged bodies advance on the action clock, so hit-stop holds them too.
+    const rigDt = Math.min(0.1, Math.max(0, (act - (this.rigAct ?? act)) / 1000));
+    this.rigAct = act;
     if (this.playerTarget) {
       this.playerLight.position
         .copy(this.player.position)
@@ -2866,6 +2978,15 @@ export class World {
       this.heroLimbLive = this.poseHero(now, act);
       this.heroAnimation.update(act);
       this.heroLimbLive ||= this.heroAnimation.active;
+      if (this.heroRig) {
+        const moving = this.followLive() && !this.reduced;
+        // One nominal tile per step interval: the pace the glide is planned at.
+        const pace = moving ? (this.stepNominal * 1000) / Math.max(STEP_MS, this.runActive ? this.stepInterval : this.followMs) : 0;
+        this.heroRig.locomote(moving, pace);
+        if (this.reduced) this.heroRig.settle();
+        else this.heroRig.update(rigDt);
+        this.heroLimbLive ||= this.heroRig.busy;
+      }
       if (this.collapsedAt == null) this.keepBodyOutOfRock();
     }
     const impactLive = this.impact.update(act);
@@ -2939,6 +3060,12 @@ export class World {
         if (animateCreature(mesh, now, moving, this.reduced)) this.hasMotion = true;
       }
       else if (camTurned || mesh.userData.presentation === "model") faceMonster(mesh, null, this.camera);
+      if (actor.rig) {
+        actor.rig.locomote(moving, moving ? (actor.nominal * 1000) / STEP_MS : 0);
+        if (this.reduced) actor.rig.settle();
+        else actor.rig.update(rigDt);
+        if (actor.rig.busy) this.hasMotion = true;
+      }
     }
     if (camTurned) {
       for (const art of this.billboards) faceItem(art, this.camera);
@@ -2954,11 +3081,17 @@ export class World {
     }
     if (this.wallCells.length) this.updateWalls(dt);
     if (this.cinematicRendering() && this.state) this.syncPlayerLight();
-    if (this.cinematicRendering() && this.state?.level===0) {
+    if (this.cinematicRendering() && this.state) {
       const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
       this.hasMotion ||= lightsMoving;
-      if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget);
+      if (this.state.level===0) { if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget); }
+      // The stone takes the same flames and fades as the point lights.
+      else caveTorches.forEach((torch, i) => {
+        const light = this.torchLights[i];
+        torch.set(light.position.x, light.position.y, light.position.z, light.visible ? light.intensity / this.lighting.peak : 0);
+      });
     }
+    this.dressing.update(now);
     if (this.cinematicRendering() && this.state?.level) caveGlowCenter.copy(this.player.position);
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
@@ -3064,6 +3197,9 @@ export class World {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.heroRig?.dispose();
+    for (const actor of this.monsters.values()) actor.rig?.dispose();
+    this.dressing.dispose();
     this.longTaskObserver?.disconnect();
     this.stopFrames();
     this.events.abort();

@@ -234,8 +234,8 @@ test("a displaced route cancels and camera reset during a step stays centered", 
   await page.keyboard.press("ArrowRight"); await page.clock.runFor(50);
   await page.locator("#camera-reset").click(); await page.clock.runFor(150);
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
-  expect(metrics.heroScreen.x).toBeCloseTo((metrics.viewport.left + metrics.viewport.right) / 2, 0);
-  expect(metrics.heroScreen.y).toBeCloseTo((metrics.viewport.top + metrics.viewport.bottom) / 2, 0);
+  expect(metrics.heroScreen.x).toBeCloseTo(metrics.viewFocus.x, 0);
+  expect(metrics.heroScreen.y).toBeCloseTo(metrics.viewFocus.y, 0);
   await page.evaluate(() => {
     const key = ularn.key;
     ularn.key = (...args) => { key(...args); player.x = 50; paint(); };
@@ -255,3 +255,12 @@ for (const dimensions of [[1440, 1000], [390, 844], [844, 390]]) {
     await page.screenshot({ path: `test-results/fluidity-${dimensions.join("x")}.png` });
   });
 }
+
+test("a wide window keeps the hero at screen center beside the floating side panels", async ({ page }) => {
+  await page.setViewportSize({ width: 2000, height: 1355 }); await arena(page);
+  await page.waitForTimeout(250);
+  const { heroScreen, viewport } = await page.evaluate(() => ularnGraphics.metrics());
+  expect(viewport.left).toBeGreaterThan(200);
+  expect(heroScreen.x).toBeCloseTo(1000, 0);
+  expect(heroScreen.y).toBeCloseTo((viewport.top + viewport.bottom) / 2, 0);
+});
