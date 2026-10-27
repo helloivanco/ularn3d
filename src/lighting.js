@@ -25,6 +25,8 @@ export class TorchLighting {
   constructor(lights) {
     this.lights = lights;
     this.slots = lights.map((light) => ({ light, lamp: null, desired: null, gain: 0 }));
+    // Full intensity of a lit slot. Cave torches burn lower than town lamps.
+    this.peak = 5;
     this.reassignments = 0;
     this.clear();
   }
@@ -66,7 +68,7 @@ export class TorchLighting {
       if (slot.gain !== target || changing) moving = true;
       const phase = slot.lamp ? slot.lamp.point.x * .71 + slot.lamp.point.z * 1.13 : 0;
       // Gentle, source-anchored warmth rather than a rapid brightness pulse.
-      slot.light.intensity = 5 * slot.gain * (reduced ? 1 : 1 + Math.sin(time * 1.4 + phase) * .012);
+      slot.light.intensity = this.peak * slot.gain * (reduced ? 1 : 1 + Math.sin(time * 1.4 + phase) * .012);
     }
     return moving;
   }

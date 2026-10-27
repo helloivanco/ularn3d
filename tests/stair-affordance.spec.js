@@ -1,5 +1,30 @@
 import { test, expect } from "@playwright/test";
-import { itemModel } from "../src/models.js";
+import { itemModel, opensFloor } from "../src/models.js";
+import { WALL_BASE_Y } from "../src/wall-cut.js";
+
+test("stairs going down are cut into the floor and no stair part floats", () => {
+  expect(opensFloor({ id: 13 })).toBe(true);
+  expect(opensFloor({ id: 5 })).toBe(false);
+  const down = itemModel({ id: 13, name: "stairs" });
+  for (let i = 0; i < 4; i++) {
+    const step = down.getObjectByName(`step-${i}`);
+    expect(step.position.y + step.scale.y / 2).toBeLessThan(WALL_BASE_Y);
+  }
+  expect(down.getObjectByName("down-arrow").position.y).toBeLessThan(WALL_BASE_Y);
+  const up = itemModel({ id: 5, name: "stairs" });
+  for (let i = 0; i < 5; i++) {
+    const step = up.getObjectByName(`step-${i}`);
+    expect(step.position.y - step.scale.y / 2).toBeCloseTo(WALL_BASE_Y, 5);
+  }
+  // Rubble stones are squashed relative to their size, not stretched into spikes.
+  for (const id of [5, 13]) {
+    const stones = itemModel({ id, name: "stairs", stair: { blocked: true } })
+      .getObjectByName("stair-blockage").children.filter((child) => child.geometry?.type === "IcosahedronGeometry");
+    expect(stones).toHaveLength(4);
+    for (const stone of stones) expect(stone.scale.y).toBeLessThan(stone.scale.x);
+  }
+});
+
 
 test("blocked stairs have a solid landing obstruction instead of a travel arrow", () => {
   for (const [id, direction] of [[5, "up"], [13, "down"]]) {

@@ -104,7 +104,7 @@ test("Cinematic caves glow around the hero while Auto caves stay flat and unlit"
   await page.evaluate(()=>{newcavelevel(1);paint();});
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
   const cave=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(cave.caveGlow).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBe(1);
+  expect(cave.caveGlow).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights).toBeLessThanOrEqual(5);
   // The glow keeps the unlit, mapped cave materials.
   expect(cave.floorMaterial).toBe("MeshBasicMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
   await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("auto");

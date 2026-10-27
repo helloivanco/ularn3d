@@ -175,6 +175,16 @@
           </p>
           <p id="start-error" role="alert"></p>
         </form>
+        <section id="weekly" class="weekly-card" aria-labelledby="weekly-title" hidden>
+          <div class="weekly-copy">
+            <div class="weekly-head"><span class="weekly-icon" data-icon="hourglass" aria-hidden="true"></span><h2 id="weekly-title">Weekly challenge</h2></div>
+            <p><span id="weekly-rules"></span> <span id="weekly-status"></span></p>
+          </div>
+          <div class="weekly-actions">
+            <button type="button" id="weekly-start" class="button primary">Play</button>
+            <button type="button" id="weekly-board" class="button secondary">Board</button>
+          </div>
+        </section>
         <div class="play-options web-only">
           <a id="download-windows" class="windows-download" href="/downloads/Ularn.windows.exe" aria-label="Download Ularn 3D for Windows">
             <span class="download-icon" data-icon="take" aria-hidden="true"></span>
@@ -513,6 +523,13 @@
           >. Original Ularn by Phil Cordier.
           <a href="/engine/LICENSE" target="_blank">License</a>.
         </div>
+      </dialog>
+      <dialog id="weekly-dialog" class="panel dialog online-dialog" aria-labelledby="weekly-board-title">
+        <form method="dialog">
+          <header><h2 id="weekly-board-title">Weekly board</h2><button type="submit" class="dialog-x" aria-label="Close weekly board"><span data-icon="close"></span></button></header>
+          <p id="weekly-board-note" class="weekly-board-note" role="status"></p>
+          <ol id="weekly-board-list" class="board-list weekly-board-list"></ol>
+        </form>
       </dialog>
       <dialog id="pause-dialog" class="panel dialog compact">
         <button class="close-dialog" aria-label="Close menu">

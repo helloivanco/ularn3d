@@ -15,6 +15,11 @@ export const CAVE_HERO_LIGHT = Object.freeze({ intensity: 9, distance: 10, heigh
    brighten and the far sides darken, from the terrain's own relief map. The
    lantern sits at hand height, so light rakes across the floor. */
 export const CAVE_RELIEF = Object.freeze({ height: 1.1, strength: 3, gain: 1.15 });
+/* Wall torches pool warm light on the stone near them: the nearest few, faded
+   in and out by the torch slots that also drive their point lights. `light`
+   is those point lights' peak, lower than a town lamp's. */
+export const CAVE_TORCH = Object.freeze({ count: 4, radius: 2.7, strength: 1.5, light: 1.6,
+  color: { caves: [1.0, 0.62, 0.3], volcano: [1.0, 0.42, 0.2] } });
 
 const uniforms = {
   uGlowCenter: { value: new THREE.Vector3() },
@@ -24,7 +29,13 @@ const uniforms = {
   uReliefHeight: { value: CAVE_RELIEF.height },
   uReliefStrength: { value: CAVE_RELIEF.strength },
   uReliefGain: { value: CAVE_RELIEF.gain },
+  // xyz is the flame, w its gain (0 when the slot is dark).
+  uTorches: { value: Array.from({ length: CAVE_TORCH.count }, () => new THREE.Vector4()) },
+  uTorchColor: { value: new THREE.Vector3(...CAVE_TORCH.color.caves) },
+  uTorchRadius: { value: CAVE_TORCH.radius },
 };
+export const caveTorches = uniforms.uTorches.value;
+export const caveTorchColor = uniforms.uTorchColor.value;
 /** Shared by every glow material; copy the hero's displayed position into it each frame. */
 export const caveGlowCenter = uniforms.uGlowCenter.value;
 
@@ -48,6 +59,9 @@ uniform vec3 uGlowCenter;
 uniform float uGlowRadius;
 uniform float uGlowEdge;
 uniform vec3 uGlowWarm;
+uniform vec4 uTorches[ ${CAVE_TORCH.count} ];
+uniform vec3 uTorchColor;
+uniform float uTorchRadius;
 #ifdef CAVE_RELIEF
   uniform sampler2D uReliefMap;
   uniform float uReliefHeight;
@@ -75,6 +89,20 @@ uniform vec3 uGlowWarm;
   }
   #endif
   outgoingLight *= mix( uGlowEdge, 1.0, glow ) * mix( vec3( 1.0 ), uGlowWarm, glow * glow );
+  {
+    // Faces turned away from a flame stay dark, so a torch does not light the
+    // back of its own wall.
+    vec3 torchNormal = normalize( cross( dFdx( vGlowWorld ), dFdy( vGlowWorld ) ) );
+    vec3 torchLight = vec3( 0.0 );
+    for ( int i = 0; i < ${CAVE_TORCH.count}; i++ ) {
+      vec3 toFlame = uTorches[ i ].xyz - vGlowWorld;
+      float reach = clamp( 1.0 - length( toFlame ) / uTorchRadius, 0.0, 1.0 );
+      float facing = clamp( dot( torchNormal, normalize( toFlame ) ) * 0.75 + 0.25, 0.0, 1.0 );
+      torchLight += uTorchColor * ( reach * reach * facing * uTorches[ i ].w );
+    }
+    // Pools still read inside the hero's own light, strongest where it fades.
+    outgoingLight *= 1.0 + torchLight * ${CAVE_TORCH.strength.toFixed(2)} * ( 1.0 - 0.4 * glow );
+  }
   #include <opaque_fragment>`);
 }
 

@@ -3,6 +3,7 @@ import { mat, matBasic, surface, noise, placedTexture } from "./materials.js";
 import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { compact, disposeGeometry, featherContact } from "./graphics-utils.js";
+import { WALL_BASE_Y, FLOOR_CENTER_Y, FLOOR_HEIGHT, FLOOR_BOTTOM_Y } from "./wall-cut.js";
 export { mat } from "./materials.js";
 const shared = new Map();
 const weaponModels = new Map();
@@ -1018,6 +1019,8 @@ export function building(id) {
   }
   return g;
 }
+/** Stairs going down are a well cut into the floor, so their tile draws no floor slab. */
+export const opensFloor = (tile) => tile.id === 13;
 export function itemModel(tile) {
   const g = new THREE.Group(),
     id = tile.id,
@@ -1048,49 +1051,76 @@ export function itemModel(tile) {
     const blocked = !!tile.stair?.blocked;
     g.userData.stairDirection = up ? "up" : "down";
     g.userData.stairBlocked = blocked;
-    box(g, up ? 0x56645b : 0x081116, 0, 0.01, 0, 0.94, 0.04, 0.94);
-    for (let i = 0; i < 5; i++) {
-      const step = box(g, up ? 0xc1cdb1 : 0x9b8e72, 0,
-        up ? 0.09 + i * 0.115 : 0.29 - i * 0.057,
-        0.35 - i * 0.15, 0.72, 0.09, 0.16);
-      step.name = `step-${i}`;
+    // Every part rests on something: solid steps, posted rails, and marks laid
+    // on a surface. Both flights climb or descend toward -z.
+    let rest;
+    if (up) {
+      for (let i = 0; i < 5; i++) {
+        const top = 0.11 * (i + 1), front = 0.42 - i * 0.17, back = i === 4 ? -0.46 : front - 0.17;
+        const step = box(g, 0xc1cdb1, 0, (top + WALL_BASE_Y) / 2, (front + back) / 2,
+          0.72, top - WALL_BASE_Y, front - back);
+        step.name = `step-${i}`;
+      }
+      rest = { y: 0.55, z: -0.36 };
+      for (const x of [-0.41, 0.41]) {
+        box(g, 0x8a9a80, x, 0.15, 0.4, 0.05, 0.33, 0.05);
+        box(g, 0x8a9a80, x, 0.42, -0.42, 0.05, 0.87, 0.05);
+        beam(g, 0xa6b898, [x, 0.3, 0.4], [x, 0.84, -0.42], 0.025);
+      }
+      unlitAccent(g, id === 93 ? 0xffe08a : 0xb6f0bc, 0, 0.554, -0.275, 0.72, 0.008, 0.03,
+        id === 93 ? "town-exit-accent" : "stair-accent");
+    } else {
+      // The stairwell is cut into the floor (see opensFloor): a stone rim, a
+      // dark lining, and steps that fall away into the dark.
+      const rim = 0.025;
+      for (const [x, z, w, d] of [[-0.44, 0, 0.12, 1], [0.44, 0, 0.12, 1], [0, -0.45, 0.76, 0.1], [0, 0.45, 0.76, 0.1]]) {
+        box(g, 0x9aa393, x, (rim + WALL_BASE_Y) / 2, z, w, rim - WALL_BASE_Y, d);
+        box(g, 0x353b34, x, FLOOR_CENTER_Y, z, w, FLOOR_HEIGHT, d);
+      }
+      [0x8f8a76, 0x6b6757, 0x4b483d, 0x2e2c26].forEach((color, i) => {
+        const top = WALL_BASE_Y - 0.035 * (i + 1);
+        const step = box(g, color, 0, (top + FLOOR_BOTTOM_Y) / 2, 0.32 - i * 0.16,
+          0.76, top - FLOOR_BOTTOM_Y, 0.16);
+        step.name = `step-${i}`;
+      });
+      mesh(g, boxGeo, matBasic(0x050709), 0, FLOOR_BOTTOM_Y + 0.005, -0.32, 0.76, 0.01, 0.16).name = "stair-depth";
+      rest = { y: FLOOR_BOTTOM_Y + 0.012, z: -0.32 };
+      unlitAccent(g, 0xffc078, 0, rim + 0.003, 0.415, 0.76, 0.006, 0.03, "stair-accent");
     }
-    // Raised handrails lead to the upper landing; a dark well frames the descent.
-    for (const x of [-0.43, 0.43]) {
-      if (up) beam(g, 0xa6b898, [x, 0.3, 0.42], [x, 0.87, -0.4], 0.035);
-      else box(g, 0x5c5748, x, 0.14, 0, 0.075, 0.27, 0.92);
-    }
-    unlitAccent(
-      g,
-      id === 93 ? 0xffe08a : up ? 0xb6f0bc : 0xffc078,
-      0,
-      up ? 0.78 : 0.48,
-      up ? -0.42 : 0.36,
-      0.62,
-      0.05,
-      0.1,
-      id === 93 ? "town-exit-accent" : "stair-accent",
-    );
     if (blocked) {
       const landing = new THREE.Group();
       landing.name = "stair-blockage";
-      const y = up ? 0.66 : 0.25;
-      box(landing, 0x756e60, 0, y, -0.3, 0.8, 0.42, 0.28);
+      // A fallen block covers the landing, or fills the well past the rim.
+      // Loose stones lie on the step in front of it, clear of the cross.
+      const [bottom, top] = up ? [rest.y, rest.y + 0.3] : [FLOOR_BOTTOM_Y, 0.06];
+      box(landing, 0x8a8270, 0, (bottom + top) / 2, up ? -0.36 : -0.2, 0.72, top - bottom, up ? 0.2 : 0.4);
       for (let i = 0; i < 4; i++) {
-        const rubble = orb(landing, 0x89816d, (i - 1.5) * 0.18,
-          y - 0.16, -0.05 + (i % 2) * 0.1, 0.14 + (i % 2) * 0.025);
-        rubble.scale.y = 0.65;
+        const rubble = orb(landing, 0xa39b85, (i - 1.5) * 0.17,
+          up ? 0.5 : 0.02, (up ? -0.2 : 0.28) + (i % 2) * 0.05, 0.085 + (i % 2) * 0.02);
+        rubble.scale.y *= 0.7;
       }
       // A cross over the blocked landing stays legible from the overhead view.
-      beam(landing, 0xd39a71, [-0.28, y + 0.23, -0.45], [0.28, y + 0.23, -0.15], 0.055);
-      beam(landing, 0xd39a71, [-0.28, y + 0.23, -0.15], [0.28, y + 0.23, -0.45], 0.055);
+      const cz = up ? -0.36 : -0.16;
+      beam(landing, 0xd39a71, [-0.28, top + 0.03, cz - 0.15], [0.28, top + 0.03, cz + 0.15], 0.055);
+      beam(landing, 0xd39a71, [-0.28, top + 0.03, cz + 0.15], [0.28, top + 0.03, cz - 0.15], 0.055);
       g.add(landing);
     } else {
-      const arrow = cone(g, up ? 0xb2e3b9 : 0xefbb7d, 0.0, up ? 0.86 : 0.56, -0.3, 0.16, 0.2, 3);
-      arrow.rotation.z = up ? 0 : Math.PI;
+      // A chevron laid on the landing, or at the foot of the well, reads as up
+      // or down from the default north-up camera.
+      const arrow = new THREE.Mesh(
+        geometry("stair-chevron", () => {
+          const shape = new THREE.Shape([[-0.15, -0.06], [0, 0.06], [0.15, -0.06], [0.09, -0.06], [0, 0.012], [-0.09, -0.06]]
+            .map(([x, y]) => new THREE.Vector2(x, y)));
+          return new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+        }),
+        matBasic(up ? 0xb2e3b9 : 0xefbb7d, { toneMapped: false }),
+      );
+      arrow.position.set(0, rest.y + 0.004, rest.z);
+      if (!up) arrow.rotation.y = Math.PI;
+      arrow.userData.flatMark = true;
       arrow.name = up ? "up-arrow" : "down-arrow";
+      g.add(arrow);
     }
-    ring(g, up ? 0x9ac8a1 : 0xb49d6b, 0.46);
     if (id === 93) {
       for (const x of [-0.5, 0.5]) box(g, 0x6a5438, x, 0.55, -0.15, 0.08, 1.05, 0.08);
       box(g, 0x8a7048, 0, 1.08, -0.15, 1.1, 0.08, 0.08);

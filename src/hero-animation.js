@@ -41,6 +41,8 @@ export class HeroAnimation {
     this.bind(hero);
   }
   bind(hero) {
+    // A rigged body swings the weapon itself; the grip then stays at rest.
+    this.skinned = false;
     this.hero = hero;
     this.body = hero.getObjectByName("body");
     this.arm = hero.getObjectByName("right-arm");
@@ -53,7 +55,7 @@ export class HeroAnimation {
     if (!this.body || !this.arm || !this.weapon) return;
     this.body.rotation.y = pose[0]; this.body.rotation.z = pose[1]; this.body.position.z = pose[2];
     this.arm.rotation.set(pose[3], pose[4], pose[5]);
-    this.weapon.rotation.set(pose[6], pose[7], pose[8]);
+    if (!this.skinned) this.weapon.rotation.set(pose[6], pose[7], pose[8]);
   }
   start(detail, now = performance.now(), reduced = false, visibleTarget = true) {
     if (reduced || !this.weapon) { this.clear(); return; }

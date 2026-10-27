@@ -21,7 +21,8 @@ doRollbar = (severity, title, detail) => {
 uploadStyle = () => true;
 // Room players record their own adventurer (see recordRoomScore3D). Other parties stay off the board.
 cloudflareWriteHighScore = score => PARTY_ON && !ROOM_SESSION_ON ? Promise.resolve(false) : ularnScoreService.submit(score, "3d");
-getHighscores = () => ularnScoreService.highscores(ULARN, "3d");
+// A weekly run reads its own week's board, practice runs included.
+getHighscores = () => ularnScoreService.highscores(ULARN, "3d", weeklyRun3D?.label);
 cloudflareLoadGame = async id => scoreDetailsText(await ularnScoreService.details(id, "3d"));
 let roomScoreActor3D = null, roomScore3D = null, roomScoreSent3D = false;
 const roomFates3D = new Map();
@@ -137,6 +138,90 @@ function readAutoLoot3D() {
     return true;
   }
 }
+
+// Weekly challenge (larn.org's Game of the Week). Everyone who starts it in the
+// same ISO week gets the town, store and all 21 floors built from one seed,
+// with the calling and difficulty that seed picks. Each browser's first run of
+// the week counts; later runs are practice and are never recorded, like the
+// engine's DIED_RETRIED_GOTW games.
+const WEEKLY_KEY_3D = "ularn3d.weekly.v1";
+const WEEKLY_CALLINGS_3D = ["Adventurer", "Wizard", "Rogue", "Elf", "Dwarf", "Ogre", "Klingon", "Rambo"];
+const WEEKLY_LABEL_3D = /^\d{4}_\d{1,2}$/;
+const weekLabel3D = getGotwLabel;
+let weeklyRun3D = null; // { label, practice } while a weekly run is loaded
+// A run belongs to the week it started in, even if it ends after Sunday.
+getGotwLabel = (date) => weeklyRun3D?.label || weekLabel3D(date);
+function weeklyChallenge3D(date = new Date()) {
+  const label = weekLabel3D(date);
+  const seed = Number.parseInt(fnv1a64(`ularn3d.weekly.${label}`).slice(-8), 16) >>> 0 || 1;
+  return {
+    label,
+    year: getISOYear(date),
+    week: getISOWeek(date),
+    seed,
+    character: WEEKLY_CALLINGS_3D[seed % WEEKLY_CALLINGS_3D.length],
+    difficulty: 1 + (Math.floor(seed / WEEKLY_CALLINGS_3D.length) % 3),
+    // getISOWeekDate is the week's Thursday at 00:00 UTC; the week ends at Monday's.
+    closesAt: getISOWeekDate(date).getTime() + 4 * 86400000,
+  };
+}
+function readWeeklyRecord3D() {
+  try {
+    const record = JSON.parse(localStorage.getItem(WEEKLY_KEY_3D));
+    return WEEKLY_LABEL_3D.test(record?.label) ? record : null;
+  } catch {
+    return null;
+  }
+}
+function writeWeeklyRecord3D(record) {
+  try {
+    localStorage.setItem(WEEKLY_KEY_3D, JSON.stringify(record));
+  } catch {
+    /* Without storage the attempt cannot be remembered on this browser. */
+  }
+}
+function savedWeekly3D() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY_3D);
+    const data = raw && JSON.parse(LZString.decompressFromUTF16(raw));
+    return WEEKLY_LABEL_3D.test(data?.weekly?.label) ? data.weekly : null;
+  } catch {
+    return null;
+  }
+}
+// Build every floor and the store now, from the week's seed, so no floor
+// depends on what the player did before reaching it. This is what larn.org's
+// uploadGOTWforDate did on its server. Play itself stays as random as any solo run.
+function beginWeekly3D(week) {
+  GOTW = true; // keeps each new floor unseen while it is built
+  const home = { x: player.x, y: player.y };
+  for (let depth = 1; depth < LEVELS.length; depth++) newcavelevel(depth);
+  player.x = home.x;
+  player.y = home.y;
+  newcavelevel(0);
+  dnd_item = null;
+  initpricelist();
+  // storedata.js picks the store's spellbook once per page load.
+  const book = dnd_item.find((item) => item.itemId === OBOOK.id);
+  if (book) book.arg = 2 * 100 + rund(9);
+  installEngineHost(null);
+  const practice = readWeeklyRecord3D()?.label === week.label;
+  gameID = `w${week.label}-${Math.random().toString(36).slice(2, 12)}`;
+  weeklyRun3D = { label: week.label, practice };
+  if (!practice) writeWeeklyRecord3D({ label: week.label, gameID });
+  updateLog(`Weekly challenge, week ${week.week} of ${week.year}: everyone this week explores this same dungeon.`);
+  updateLog(practice
+    ? "This is a practice run. Your counted run this week is already recorded, so this one is not."
+    : "This is your counted run. Its result goes on the weekly board.");
+}
+// A weekly floor is built at the start, so arriving there the first time is
+// not a return visit. Skip the engine's return-visit monsters, which would be
+// placed at random and differ from player to player.
+const originalSethp3D = sethp;
+sethp = function (newLevel) {
+  if (GOTW && !newLevel && level > 0 && !isLevelVisited(level)) return;
+  return originalSethp3D(newLevel);
+};
 
 // Presentation identity belongs outside the saved rule objects. Weak references
 // also let dead monsters and discarded levels be collected normally.
@@ -686,9 +771,18 @@ function enqueueSave3D(key, data, legacy = false) {
     pumpSaves3D();
   } catch { reportSaveError3D(); }
 }
+const saveData3D = () => ({
+  version: 1,
+  state: new GameState(true),
+  // Equal-looking items can occupy different slots. Preserve their identity,
+  // since the original loader matches equipment only by item ID and bonus.
+  equipment: equipmentSlots3D(),
+  // A weekly run keeps its week and practice flag across Continue.
+  ...(weeklyRun3D ? { weekly: weeklyRun3D } : {}),
+});
 function autosave3D() {
   if (!initialized3D || GAMEOVER || !mazeMode || blocking_callback || napping) return;
-  enqueueSave3D(SAVE_KEY_3D, { version: 1, state: new GameState(true), equipment: equipmentSlots3D() });
+  enqueueSave3D(SAVE_KEY_3D, saveData3D());
 }
 const originalCheckpointSave3D = saveGame;
 saveGame = function (checkpoint) {
@@ -811,6 +905,17 @@ window.ularn = {
       id: index + 1, name: plainText3D(monster.desc), symbol: plainText3D(monster.char), level: monster.level,
     }));
   },
+  /** This week's challenge, this browser's counted attempt, and a saved weekly run. */
+  weekly() {
+    const week = weeklyChallenge3D();
+    const record = readWeeklyRecord3D();
+    const saved = savedWeekly3D();
+    return {
+      ...week,
+      attempt: record?.label === week.label ? { gameID: record.gameID, result: record.result || null } : null,
+      saved: saved?.label === week.label ? { practice: !!saved.practice } : null,
+    };
+  },
   async start({
     name = "Adventurer",
     character = "Adventurer",
@@ -818,12 +923,14 @@ window.ularn = {
     resume = false,
     seed = null,
     skipPaint = false,
+    weekly = false,
   } = {}) {
     if (initialized3D) return;
     ending3D = null;
     deepestKey3D = "";
     ULARN = true;
     GOTW = false;
+    weeklyRun3D = null;
     PARAMS = { ularn: "true" };
     playerID = "local";
     ULARN_monsterlist.forEach((monster, index) =>
@@ -914,6 +1021,10 @@ window.ularn = {
                 : player.inventory[data.equipment[field]];
         }
         setGameDifficulty(getDifficulty());
+        if (WEEKLY_LABEL_3D.test(data.weekly?.label)) {
+          GOTW = true;
+          weeklyRun3D = { label: data.weekly.label, practice: !!data.weekly.practice };
+        }
         game_started = true;
         onResize();
         overridePref("side_inventory", false);
@@ -931,6 +1042,9 @@ window.ularn = {
         );
       }
     }
+    // The week decides the seed, calling and difficulty. Rooms never run one.
+    const week = weekly && !ROOM_SESSION_ON ? weeklyChallenge3D() : null;
+    if (week) ({ seed, character, difficulty } = week);
     if (seed != null) {
       installEngineHost(
         createEngineHost(seed, { skipPaint: !!skipPaint, skipDelay: true }),
@@ -962,6 +1076,7 @@ window.ularn = {
         ? character
         : "Adventurer",
     );
+    if (week) beginWeekly3D(week);
     paint();
     this.save();
   },
@@ -986,13 +1101,9 @@ window.ularn = {
       return false;
     cancelAutosave3D(); invalidatePendingSaves3D();
     try {
-      // Equal-looking items can occupy different slots. Preserve their identity,
-      // since the original loader matches equipment only by item ID and bonus.
-      const equipment = equipmentSlots3D();
-      const data = { version: 1, state: new GameState(true), equipment };
       localStorage.setItem(
         SAVE_KEY_3D,
-        LZString.compressToUTF16(JSON.stringify(data)),
+        LZString.compressToUTF16(JSON.stringify(saveData3D())),
       );
       diskWriteCount3D++;
       saveDirty3D = false;
@@ -1148,6 +1259,7 @@ window.ularn = {
       scoreboard: scoreboardActive,
       localScores: scoreboardLocal,
       scoreSync: ularnScoreService.status(),
+      weekly: weeklyRun3D,
       busy: napping,
       prompt: !!blocking_callback,
       aimAssist: (() => {
@@ -1311,8 +1423,24 @@ function recordRoomScore3D() {
 }
 const originalWriteScore3D = writeScoreToDatabase;
 writeScoreToDatabase = function (endGameScore) {
+  if (weeklyRun3D) {
+    const record = readWeeklyRecord3D();
+    if (record?.gameID === endGameScore.gameID)
+      writeWeeklyRecord3D({
+        ...record,
+        result: {
+          score: endGameScore.score,
+          winner: !!endGameScore.winner,
+          fate: String(endGameScore.what || "").replace(/<[^>]*>/g, ""),
+          level: endGameScore.level,
+        },
+      });
+  }
   if (!ROOM_SESSION_ON) {
     ending3D = endingView3D(endGameScore);
+    // A practice run shows its recap but is never recorded, like the
+    // engine's DIED_RETRIED_GOTW games. Rooms never run a weekly challenge.
+    if (weeklyRun3D?.practice) return Promise.resolve();
     return originalWriteScore3D(endGameScore);
   }
   // Let died() finish with its own hero before switching to this browser's.
