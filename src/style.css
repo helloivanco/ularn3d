@@ -590,6 +590,24 @@ button.primary:not(.button) {
 .native-buttons br {
   width: 100%;
 }
+/* Aiming a spell or opening a door: the eight ways out, laid out like the map. */
+.direction-pick {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  gap: 5px;
+  margin-top: 4px;
+}
+.native-buttons[hidden],
+.direction-pick[hidden] {
+  display: none;
+}
+.direction-pick button {
+  height: 36px;
+  background: #193137;
+  border-color: #8aa99e40;
+  font-size: 17px;
+  color: #dbc596;
+}
 #CONTEXT:empty {
   display: none;
 }
@@ -814,6 +832,13 @@ button.primary:not(.button) {
   color: #c8d4c9;
   margin: 16px 0;
   min-height: 120px;
+}
+#LARN.picking {
+  cursor: pointer;
+}
+::highlight(terminal-pick) {
+  background-color: #d7bc8333;
+  color: #f8dc9c;
 }
 #LARN a {
   color: #d7bc83;

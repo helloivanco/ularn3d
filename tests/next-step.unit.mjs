@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nextStep, goalStep, tileActions, foeStep, TILE } from "../src/next-step.js";
+import { nextStep, goalStep, tileActions, foeStep, restStep, TILE } from "../src/next-step.js";
 
 const floor = (x, y, extra = {}) => ({ x, y, id: 0, name: "the floor", wall: false, closed: false, monster: null, stair: null, ...extra });
 const world = (level, tiles, extra = {}) => ({ level, x: 5, y: 5, maze: true, over: false, prompt: false, busy: false, deepest: level, hasCure: false, hasEye: false, tiles: [floor(5, 5), ...tiles], ...extra });
@@ -82,4 +82,43 @@ test("with the cure, every floor points home", () => {
   assert.deepEqual(goalStep(world(16, [up, shaftUp], { hasCure: true })), { label: "Carry the cure home", detail: "up to town", target: shaftUp, key: null });
   assert.equal(goalStep(world(18, [], { hasCure: true })).label, "Find the way up");
   assert.deepEqual(goalStep(world(0, [home], { hasCure: true })), { label: "Bring the cure home", detail: "your daughter is waiting", target: home, key: null });
+});
+
+test("a floor shut behind a closed door points at the door, since exploring never opens one", () => {
+  // A walled room: the hero at (5,5), floor to (7,5), a closed door at (8,5).
+  const wall = (x, y) => floor(x, y, { wall: true, name: "a wall" });
+  const room = [floor(6, 5), floor(7, 5), floor(8, 5, { closed: true, name: "a closed door" })];
+  for (let x = 4; x <= 9; x++) room.push(wall(x, 4), wall(x, 6));
+  room.push(wall(4, 5), wall(9, 5));
+  const shut = world(3, room);
+  assert.deepEqual(goalStep(shut), { label: "Walk to the door", detail: "the only way on", target: room[1], key: null });
+  assert.equal(goalStep(world(15, room)).label, "Walk to the door", "the Eye hunt is shut in too");
+  // Unknown ground in reach (no wall at 6,6) keeps exploring.
+  const leaky = world(3, room.filter((tile) => !(tile.x === 6 && tile.y === 6)));
+  assert.equal(goalStep(leaky).label, "Explore");
+  // Beside the door already, the engine's own Open button covers it.
+  assert.equal(goalStep(world(3, room, { x: 7 })).label, "Explore");
+});
+
+test("Open names the one shut door beside you; a chest or a second door keeps the classic prompt", () => {
+  const door = floor(5, 4, { closed: true, name: "a closed door" });
+  const open = [button("BUTTON_OPEN", "o", "open")];
+  assert.deepEqual(tileActions(world(2, [door]), open), [{ key: "o", label: "Open the door", detail: "to the north", target: door }]);
+  const chest = floor(6, 5, { name: "a chest" });
+  assert.deepEqual(tileActions(world(2, [door, chest]), open), [{ key: "o", label: "Open", detail: "beside you" }]);
+  const second = floor(4, 5, { closed: true, name: "a closed door" });
+  assert.equal(tileActions(world(2, [door, second]), open)[0].label, "Open");
+});
+
+test("badly hurt with nothing hostile in sight, Rest comes first", () => {
+  const rest = { key: "M", label: "Rest", detail: "until you recover" };
+  assert.deepEqual(restStep(world(3, [], { hp: 7, hpMax: 20 })), rest);
+  assert.equal(restStep(world(3, [], { hp: 11, hpMax: 20 })), null, "above half health");
+  assert.equal(restStep(world(3, [floor(9, 9, { monster: { name: "hobgoblin" } })], { hp: 4, hpMax: 20 })), null, "a creature in sight");
+  assert.equal(restStep(world(3, [floor(9, 9, { monster: { name: "lemming", harmless: true } })], { hp: 4, hpMax: 20 })).label, "Rest");
+  assert.equal(restStep(world(3, [], { hp: 4, hpMax: 20 }), { room: true }), null, "rooms share every turn");
+  const step = nextStep(world(4, [], { hp: 5, hpMax: 20 }));
+  assert.deepEqual(step.actions.map((action) => action.label), ["Rest", "Explore"]);
+  const stairs = world(4, [], { hp: 5, hpMax: 20, tiles: [floor(5, 5, { id: TILE.STAIRS_DOWN, stair: { direction: "down", blocked: false } })] });
+  assert.deepEqual(nextStep(stairs, [button("BUTTON_DOWNSTAIRS", ">", "go down")]).actions.map((action) => action.label), ["Rest", "Go down"]);
 });

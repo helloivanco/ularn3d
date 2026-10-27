@@ -80,6 +80,7 @@ test("deep journal history survives save and resume", async ({ page }) => {
       hasFirst: journal.innerText.includes("Journal history line 1"),
       hasLast: journal.innerText.includes("Journal history line 90"),
       canScroll: journal.scrollHeight > journal.clientHeight + 1,
+      atLatest: journal.scrollHeight - journal.scrollTop - journal.clientHeight <= 24,
       logCap: LOG_JOURNAL_CAP,
     };
   });
@@ -90,4 +91,5 @@ test("deep journal history survives save and resume", async ({ page }) => {
   expect(restored.hasFirst).toBe(true);
   expect(restored.hasLast).toBe(true);
   expect(restored.canScroll).toBe(true);
+  expect(restored.atLatest, "a resumed journal opens on its latest line, not its oldest").toBe(true);
 });

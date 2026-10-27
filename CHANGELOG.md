@@ -4,6 +4,19 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.7.1 — Fewer dead ends
+
+- When the only way on is a closed door, the next step walks you to it instead of telling you to explore. Exploring still never opens doors for you, since a door can shock or weaken whoever opens it
+- Beside a single closed door, the next step reads "Open the door" with its direction, and one click opens it
+- Opening a door or aiming a spell offers eight direction buttons instead of unrelated pack commands. The spell list is titled Cast a spell
+- Badly hurt with nothing hostile in sight, the next step offers Rest, which waits until you recover and wakes you if a creature appears. It is the classic M command, now in the Field Guide too
+- In stores, the college and the trading post, point at a listed choice to light it and click to choose it
+- Every item in your pack shows its picture, including your starting gear, a continued expedition and anything you buy
+- Continuing an expedition opens the journal at the latest entry instead of the oldest
+- Town destinations use the names on the building signs, and arrow keys move your hero again right after you pick one
+- Settings checkboxes sit beside their labels
+- Co-op scores from runs that use the pack menu verify again once the score service is updated. The classic rules are unchanged
+
 ## 1.7.0 — Lantern-lit caves and a pack at hand
 
 - Click any item in your pack to use it. A small menu offers what it can do: drink, read, eat, wear, wield or drop. Arrow keys move through the menu and each choice's own key picks it

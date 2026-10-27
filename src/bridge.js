@@ -910,7 +910,8 @@ window.ularn = {
   // Which kind of answer the open prompt wants, so a controller can give it.
   promptKind() {
     if (!blocking_callback) return null;
-    return blocking_callback === getdirectioninput ? "direction" : "choice";
+    if (blocking_callback === getdirectioninput) return "direction";
+    return blocking_callback === castCallback ? "spell" : "choice";
   },
   // Read-only species list for the bestiary; templates are never touched.
   species() {

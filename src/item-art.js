@@ -322,35 +322,46 @@ function cureGlowMaterial() {
   return cureGlow;
 }
 
+// Loads item art once per path. Callers waiting on art still in flight wait on
+// that texture, and run when it has loaded and been stripped.
+function loadArt(path, onLoad) {
+  if (textures.has(path)) {
+    textures.get(path).userData.waiting?.add(onLoad);
+    return;
+  }
+  const waiting = new Set([onLoad]);
+  const texture = loader.load(path, (loaded) => {
+    stripLoadedTexture(loaded);
+    loaded.userData.waiting = null;
+    waiting.forEach((callback) => callback());
+  });
+  texture.userData.waiting = waiting;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // The 256 px illustrations are drawn at roughly 30–90 px. Trilinear mips
+  // keep them clean while minified; nearest sampling shimmered and stair-stepped.
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 2;
+  textures.set(path, texture);
+  materials.set(
+    path,
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      color: spriteTint(path),
+      transparent: true,
+      alphaTest: 0.2,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    }),
+  );
+}
+
 export function itemSprite(tile, invalidate = () => {}) {
   const known = tile?.known !== false;
   const path = itemArtPath(tile?.id, tile?.arg ?? 0, known);
   if (!path) return null;
-  if (!textures.has(path)) {
-    const texture = loader.load(path, (loaded) => {
-      stripLoadedTexture(loaded);
-      invalidate();
-    });
-    texture.colorSpace = THREE.SRGBColorSpace;
-    // The 256 px illustrations are drawn at roughly 30–90 px. Trilinear mips
-    // keep them clean while minified; nearest sampling shimmered and stair-stepped.
-    texture.magFilter = THREE.LinearFilter;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.generateMipmaps = true;
-    texture.anisotropy = 2;
-    textures.set(path, texture);
-    materials.set(
-      path,
-      new THREE.MeshBasicMaterial({
-        map: texture,
-        color: spriteTint(path),
-        transparent: true,
-        alphaTest: 0.2,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
-    );
-  }
+  loadArt(path, invalidate);
   const group = new THREE.Group();
   const artwork = new THREE.Mesh(plane, materials.get(path));
   const width = 0.72;
@@ -385,12 +396,15 @@ export function faceItem(group, camera) {
   if (Math.abs(side) > 0.05) artwork.scale.x = (side < 0 ? -1 : 1) * group.userData.artWidth;
 }
 
-// The already-stripped canvas of loaded floor art, for HUD flyers and icons.
-// Null until the floor sprite has loaded once; nothing is fetched here.
-export function itemArtImage(id, arg = 0, known = true) {
+// The already-stripped canvas of loaded item art, for HUD flyers and icons.
+// Null until the art has loaded. With onReady, missing art is fetched and
+// onReady runs once it arrives.
+export function itemArtImage(id, arg = 0, known = true, onReady = null) {
   const path = itemArtPath(id, arg, known);
   const image = path && textures.get(path)?.image;
-  return image && (image.getContext || image.complete) ? image : null;
+  if (image && (image.getContext || image.complete)) return image;
+  if (path && onReady) loadArt(path, onReady);
+  return null;
 }
 
 export function itemArtMetrics() {
