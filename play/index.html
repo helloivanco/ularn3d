@@ -373,6 +373,17 @@
         </div>
         <div id="ACTIONS" class="native-buttons"></div>
         <div id="KEYBOARD" class="native-buttons"></div>
+        <div id="direction-pick" class="direction-pick" role="group" aria-label="Choose a direction" hidden>
+          <button data-key="y" aria-label="Northwest">↖</button
+          ><button data-key="k" aria-label="North">↑</button
+          ><button data-key="u" aria-label="Northeast">↗</button
+          ><button data-key="h" aria-label="West">←</button
+          ><span aria-hidden="true"></span
+          ><button data-key="l" aria-label="East">→</button
+          ><button data-key="b" aria-label="Southwest">↙</button
+          ><button data-key="j" aria-label="South">↓</button
+          ><button data-key="n" aria-label="Southeast">↘</button>
+        </div>
       </div>
       <section
         id="engine-modal"
@@ -503,7 +514,8 @@
           <section>
             <h3>Survive</h3>
             <p>
-              Wait with <kbd>.</kbd> to recover slowly. Your expedition saves
+              Wait a turn with <kbd>.</kbd>, or rest with <kbd>M</kbd> until
+              you recover; a creature in sight wakes you. Your expedition saves
               automatically between actions. Death ends the expedition.
               Reloading restores your last saved turn, not a new life.
             </p>

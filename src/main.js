@@ -15,6 +15,7 @@ import { itemArtImage } from "./item-art.js";
 import { audioSettings, musicRegion } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
+import { LANDMARK_NAMES } from "./models.js";
 import { HeldMovement, movementKey, findRoute, isHostile, keyOffset, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
 import { GameMap } from "./map.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
@@ -24,6 +25,7 @@ import { mountOnlineUi } from "./online/ui.js";
 import { tilesInFog } from "./online/spectator.js";
 import { auraControl } from "./cooperation-aura.js";
 import { nextStep } from "./next-step.js";
+import { pointedChoice } from "./terminal-pick.js";
 import { mountGamepad } from "./gamepad.js";
 mountIcons();
 const onlineUi = mountOnlineUi();
@@ -389,17 +391,20 @@ function updateInventoryAndEffects() {
       key.textContent = item.key;
       const name = document.createElement("span");
       name.textContent = item.name;
-      row.append(key);
-      // Items seen on the floor carry that same (background-stripped) artwork.
-      const art = itemArtImage(item.id, item.arg ?? 0, item.known !== false);
-      if (art) {
+      row.append(key, name);
+      // Pack items carry their floor (background-stripped) artwork. Art that
+      // has not loaded yet, such as starting gear or a continued pack, is
+      // fetched and drawn in when it arrives.
+      const paintArt = (art) => {
+        if (!art || row.querySelector(".item-art")) return;
         const image = document.createElement("canvas");
         image.className = "item-art"; image.width = image.height = 36;
         image.getContext("2d").drawImage(art, 0, 0, 36, 36);
         row.classList.add("with-art");
-        row.append(image);
-      }
-      row.append(name);
+        key.after(image);
+      };
+      paintArt(itemArtImage(item.id, item.arg ?? 0, item.known !== false, () =>
+        paintArt(itemArtImage(item.id, item.arg ?? 0, item.known !== false))));
       if (item.equipped?.length) {
         row.classList.add("equipped");
         const tag = document.createElement("small");
@@ -714,6 +719,12 @@ $("start-form").addEventListener("submit", (e) => {
 $("continue").addEventListener("click", () => start(true));
 $("weekly-start").addEventListener("click", () => start(!!weekly.saved, true));
 let townOptions = "";
+// Town destinations read like the signs over their doors ("DND Store", "Bank of Ularn").
+const landmarkName = (tile) => {
+  const sign = LANDMARK_NAMES[tile.id];
+  if (!sign) return tile.name.replace(/^the /, "");
+  return sign.toLowerCase().replace(/\b(?!of\b)\w/g, (letter) => letter.toUpperCase()).replace(/^Dnd\b/, "DND");
+};
 let journalSynced = 0;
 let journalLogRev = -1;
 /** Hide terminal chrome that classic keys cannot satisfy after death. */
@@ -745,6 +756,24 @@ const syncTerminalEndActions = (state) => {
 };
 const journalNearBottom = (el) =>
   el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+// Whether the reader is following the latest lines. A hidden journal (the HUD
+// before Continue shows it) cannot scroll, so lines that arrive then are owed
+// a scroll, paid before the next measure; otherwise a restored log would open
+// at its oldest line and stop following.
+let journalFollowing = true, journalOwed = false;
+const pinJournal = (el) => {
+  el.scrollTop = el.scrollHeight;
+  journalOwed = !el.clientHeight;
+};
+const readJournalPlace = (el) => {
+  if (!el.clientHeight) return;
+  if (journalOwed && journalFollowing) pinJournal(el);
+  journalFollowing = journalNearBottom(el);
+};
+$("journal-lines").addEventListener("scroll", (event) => readJournalPlace(event.target));
+new ResizeObserver(([entry]) => {
+  if (journalFollowing) pinJournal(entry.target);
+}).observe($("journal-lines"));
 let journalRaw = null;
 const syncJournal = (rawLog, logRev = null) => {
   // The snapshot reuses its log array until a line changes. Most steps add no
@@ -753,7 +782,7 @@ const syncJournal = (rawLog, logRev = null) => {
   journalRaw = rawLog;
   const lines = rawLog.filter((line) => String(line).trim());
   const el = $("journal-lines");
-  const stickToBottom = journalNearBottom(el);
+  readJournalPlace(el);
   // Length shrink OR soft-cap rotation (same length, new logRev) → full rebuild.
   if (
     lines.length < journalSynced ||
@@ -785,7 +814,7 @@ const syncJournal = (rawLog, logRev = null) => {
     el.appendChild(extra);
     journalSynced = lines.length;
   }
-  if (stickToBottom) el.scrollTop = el.scrollHeight;
+  if (journalFollowing) pinJournal(el);
 };
 function update() {
   const perfStart = ularnPerf.enabled ? performance.now() : 0;
@@ -1004,8 +1033,15 @@ function update() {
   syncTerminalEndActions(state);
   updateInventoryAndEffects();
   syncJournal(state.log, state.logRev);
+  // While the engine asks "In what direction?" its own row still lists the pack
+  // commands, so offer the eight directions in their place.
+  const promptKind = state.prompt && state.maze && !state.over ? engine.promptKind?.() : null;
+  const aiming = promptKind === "direction";
+  $("direction-pick").hidden = !aiming;
+  $("ACTIONS").hidden = $("KEYBOARD").hidden = aiming;
+  $("interaction-title").textContent = aiming ? "CHOOSE A DIRECTION" : promptKind === "spell" ? "CAST A SPELL" : "CHOOSE AN ACTION";
   const hasActions =
-    $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
+    aiming || $("ACTIONS").children.length > 0 || $("KEYBOARD").children.length > 0;
   $("interaction").hidden =
     !hasActions || (state.roomBlocked && !state.over) || (!state.prompt && state.maze && !state.over);
   // Keep native command buttons inside the scrollable game panel.
@@ -1037,7 +1073,7 @@ function update() {
       $("destination").replaceChildren(
         new Option("Choose a destination…", ""),
         ...landmarks.map(
-          (t) => new Option(t.name.replace(/^the /, ""), `${t.x},${t.y}`),
+          (t) => new Option(landmarkName(t), `${t.x},${t.y}`),
         ),
       );
     }
@@ -1131,7 +1167,9 @@ function syncNextStep() {
 function runStep(index = 0) {
   const action = stepActions[index];
   if (!action || !state) return false;
-  if (action.key) command(action.key);
+  // A shut door beside the hero opens toward it, without asking which way.
+  if (action.target?.closed) travel(action.target);
+  else if (action.key) command(action.key);
   else if (action.target) travel(action.target);
   else return false;
   return true;
@@ -1590,8 +1628,34 @@ document.addEventListener("visibilitychange", () => {
 $("destination").addEventListener("change", (event) => {
   const [x, y] = event.target.value.split(",").map(Number);
   const t = state?.tiles.find((t) => t.x === x && t.y === y);
-  if (t) travel(t);
   event.target.value = "";
+  // Hand the keys back to the hero; a focused list would take the next arrow press.
+  event.target.blur();
+  if (t) travel(t);
+});
+
+// Stores, the bank, the college and the trading post list choices as "a) item".
+// Pointing at one lights it, and clicking presses its letter.
+const terminalText = $("LARN");
+const terminalPick = typeof Highlight === "function" && CSS.highlights ? new Highlight() : null;
+if (terminalPick) CSS.highlights.set("terminal-pick", terminalPick);
+const pickAt = (event) => (state && !state.over ? pointedChoice(terminalText, event.clientX, event.clientY) : null);
+terminalText.addEventListener("pointermove", (event) => {
+  const choice = pickAt(event);
+  terminalText.classList.toggle("picking", !!choice);
+  terminalPick?.clear();
+  if (choice) terminalPick?.add(choice.range);
+});
+terminalText.addEventListener("pointerleave", () => {
+  terminalText.classList.remove("picking");
+  terminalPick?.clear();
+});
+terminalText.addEventListener("click", (event) => {
+  if (getSelection()?.toString()) return; // Selecting text to read or copy, not choosing.
+  const choice = pickAt(event);
+  if (!choice) return;
+  terminalPick?.clear();
+  command(choice.key);
 });
 
 $("graphics-quality").addEventListener("change", (event) =>

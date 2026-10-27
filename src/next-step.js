@@ -11,6 +11,7 @@ const CAVE_BOTTOM = 15, VOLCANO_TOP = 16, VOLCANO_BOTTOM = 20;
 const GENERIC = new Set(["BUTTON_DROP", "BUTTON_INVENTORY_FULL", "BUTTON_PACKWEIGHT", "BUTTON_TELEPORT"]);
 
 export const depthName = (level) => !level ? "town" : level > CAVE_BOTTOM ? `Volcano ${level - CAVE_BOTTOM}` : `Depth ${level}`;
+const COMPASS = { k: "north", u: "northeast", l: "east", n: "southeast", j: "south", b: "southwest", h: "west", y: "northwest" };
 const sentence = (text) => { const value = String(text || "").trim(); return value ? value[0].toUpperCase() + value.slice(1) : ""; };
 const place = (name) => String(name || "").replace(/^(a|an|the)\s+/i, "").replace(/\s*\(dead end\)$/, "");
 const tileAt = (state, x, y) => state.tiles.find((tile) => tile.x === x && tile.y === y) || null;
@@ -44,8 +45,15 @@ function describe(button, state, under) {
       return { key, label: "Climb up", detail: level === VOLCANO_TOP ? "to town" : name };
     case "BUTTON_TAKE":
       return { key, label: "Take", detail: name };
-    case "BUTTON_OPEN":
+    case "BUTTON_OPEN": {
+      // One shut door beside you and no chest: the step opens it, no direction asked.
+      const near = DIRECTIONS.map(([dx, dy, step]) => ({ step, tile: tileAt(state, state.x + dx, state.y + dy) }));
+      const doors = near.filter(({ tile }) => tile?.closed);
+      const chest = [under, ...near.map(({ tile }) => tile)].some((tile) => /\bchest\b/i.test(tile?.name || ""));
+      if (doors.length === 1 && !chest)
+        return { key, label: "Open the door", detail: `to the ${COMPASS[doors[0].step]}`, target: doors[0].tile };
       return { key, label: "Open", detail: "beside you" };
+    }
     case "BUTTON_CLOSE":
       return { key, label: "Close the door", detail: "" };
     case "BUTTON_IDTRAPS":
@@ -59,6 +67,36 @@ const known = (state, test) => state.tiles.find(test) || null;
 const stairs = (direction) => (tile) => tile.stair?.direction === direction && !tile.stair.blocked;
 
 /**
+ * Auto explore never opens doors (opening one can shock or weaken you), so a
+ * floor whose only way on is a closed door strands it. When no ground you can
+ * walk to borders the unknown but a closed door does, this is the ground
+ * beside the nearest such door; otherwise null.
+ */
+export function doorAhead(state) {
+  const tiles = new Map(state.tiles.map((tile) => [`${tile.x},${tile.y}`, tile]));
+  const open = (tile) => tile && !tile.wall && !tile.closed && !tile.hazard;
+  const outside = (x, y) => x < 0 || y < 0 || (state.width && x >= state.width) || (state.height && y >= state.height);
+  const queue = [tiles.get(`${state.x},${state.y}`) ?? { x: state.x, y: state.y }], seen = new Set([`${state.x},${state.y}`]);
+  let beside = null;
+  for (let i = 0; i < queue.length; i++) {
+    const { x, y } = queue[i];
+    for (const [dx, dy] of DIRECTIONS) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (outside(nx, ny) || seen.has(key)) continue;
+      const tile = tiles.get(key);
+      if (!tile) return null; // Unknown ground in reach: exploring still helps.
+      // Doors are walked through square on, so wait for a straight neighbour.
+      // Beside the hero already, the engine's own Open button says so.
+      if (tile.closed && !beside && i > 0 && (dx === 0 || dy === 0)) beside = queue[i];
+      if (!open(tile)) continue;
+      seen.add(key);
+      queue.push(tile);
+    }
+  }
+  return beside;
+}
+
+/**
  * Where the expedition goes next when the tile offers nothing. `travelKeys`
  * says whether > and < walk to known stairs (the engine's own preference);
  * rooms share every step, so they only travel by clicking.
@@ -66,7 +104,10 @@ const stairs = (direction) => (tile) => tile.stair?.direction === direction && !
 export function goalStep(state, { room = false, travelKeys = true, explore = true } = {}) {
   const level = state.level, walk = !room && travelKeys, scout = !room && explore ? "X" : null;
   const go = (label, detail, target, key = null) => ({ label, detail, target, key: target && key && walk ? key : null });
-  const search = (label, detail) => ({ label, detail, target: null, key: scout });
+  const search = (label, detail) => {
+    const door = doorAhead(state);
+    return door ? go("Walk to the door", "the only way on", door) : { label, detail, target: null, key: scout };
+  };
   if (state.hasCure) {
     if (level === 0) return go("Bring the cure home", "your daughter is waiting", known(state, (tile) => tile.id === TILE.HOME));
     const exit = level === 1 ? known(state, (tile) => tile.id === TILE.HOME_EXIT)
@@ -102,13 +143,25 @@ export function foeStep(state) {
   return foe ? { key: DIRECTIONS[best][2], label: "Attack", detail: place(foe.monster.name) } : null;
 }
 
+/**
+ * Badly hurt with nothing hostile in sight: the engine's own rest (M) waits
+ * until you recover, and wakes you if a creature appears or strikes. Rooms
+ * share every turn, so they never suggest it.
+ */
+export function restStep(state, { room = false } = {}) {
+  if (room || !state.hpMax || state.hp > state.hpMax / 2) return null;
+  if (state.tiles.some(isHostile)) return null;
+  return { key: "M", label: "Rest", detail: "until you recover" };
+}
+
 /** The whole prompt, or null while a prompt, menu or ending owns the screen. */
 export function nextStep(state, buttons = [], options = {}) {
   if (!state || !state.maze || state.over || state.prompt || state.busy) return null;
   const foe = foeStep(state);
   if (foe) return { kind: "foe", actions: [foe] };
+  const rest = restStep(state, options);
   const actions = tileActions(state, buttons);
-  if (actions.length) return { kind: "tile", actions };
+  if (actions.length) return { kind: "tile", actions: rest ? [rest, actions[0]] : actions };
   const goal = goalStep(state, options);
-  return { kind: "goal", actions: [goal] };
+  return { kind: "goal", actions: rest ? [rest, goal] : [goal] };
 }

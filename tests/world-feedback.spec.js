@@ -129,9 +129,10 @@ test("notable artifacts use unique camera-facing art that mirrors with orbit", a
     expect(byId[id].art).toBe(paths[id]);
   }
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
-  // Floor props plus the wielded-weapon art overlay share the item texture cache.
+  // Floor props share the item texture cache with the pack's icons: the
+  // starting leather armor, and the dagger that is also the wielded overlay.
   expect(metrics.itemTextures).toBeGreaterThanOrEqual(15);
-  expect(metrics.itemTextures).toBeLessThanOrEqual(16);
+  expect(metrics.itemTextures).toBeLessThanOrEqual(17);
   const before = await page.evaluate(() => ularnGraphics.props().find((p) => p.id === 26).mirrored);
   await page.locator("#rotate-left").click();
   await page.locator("#rotate-left").click();

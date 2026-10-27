@@ -87,7 +87,7 @@ button.secondary:hover {
 }
 
 .field,
-input:not([type="button"]),
+input:not([type="button"], [type="checkbox"], [type="radio"]),
 select {
   display: block;
   box-sizing: border-box;
@@ -103,13 +103,13 @@ select {
 }
 
 .field:hover,
-input:not([type="button"]):hover,
+input:not([type="button"], [type="checkbox"], [type="radio"]):hover,
 select:hover {
   border-color: #d7bc8377;
 }
 
 .field:focus-visible,
-input:not([type="button"]):focus-visible,
+input:not([type="button"], [type="checkbox"], [type="radio"]):focus-visible,
 select:focus-visible {
   border-color: #d7bc83;
 }
