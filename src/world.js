@@ -6,11 +6,10 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { caveGlowMaterial, caveGlowCenter, caveTorches, caveTorchColor, releaseCaveGlowResources, VignetteShader, CAVE_HERO_LIGHT, CAVE_TORCH } from "./cave-glow.js";
+import { VignetteShader, CAVE_LIGHT, OCCLUDER_LAYER, caveEnvironmentScene } from "./cave-light.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, reliefMap, stoneTint, releaseMaterialResources } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, glowMap, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { createCreatureModel } from "./creature-models.js";
@@ -25,7 +24,7 @@ import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } 
 import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
 import { heroBody, creatureBody, CharacterRig } from "./hero-skin.js";
 import { SetDressing, chestModel } from "./set-dressing.js";
-import { TorchLighting, stabilizeShadow } from "./lighting.js";
+import { TorchLighting, stabilizeShadow, TOWN_LIGHT, townSkyScene } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
@@ -94,6 +93,8 @@ const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
 /* The hero leaves screen center only to stay this far (CSS px) clear of a side panel. */
 const FRAME_CLEARANCE = 160;
+/** Town glow: half-res and faint, so lamps and windows soften without blooming the grass. */
+const TOWN_BLOOM = Object.freeze({ strength: 0.1, radius: 0.4, threshold: 1.45 });
 /*
  * Auto spends headroom on resolution, from below native up to the screen's
  * own density (Retina included), never above 2×. Tiers above the screen's
@@ -435,6 +436,7 @@ export class World {
     );
     for (const mesh of [this.walls, this.caps]) {
       mesh.count = 0;
+      mesh.layers.enable(OCCLUDER_LAYER);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -451,6 +453,9 @@ export class World {
     this.playerLight = new THREE.PointLight(0xffc172, 6, 8, 2);
     this.playerLight.visible = false;
     this.playerLight.intensity = 0;
+    this.playerLight.shadow.mapSize.setScalar(CAVE_LIGHT.lantern.shadow);
+    Object.assign(this.playerLight.shadow, { bias: -0.0015, normalBias: 0.02 });
+    this.playerLight.shadow.camera.near = 0.1;
     this.scene.add(this.playerLight);
     this.wallHeightAt = [];
     this.wallLayout = 0;
@@ -468,9 +473,20 @@ export class World {
     this.ambientRats = new AmbientRats(this.scene);
     this.torchLights = Array.from({ length: 6 }, () => {
       const l = new THREE.PointLight(0xffa64c, 0, 6, 2);
+      // A torch's shadow holds only walls and is redrawn when the torch moves
+      // (renderTorchShadows). Lights join the occluder layer to take part in that pass.
+      l.shadow.mapSize.setScalar(CAVE_LIGHT.torch.shadow);
+      Object.assign(l.shadow, { bias: -0.003, normalBias: 0.03, autoUpdate: false });
+      l.shadow.camera.near = 0.1;
+      l.layers.enable(OCCLUDER_LAYER);
       this.scene.add(l);
       return l;
     });
+    this.playerLight.layers.enable(OCCLUDER_LAYER);
+    this.torchMoves = 0;
+    this.lanternShadowAt = new THREE.Vector3();
+    this.torchShadowsDirty = false;
+    this.torchShadowTarget = null;
     this.lighting = new TorchLighting(this.torchLights);
     this.marker = new THREE.Group();
     ring(this.marker, 0xf0d491, 0.46, 0.018);
@@ -638,6 +654,7 @@ export class World {
     });
     listen(canvas, "webglcontextrestored", () => {
       this.environment = null;
+      this.caveEnvironment = null;
       this.applyGpuQuality();
       this.lost = false;
       this.resize();
@@ -747,7 +764,8 @@ export class World {
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
         torchReassignments:this.lighting.reassignments,
         antialiasing:this.cinematicRendering() ? "SMAA" : this.msaa ? "MSAA" : "none",
-        caveGlow: !!this.floor.material?.userData?.caveGlow, caveRelief: !!this.floor.material?.userData?.caveRelief, vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
+        caveLit: !!this.floor.material?.userData?.caveLit, caveRelief: !!(this.floor.material?.userData?.caveLit && this.floor.material.normalMap), vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
+        lanternShadow: !!(this.playerLight.visible && this.playerLight.castShadow), torchShadows: this.torchLights.filter((l) => l.visible && l.castShadow).length,
         wallRelief:!!this.walls.geometry.getAttribute("color"),
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
@@ -1091,13 +1109,17 @@ export class World {
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
     releaseCreatureResources(clearArtCache);
-    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials(); releaseCaveGlowResources(clearArtCache);
+    releaseModelResources(); releaseMaterialResources(); releaseCompactMaterials();
     releaseMonsterArtResources(clearArtCache);
     releaseItemArtResources(clearArtCache);
     this.sun.shadow.dispose();
     this.disposeComposer();
     this.environment?.dispose();
     this.environment = null;
+    this.caveEnvironment?.dispose();
+    this.caveEnvironment = null;
+    this.torchShadowTarget?.dispose();
+    this.torchShadowTarget = null;
     this.scene.environment = null;
   }
   bindHero() {
@@ -1454,12 +1476,19 @@ export class World {
     this.heroAnimation?.bind(this.player);
     // Unique 3D grip meshes only — no tiny floor-art plate stuck on the blade.
   }
+  /** The town's reflections and fill: the same sky the sun shines from. */
   buildEnvironment() {
-    const pmrem = new THREE.PMREMGenerator(this.renderer),
-      environment = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(this.renderer), sky = townSkyScene();
     this.environment?.dispose();
-    this.environment = pmrem.fromScene(environment, 0.04);
-    environment.dispose();
+    this.environment = pmrem.fromScene(sky, 0.02);
+    sky.traverse((object) => { object.geometry?.dispose(); object.material?.dispose(); });
+    pmrem.dispose();
+  }
+  buildCaveEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(this.renderer), cave = caveEnvironmentScene();
+    this.caveEnvironment?.dispose();
+    this.caveEnvironment = pmrem.fromScene(cave, 0.04);
+    cave.traverse((object) => { object.geometry?.dispose(); object.material?.dispose(); });
     pmrem.dispose();
   }
   disposeComposer() {
@@ -1482,9 +1511,9 @@ export class World {
     // Half-res + weaker bloom: full-size UnrealBloomPass lags typical GPUs.
     this.bloom = new UnrealBloomPass(
       new THREE.Vector2(Math.max(1, width * 0.5), Math.max(1, height * 0.5)),
-      0.1,
-      0.4,
-      1.45,
+      TOWN_BLOOM.strength,
+      TOWN_BLOOM.radius,
+      TOWN_BLOOM.threshold,
     );
     this.ao = new SSAOPass(this.scene, this.camera, width / 2, height / 2);
     // Contact shading at tile scale (world units), not an 8-tile smear.
@@ -1502,17 +1531,38 @@ export class World {
     const cinematic = this.cinematicRendering();
     const town = !this.state || this.state.level === 0;
     const volcano = this.state?.level > 15;
+    const lit = cinematic && !town;
+    // The studio reflection suits daylight. Set per floor, not only on a quality
+    // change, or a cave entered from town kept lighting its stone like a studio.
+    if (cinematic && town) {
+      if (!this.environment) this.buildEnvironment();
+      this.scene.environment = this.environment.texture;
+      this.scene.environmentIntensity = TOWN_LIGHT.sky.intensity;
+    } else if (lit) {
+      if (!this.caveEnvironment) this.buildCaveEnvironment();
+      this.scene.environment = this.caveEnvironment.texture;
+      this.scene.environmentIntensity = CAVE_LIGHT.reflection;
+    } else {
+      this.scene.environment = null;
+      this.scene.environmentIntensity = 0;
+    }
+    // Lit Cinematic caves take a dim, cool bounce; everywhere else the usual sky.
+    const sky = lit ? CAVE_LIGHT.bounce : cinematic && town ? TOWN_LIGHT.hemisphere : { sky: 0xc4e4eb, ground: 0x32422c };
+    this.ambient.color.setHex(sky.sky);
+    this.ambient.groundColor.setHex(sky.ground);
     if (town) {
-      this.ambient.intensity = 1.75;
-      this.sun.intensity = 4.15;
-      this.fill.intensity = 1.25;
+      // Cinematic: a warm low sun over a sky that fills the shade. Balanced keeps its even daylight.
+      this.ambient.intensity = cinematic ? TOWN_LIGHT.hemisphere.intensity : 1.75;
+      this.sun.intensity = cinematic ? TOWN_LIGHT.sun.intensity : 4.15;
+      this.sun.color.setHex(cinematic ? TOWN_LIGHT.sun.color : 0xffd499);
+      this.fill.intensity = cinematic ? TOWN_LIGHT.fill : 1.25;
       this.sun.visible = true;
       this.fill.visible = true;
       if (this.scene.fog) this.scene.fog.density = 0.02;
     } else {
       /* Constant dungeon light: ambient only, no directional/point, no fog dimming.
-         Cinematic lowers the ambient and lets the hero's light carry nearby detail. */
-      this.ambient.intensity = cinematic ? 1.35 : 1.7;
+         Cinematic caves are lit by the lantern and torches over a dim bounce. */
+      this.ambient.intensity = cinematic ? CAVE_LIGHT.bounce.intensity : 1.7;
       this.sun.intensity = 0;
       this.fill.intensity = 0;
       this.sun.visible = false;
@@ -1521,6 +1571,15 @@ export class World {
     }
     // Embers reach the bloom threshold only in Cinematic.
     this.embers?.material.color.setHex(EMBER_COLOR).multiplyScalar(cinematic ? 6 : 1);
+    if (this.bloom) {
+      const glow = lit ? CAVE_LIGHT.bloom : TOWN_BLOOM;
+      Object.assign(this.bloom, { strength: glow.strength, radius: glow.radius, threshold: glow.threshold });
+    }
+    if (cinematic) this.renderer.toneMappingExposure = lit ? CAVE_LIGHT.exposure : 1.15;
+    // The lantern's shadow follows every step; torch shadows hold only walls.
+    this.playerLight.castShadow = lit;
+    this.torchLights.forEach((light) => { light.castShadow = lit; });
+    this.torchShadowsDirty = lit;
     if (this.state) {
       this.fill.color.set(
         volcano ? 0xb54c35 : town ? (cinematic ? 0xd7b07a : 0x78b9cf) : 0x8eb8c9,
@@ -1565,15 +1624,6 @@ export class World {
     } else this.disposeComposer();
     this.torchBudget = 0;
     this.disablePointLights();
-    const town = !this.state || this.state.level === 0;
-    if (cinematic && town) {
-      if (!this.environment) this.buildEnvironment();
-      this.scene.environment = this.environment.texture;
-      this.scene.environmentIntensity = 0.24;
-    } else {
-      this.scene.environment = null;
-      this.scene.environmentIntensity = 0;
-    }
     // Walls and floors filled the shadow pass on every walk frame. Balanced keeps
     // shadows off entirely; cinematic restores contact shadows.
     this.walls.castShadow = cinematic;
@@ -1613,10 +1663,13 @@ export class World {
     const turned = (material) => (scatter ? tileScatter(material) : material);
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
-    // Cinematic adds a warm pool around the hero on the same unlit, mapped material.
+    // Cinematic caves are lit: the same maps on PBR stone, with lava giving off light.
     if (dungeon) {
-      const flat = turned(surfaceBasic(kind, color, extra));
-      return this.cinematicRendering() ? caveGlowMaterial(flat, reliefMap(kind)) : flat;
+      if (!this.cinematicRendering()) return turned(surfaceBasic(kind, color, extra));
+      const hot = kind === "basalt" && glowMap(kind);
+      const lit = turned(surface(kind, color, hot ? { ...extra, emissiveMap: hot, emissive: CAVE_LIGHT.lava.color, emissiveIntensity: CAVE_LIGHT.lava.intensity } : extra));
+      lit.userData.caveLit = true;
+      return lit;
     }
     return turned(this.cinematicRendering()
       ? surface(kind, color, extra)
@@ -1656,6 +1709,38 @@ export class World {
     else this.scratchColor.setRGB(base, base, base * 0.98);
     return this.scratchColor;
   }
+  /** Torch shadows hold only walls: redraw them when a torch moves or the walls change. */
+  refreshTorchShadows() {
+    if (!this.cinematicRendering() || !this.state?.level) return;
+    this.torchShadowsDirty = true;
+    this.invalidate();
+  }
+  /**
+   * The shadow pass tests layers against the viewing camera, not each light's,
+   * so torch shadows get a pass of their own: the camera sees only walls, only
+   * the torch maps are marked for drawing, and the frame goes to a 1×1 target.
+   */
+  renderTorchShadows() {
+    this.torchShadowsDirty = false;
+    const camera = this.camera, mask = camera.layers.mask, lantern = this.playerLight.shadow, follows = lantern.autoUpdate;
+    // A lantern update asked for this frame still belongs to the main pass.
+    const pending = this.renderer.shadowMap.needsUpdate;
+    this.torchShadowTarget ??= new THREE.WebGLRenderTarget(1, 1);
+    const target = this.renderer.getRenderTarget();
+    lantern.autoUpdate = false;
+    this.torchLights.forEach((light) => { light.shadow.needsUpdate = light.visible && light.castShadow; });
+    camera.layers.set(OCCLUDER_LAYER);
+    this.renderer.shadowMap.needsUpdate = true;
+    try {
+      this.renderer.setRenderTarget(this.torchShadowTarget);
+      this.renderer.render(this.scene, camera);
+    } finally {
+      this.renderer.setRenderTarget(target);
+      camera.layers.mask = mask;
+      lantern.autoUpdate = follows;
+      this.renderer.shadowMap.needsUpdate = pending;
+    }
+  }
   markShadowUpdate() {
     this.renderer.shadowMap.needsUpdate = true;
     this.shadowUpdates++;
@@ -1667,13 +1752,21 @@ export class World {
     this.playerLight.visible=true;
     // A carried flame breathes a little in the caves; reduced motion holds it steady.
     const flicker = town || this.reduced ? 0 : Math.sin(this.tick * 7.3) * .035 + Math.sin(this.tick * 13.1 + 1.7) * .025;
-    this.playerLight.intensity=town ? 3.5 : CAVE_HERO_LIGHT.intensity * (1 + flicker);
-    this.playerLight.distance=town ? 8 : CAVE_HERO_LIGHT.distance;
+    const lantern = CAVE_LIGHT.lantern, torch = CAVE_LIGHT.torch;
+    this.playerLight.color.setHex(town ? 0xffc172 : lantern.color);
+    this.playerLight.intensity=town ? 3.5 : lantern.intensity * (1 + flicker);
+    this.playerLight.distance=town ? 8 : lantern.distance;
+    this.playerLight.shadow.camera.far = this.playerLight.distance;
     // Town lamps, or in caves the wall torches nearest the hero.
-    const count = town ? 4 : CAVE_TORCH.count, volcano = this.state.level > 15;
-    this.torchLights.forEach((light,index)=>{light.visible=index<count; light.color.setHex(volcano ? 0xff6a3a : 0xffa64c);});
-    caveTorchColor.fromArray(volcano ? CAVE_TORCH.color.volcano : CAVE_TORCH.color.caves);
-    this.lighting.peak = town ? 5 : CAVE_TORCH.light;
+    const count = town ? 4 : torch.count, volcano = this.state.level > 15;
+    this.torchLights.forEach((light,index)=>{
+      light.visible=index<count;
+      light.color.setHex(town ? 0xffa64c : volcano ? torch.color.volcano : torch.color.caves);
+      light.distance = town ? 6 : torch.distance;
+      light.shadow.camera.far = light.distance;
+    });
+    this.lighting.peak = town ? 5 : torch.intensity;
+    this.lighting.flicker = town ? 0.012 : torch.flicker;
     // Torch choice depends only on the hero's tile and the lamp set.
     const rev = town ? `t${this.lampRev}` : `c${this.dressing.flameRev}`;
     const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${rev}` : null;
@@ -2657,7 +2750,7 @@ export class World {
       if (layoutChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       if (layoutChanged) mesh.computeBoundingSphere();
     }
-    if (layoutChanged) this.markShadowUpdate();
+    if (layoutChanged) { this.markShadowUpdate(); this.refreshTorchShadows(); }
   }
 
   pick(e) {
@@ -2972,9 +3065,18 @@ export class World {
     const rigDt = Math.min(0.1, Math.max(0, (act - (this.rigAct ?? act)) / 1000));
     this.rigAct = act;
     if (this.playerTarget) {
-      this.playerLight.position
-        .copy(this.player.position)
-        .add(this.scratchOffset.set(0, this.state?.level ? CAVE_HERO_LIGHT.height : 1.4, 0.2));
+      if (this.state?.level) {
+        // Held out toward the camera, so the side of the hero the player sees is
+        // lit and their shadow falls away from view, whichever way the view turns.
+        const lantern = CAVE_LIGHT.lantern;
+        this.scratchOffset.subVectors(this.camera.position, this.player.position).setY(0).setLength(lantern.reach);
+        this.playerLight.position.copy(this.player.position).add(this.scratchOffset.setY(lantern.height));
+        // Turning the view swings the lantern too; its shadows follow it.
+        if (this.cinematicRendering() && this.playerLight.position.distanceToSquared(this.lanternShadowAt) > 1e-4) {
+          this.lanternShadowAt.copy(this.playerLight.position);
+          this.markShadowUpdate();
+        }
+      } else this.playerLight.position.copy(this.player.position).add(this.scratchOffset.set(0, 1.4, 0.2));
       this.heroLimbLive = this.poseHero(now, act);
       this.heroAnimation.update(act);
       this.heroLimbLive ||= this.heroAnimation.active;
@@ -3085,14 +3187,13 @@ export class World {
       const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
       this.hasMotion ||= lightsMoving;
       if (this.state.level===0) { if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget); }
-      // The stone takes the same flames and fades as the point lights.
-      else caveTorches.forEach((torch, i) => {
-        const light = this.torchLights[i];
-        torch.set(light.position.x, light.position.y, light.position.z, light.visible ? light.intensity / this.lighting.peak : 0);
-      });
+      // A torch that moved to a new flame redraws its wall shadow there.
+      else if (this.lighting.reassignments !== this.torchMoves) {
+        this.torchMoves = this.lighting.reassignments;
+        this.refreshTorchShadows();
+      }
     }
     this.dressing.update(now);
-    if (this.cinematicRendering() && this.state?.level) caveGlowCenter.copy(this.player.position);
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
     this.ambientRatsNear = this.ambientRats?.update(dt, this.camera) || false;
@@ -3108,6 +3209,7 @@ export class World {
     for (const hook of this.frameHooks) hook(this);
     this.applyPixelGrid();
     try {
+      if (this.torchShadowsDirty && this.cinematicRendering()) this.renderTorchShadows();
       if (this.composer && this.cinematicRendering()) {
         if (this.vignette) this.aimVignette();
         if (this.ao?.enabled) {

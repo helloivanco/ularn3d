@@ -486,6 +486,53 @@ a:hover {
   border-right: 0;
 }
 
+.class-list article:has(img) {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.class-list img {
+  width: 76px;
+  height: auto;
+}
+
+.callings {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.callings li {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: radial-gradient(ellipse at 50% 58%, #1d3034 0%, #10191c 72%);
+}
+
+.callings img {
+  width: 100%;
+  max-width: 132px;
+  height: auto;
+}
+
+.callings span {
+  font: normal 15px Georgia, serif;
+  color: #dfddce;
+}
+
+.callings-more {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+
 .class-list h3 {
   margin: 0 0 6px;
   font: normal 18px Georgia, serif;
@@ -794,6 +841,9 @@ kbd {
   }
   .class-list {
     grid-template-columns: 1fr;
+  }
+  .callings {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .class-list article,
   .class-list article:nth-child(2n) {

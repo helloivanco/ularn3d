@@ -1,6 +1,6 @@
 {
   "name": "ularn-3d",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "description": "Ularn — The Caves Below, an offline dungeon adventure",
@@ -8,6 +8,8 @@
   "main": "desktop/main.cjs",
   "scripts": {
     "audio:build": "node scripts/build-audio.mjs",
+    "models:rat": "node scripts/build-rat.mjs",
+    "site:capture": "node scripts/capture-site.mjs",
     "dev": "node scripts/build-engine.mjs && vite --host 0.0.0.0",
     "build": "node scripts/build-engine.mjs --production && vite build",
     "preview": "vite preview --host 0.0.0.0",

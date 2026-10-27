@@ -26,6 +26,19 @@ binary chunk.
   weapons and the hero's lantern, mounted on the rig's `handslot` bones.
 - Only the props listed in `PROPS` in `src/set-dressing.js` are written.
 
+## Wall rat
+
+The decorative rats on cave wall tops are not from a pack. `npm run models:rat`
+(`scripts/build-rat.mjs`) builds `public/models/creatures/rat.glb` from code, so it is
+reproducible and needs no download. A unit test rebuilds it and compares the bytes.
+
+- The body and head are one loft from a side and top profile. Ears, eyes, nose, paws, whiskers
+  and the tapered tail are primitives with baked vertex colours.
+- Sixteen bones: hips, spine, chest, head, ears, four legs and a five-bone tail.
+- Five looping clips, each a periodic pose sampled at 30 fps and thinned to the keys linear
+  interpolation would miss: `Idle`, `Sniff`, `Groom`, `Rear` and `Run`.
+- Two materials: `RatFur`, which each rat clones and tints, and the shared pink `RatSkin`.
+
 ## Rules
 
 - **The procedural rigs still run.** `src/hero-skin.js` draws a skinned body over the

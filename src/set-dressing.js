@@ -32,6 +32,8 @@ const SHOP = ["barrel_small", "barrel_large", "crates_stacked", "keg"];
 /* South first: the default camera looks north, so south faces are the ones in view. */
 const SIDES = [[0, 1], [1, 0], [-1, 0], [0, -1]];
 const TORCH_Y = 0.58;
+/** How far into the room a torch's light sits from the wall face. */
+const TORCH_REACH = 0.4;
 const SHADE_DEPTH = 0.4;
 
 const loader = new GLTFLoader();
@@ -360,7 +362,11 @@ export class SetDressing {
     this.glow.geometry.setAttribute("position", new THREE.Float32BufferAttribute([...flames, ...lanterns].flat(), 3));
     this.glow.geometry.computeBoundingSphere();
     this.flameShown = flames.map(() => true);
-    this.flamePoints = flames.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    // Each torch's light hangs a little out from its flame, so the wall beside
+    // it is lit without a white-hot spot on the bracket.
+    this.flamePoints = this.plan.torches.map((torch) => new THREE.Vector3(
+      torch.x + Math.sin(torch.angle) * TORCH_REACH, TORCH_Y + 0.3, torch.z + Math.cos(torch.angle) * TORCH_REACH,
+    ));
     this.flameRev = (this.flameRev || 0) + 1;
   }
   /** Lit flames, for the torch lights. `flameRev` changes whenever this list does. */

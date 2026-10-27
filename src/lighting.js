@@ -1,6 +1,12 @@
 import * as THREE from "three";
+import { Sky } from "three/addons/objects/Sky.js";
 
-const OFFSET = new THREE.Vector3(-12, 24, 8);
+/*
+ * Cinematic town sun: late afternoon from the south-west, about 35° up, so
+ * buildings and trees throw long shadows away from the camera. Balanced keeps
+ * its fixed overhead sun; only this stabilized, shadow-casting sun moves.
+ */
+const OFFSET = new THREE.Vector3(-16, 14, 12);
 const FORWARD = OFFSET.clone().normalize();
 const RIGHT = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), FORWARD).normalize();
 const UP = new THREE.Vector3().crossVectors(FORWARD, RIGHT);
@@ -19,6 +25,33 @@ export function stabilizeShadow(light, position) {
   return texel;
 }
 
+/** Cinematic town light: a warm low sun, a physical sky for fill and reflections, little else. */
+export const TOWN_LIGHT = Object.freeze({
+  sun: { color: 0xffc78c, intensity: 6.2 },
+  // The sky now fills the shade, so the old flat fill drops back.
+  hemisphere: { sky: 0x9fc4e2, ground: 0x4d5733, intensity: 0.5 },
+  fill: 0.25,
+  sky: { intensity: 0.32, turbidity: 4.5, rayleigh: 1.5, mie: 0.004 },
+});
+
+/**
+ * The sky the town's PBR surfaces see: atmospheric scattering lit from the
+ * same direction as the sun, without the sun's disc (the light itself makes
+ * the highlights). Water and glass reflect it, and shade takes its blue.
+ */
+export function townSkyScene() {
+  const scene = new THREE.Scene(), sky = new Sky(), { sky: look } = TOWN_LIGHT;
+  sky.scale.setScalar(100);
+  const uniforms = sky.material.uniforms;
+  uniforms.turbidity.value = look.turbidity;
+  uniforms.rayleigh.value = look.rayleigh;
+  uniforms.mieCoefficient.value = look.mie;
+  uniforms.sunPosition.value.copy(OFFSET).normalize();
+  uniforms.showSunDisc.value = 0;
+  scene.add(sky);
+  return scene;
+}
+
 // Slots keep their lamp identity across nearest-distance ties. A replacement
 // fades to zero before moving, then fades in at the new static source.
 export class TorchLighting {
@@ -27,6 +60,8 @@ export class TorchLighting {
     this.slots = lights.map((light) => ({ light, lamp: null, desired: null, gain: 0 }));
     // Full intensity of a lit slot. Cave torches burn lower than town lamps.
     this.peak = 5;
+    // Share of the peak a flame wavers by. Town lamps barely breathe.
+    this.flicker = 0.012;
     this.reassignments = 0;
     this.clear();
   }
@@ -67,8 +102,9 @@ export class TorchLighting {
       }
       if (slot.gain !== target || changing) moving = true;
       const phase = slot.lamp ? slot.lamp.point.x * .71 + slot.lamp.point.z * 1.13 : 0;
-      // Gentle, source-anchored warmth rather than a rapid brightness pulse.
-      slot.light.intensity = this.peak * slot.gain * (reduced ? 1 : 1 + Math.sin(time * 1.4 + phase) * .012);
+      // Source-anchored warmth: a slow swell with a quicker shiver on top, never a strobe.
+      const waver = Math.sin(time * 1.4 + phase) * .6 + Math.sin(time * 3.7 + phase * 2.3) * .28 + Math.sin(time * 8.9 + phase * .7) * .12;
+      slot.light.intensity = this.peak * slot.gain * (reduced ? 1 : 1 + waver * this.flicker);
     }
     return moving;
   }
