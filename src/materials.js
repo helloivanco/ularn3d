@@ -453,6 +453,37 @@ export function texture(kind, resolution = MAP_SIZE) {
   return map;
 }
 
+/**
+ * The parts of a surface that give off their own light: the glowing fissures
+ * and their heat haze on basalt, black everywhere else. Lit Cinematic caves
+ * use it as an emissive map, so lava still glows where no lantern reaches.
+ */
+export function glowMap(kind) {
+  const id = `${kind}!glow`;
+  if (maps.has(id)) return maps.get(id);
+  const source = texture(kind).image;
+  if (!source.getContext) return null;
+  const { width, height } = source;
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  const c = canvas.getContext("2d");
+  const image = source.getContext("2d").getImageData(0, 0, width, height), data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    // Only the molten cores of the fissures: red far above blue. Their rims
+    // and the warmed rock beside them take light rather than give it.
+    const heat = Math.max(0, Math.min(1, (data[i] - data[i + 2] - 150) / 60));
+    data[i] = data[i + 1] = data[i + 2] = Math.round(heat * 255);
+  }
+  c.putImageData(image, 0, 0);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.magFilter = THREE.LinearFilter;
+  map.minFilter = THREE.LinearMipmapLinearFilter;
+  maps.set(id, map);
+  return map;
+}
+
 /** Same canvas as texture(kind), sampled on a different phase so walls do not share the floor courses. */
 export function shiftedTexture(kind, key, ox, oy) {
   const id = `${kind}@${key}`;
@@ -518,10 +549,6 @@ function surfaceDetails(kind, resolution=MAP_SIZE) {
   }
   const result = { normalMap, roughnessMap };
   details.set(key, result); return result;
-}
-/** The tangent-space relief map painted from texture(kind), for custom shaders. */
-export function reliefMap(kind) {
-  return surfaceDetails(kind).normalMap;
 }
 export function mat(color, extra = {}) {
   const key = `${color?.isColor ? color.getHex() : color}|${Object.entries(
@@ -623,6 +650,9 @@ const TILE_SCATTER = `#include <uv_vertex>
     #endif
     #ifdef USE_ROUGHNESSMAP
       vRoughnessMapUv = tileTurn * ( tileFlip * ( vRoughnessMapUv - 0.5 ) ) + 0.5;
+    #endif
+    #ifdef USE_EMISSIVEMAP
+      vEmissiveMapUv = tileTurn * ( tileFlip * ( vEmissiveMapUv - 0.5 ) ) + 0.5;
     #endif
   }
 #endif`;

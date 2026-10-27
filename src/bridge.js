@@ -296,6 +296,19 @@ mmove = function (sx, sy, dx, dy) {
   return originalMonsterMove3D(sx, sy, dx, dy);
 };
 
+/** Commands the pinned inventory offers for a pack item, the main use first. Read-only. */
+function packUses3D(item) {
+  const uses = [];
+  const equipped = player.WIELD === item || player.WEAR === item || player.SHIELD === item;
+  if (canQuaff(item)) uses.push("q");
+  else if (canRead(item)) uses.push("r");
+  else if (canEat(item)) uses.push("e");
+  else if (canWear(item)) { if (!equipped) uses.push("W"); }
+  else if (item.isWeapon() && !equipped) uses.push("w");
+  uses.push("d");
+  return uses;
+}
+
 function plainText3D(value) {
   return String(value ?? "")
     .replace(/<[^>]*>/g, "")
@@ -1084,6 +1097,12 @@ window.ularn = {
     if (!initialized3D) return;
     mousetrap({ shift, preventDefault() {} }, key);
   },
+  /** Use, equip or drop a pack item by letter. See usePackItem in party.js. */
+  usePack(command, letter) {
+    if (ROOM_SESSION_ON) return window.ularnOnline?.sendInput?.(`use:${command}:${letter}`);
+    if (!initialized3D) return false;
+    return usePackItem(command, letter);
+  },
   openToward(direction) {
     if (ROOM_SESSION_ON) return window.ularnOnline?.sendInput?.(`open:${direction}`);
     this.key("o");
@@ -1318,6 +1337,7 @@ window.ularn = {
                 arg: item.arg ?? 0,
                 known: item.matches(OPOTION) ? isKnownPotion(item) : item.matches(OSCROLL) ? isKnownScroll(item) : true,
                 equipped: ["WIELD", "WEAR", "SHIELD"].filter((field) => player[field] === item),
+                uses: packUses3D(item),
               }
             : null,
         )

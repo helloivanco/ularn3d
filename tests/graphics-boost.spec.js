@@ -94,7 +94,7 @@ test("Auto on a 2x screen climbs to native resolution with MSAA and no Cinematic
   await context.close();
 });
 
-test("Cinematic caves glow around the hero while Auto caves stay flat and unlit", async ({page}) => {
+test("Cinematic caves are lit by the lantern and torches while Auto caves stay flat and unlit", async ({page}) => {
   await page.addInitScript(()=>{
     localStorage.setItem("ularn3d.quality","cinematic");
     localStorage.setItem("ularn3d.audio.v1",JSON.stringify({enabled:false}));
@@ -104,13 +104,15 @@ test("Cinematic caves glow around the hero while Auto caves stay flat and unlit"
   await page.evaluate(()=>{newcavelevel(1);paint();});
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
   const cave=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(cave.caveGlow).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights).toBeLessThanOrEqual(5);
-  // The glow keeps the unlit, mapped cave materials.
-  expect(cave.floorMaterial).toBe("MeshBasicMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
+  expect(cave.caveLit).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights).toBeLessThanOrEqual(5);
+  // Lit PBR stone with its maps, a shadowing lantern, wall-only torch shadows, a dim bounce and no studio reflection.
+  expect(cave.floorMaterial).toBe("MeshStandardMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
+  expect(cave.lanternShadow).toBe(true);expect(cave.torchShadows).toBeLessThanOrEqual(4);expect(cave.ambient).toBeLessThan(0.6);
   await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("auto");
   await page.locator("#resume-game").click();
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().composer)).toBe(false);
   const flat=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(flat.caveGlow).toBe(false);expect(flat.caveRelief).toBe(false);expect(flat.vignette).toBe(false);
+  expect(flat.caveLit).toBe(false);expect(flat.caveRelief).toBe(false);expect(flat.vignette).toBe(false);expect(flat.lanternShadow).toBe(false);
+  expect(flat.floorMaterial).toBe("MeshBasicMaterial");
   expect(flat.playerLight).toBe(false);expect(flat.pointLights).toBe(0);expect(flat.ambient).toBeGreaterThanOrEqual(1.4);
 });

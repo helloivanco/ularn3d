@@ -4,6 +4,19 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.7.0 — Lantern-lit caves and a pack at hand
+
+- Click any item in your pack to use it. A small menu offers what it can do: drink, read, eat, wear, wield or drop. Arrow keys move through the menu and each choice's own key picks it
+- If an item of the same kind lies at your feet, you are asked to step off it first, so the one used is the one from your pack. It works the same in multiplayer rooms
+- The rats along the cave walls are animated 3D rats that sniff, groom, rear up and scurry from tile to tile
+- Bestiary cards no longer squash together or overlap, and creatures you haven't met yet show as clean silhouettes
+- In Cinematic, the caves are lit for real. Your lantern lights the stone around you, and every creature, chest and pillar casts a shadow
+- The nearest wall torches flicker, and their light stops at the walls instead of reaching into the next corridor. Away from any light, rooms fade into darkness
+- Underground, armor and blades catch a faint glint of distant torchlight instead of the town's sky. In the volcano, the cracks in the basalt glow on their own, beyond your lantern
+- In Cinematic, the town is set in late afternoon. A low golden sun throws long shadows from the buildings, lamp posts and trees, and the shade takes on the sky's blue
+- Balanced and Auto look as before. The classic rules are unchanged
+- The website has new screenshots from the lit caves and the town, a portrait of every calling, and a new social card
+
 ## 1.6.0 — Living heroes and a weekly challenge
 
 - The title screen has a Weekly challenge: everyone who plays it this week explores the same town, store and dungeon. A new one starts every Monday at 00:00 UTC

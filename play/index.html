@@ -18,14 +18,14 @@
     <meta property="og:description" content="Eight classes. Twenty dungeon floors. Play this free turn-based roguelike in your browser, or take the Windows game offline." />
     <meta property="og:url" content="https://ularn-3d.vercel.app/play/" />
     <meta property="og:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
-    <meta property="og:image:width" content="1440" />
-    <meta property="og:image:height" content="1000" />
-    <meta property="og:image:alt" content="Ularn gameplay with an overhead town view, symbol map, inventory, and bottom adventure controls" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Ularn 3D torchlit cave room where a knight fights a skeleton beside a jackal, a chest, a potion, a sapphire and gold" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Play Ularn 3D — Free Online or Download for Windows" />
     <meta name="twitter:description" content="Explore 20 floors with eight classes in a free turn-based dungeon crawler. Play online or download for Windows." />
     <meta name="twitter:image" content="https://ularn-3d.vercel.app/social/ularn.png" />
-    <meta name="twitter:image:alt" content="Ularn's overhead town, symbol map, inventory, and adventure controls" />
+    <meta name="twitter:image:alt" content="Ularn 3D torchlit cave room where a knight fights a skeleton beside a jackal, a chest, a potion, a sapphire and gold" />
     <script type="application/ld+json">
 {
       "@context": "https://schema.org",
@@ -226,8 +226,9 @@
         <aside id="inventory-panel" class="panel" aria-label="Pinned inventory">
           <div class="panel-heading"><span>INVENTORY</span><span id="inventory-count"></span></div>
           <div id="inventory-list"></div>
-          <div class="inventory-help">Manage items with <kbd>i</kbd> · Hide with <kbd>F3</kbd></div>
+          <div class="inventory-help">Click an item to use it · Hide with <kbd>F3</kbd></div>
         </aside>
+        <div id="item-menu" class="item-menu" role="menu" hidden></div>
         <div class="camera-tools">
           <button
             id="rotate-left"

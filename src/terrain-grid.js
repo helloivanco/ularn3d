@@ -178,7 +178,8 @@ export class ChunkedTerrainMesh extends THREE.Group {
       tint.fromArray(this.colors,index*3); at.mesh.setColorAt(at.slot,tint); touched.add(at.mesh);
     }
     for (const mesh of this.chunks.values()) {
-      mesh.castShadow=this.castShadow; mesh.receiveShadow=this.receiveShadow;
+      // Chunks share the group's shadow flags and layers (torch shadows draw walls by layer).
+      mesh.castShadow=this.castShadow; mesh.receiveShadow=this.receiveShadow; mesh.layers.mask=this.layers.mask;
       if (!touched.has(mesh)) continue;
       mesh.instanceMatrix.needsUpdate=true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate=true;

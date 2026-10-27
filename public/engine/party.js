@@ -470,6 +470,45 @@ function capturePartyState(seen) {
 }
 
 /* Authenticated room log. The database supplies the actor; UI selection is only a view. */
+/*
+ * A pack item used from the pinned inventory: the classic command, then the
+ * item's letter, sent only while that command is asking for one. Each command
+ * first takes a matching item at the hero's feet, so standing on one refuses
+ * instead of quietly using the floor item in place of the one chosen. Solo
+ * calls this through the bridge; rooms replay it from a `use:` input.
+ */
+var PACK_USES = {
+  q: { prompt: function () { return act_quaff; }, underfoot: function (here) { return here.matches(OPOTION) ? 'potion' : null; } },
+  r: { prompt: function () { return act_read; }, underfoot: function (here) { return here.matches(OSCROLL) ? 'scroll' : here.matches(OBOOK) ? 'book' : null; } },
+  e: {
+    prompt: function () { return act_eat; },
+    underfoot: function (here) {
+      if (here.matches(OTOWNPORTAL)) return 'portal';
+      if (here.isStore()) return 'doorway';
+      return here.matches(OCOOKIE) || here.matches(OSHROOMS) || here.matches(OACID) ? 'food' : null;
+    },
+  },
+  w: { prompt: function () { return act_wield; }, underfoot: function (here) { return here.isWeapon() && !pocketfull() ? 'weapon' : null; } },
+  W: { prompt: function () { return act_wear; }, underfoot: function (here) { return here.isArmor() && !pocketfull() ? 'armor' : null; } },
+  d: { prompt: function () { return act_drop; }, underfoot: function () { return null; } },
+};
+
+function usePackItem(command, letter) {
+  var use = PACK_USES[command];
+  if (!use || !mazeMode || blocking_callback) return false;
+  var index = getIndexFromChar(letter);
+  if (index < 0 || !player.inventory[index]) return false;
+  var here = itemAt(player.x, player.y);
+  var blocked = here && use.underfoot(here);
+  if (blocked) {
+    updateLog('There is a ' + blocked + ' at your feet. Step off it to use one from your pack' + period);
+    return false;
+  }
+  mousetrap(null, command);
+  if (blocking_callback === use.prompt()) mousetrap(null, letter);
+  return true;
+}
+
 var ROOM_SESSION_ON = false;
 var ROOM_APPLYING = false;
 var ROOM_ACTORS = [];
@@ -546,6 +585,8 @@ function applyRoomAction(row) {
       overridePref('auto_pickup', ROOM_AUTO_LOOT[actor]);
     } else if (input === 'aura:on' || input === 'aura:off') {
       hostSetCooperationAura(input === 'aura:on', { role: 'player' });
+    } else if (/^use:[qrewWd]:[a-z]$/.test(input)) {
+      usePackItem(input[4], input[6]);
     } else if (input.startsWith('open:')) {
       mousetrap(null, 'o');
       if (blocking_callback === getdirectioninput) mousetrap(null, input.slice(5));

@@ -56,6 +56,10 @@ test("ambient rats are capped decorative entities on dungeon walls", async ({ pa
       }),
     )
     .toBeGreaterThan(0);
+  // The rigged rat loads after the floor; each one then rests in a habit.
+  await expect
+    .poll(() => page.evaluate(() => ularnGraphics.ambientRats().rats.every((rat) => rat.presentation === "model")))
+    .toBe(true);
 
   const info = await page.evaluate(() => {
     const a = ularnGraphics.ambientRats();
@@ -84,6 +88,7 @@ test("ambient rats are capped decorative entities on dungeon walls", async ({ pa
     expect(rat.decorative).toBe(true);
     expect(rat.position.y).toBeGreaterThan(0.9);
     expect(rat.appearance).toBeTruthy();
+    expect(["Sniff", "Groom", "Rear", "Idle", "Run"]).toContain(rat.clip);
   }
   if (info.rats.length >= 2) {
     const [a, b] = info.rats;

@@ -273,6 +273,7 @@ const ularnPerf = {
 window.ularnPerf = ularnPerf;
 window.ularnAudio = audio;
 function syncInventoryPin() {
+  if (!inventoryPinned) closeItemMenu();
   $("inventory-panel").hidden = !inventoryPinned;
   $("inventory-pin").setAttribute("aria-pressed", String(inventoryPinned));
   updateViewport();
@@ -291,6 +292,76 @@ function toggleAutoLoot() {
       : "Auto-loot disabled. Gold is still collected.",
   );
 }
+// Click a pinned item for what it can do. Each choice sends the classic
+// command and that item's letter, the same keys a player would type.
+const ITEM_USES = { q: "Quaff", r: "Read", e: "Eat", w: "Wield", W: "Wear", d: "Drop" };
+const itemMenu = $("item-menu");
+let itemMenuSlot = null;
+function closeItemMenu(focusRow = false) {
+  if (itemMenuSlot === null) return;
+  const row = $("inventory-list").querySelector(`[data-slot="${itemMenuSlot}"]`);
+  row?.setAttribute("aria-expanded", "false");
+  itemMenu.hidden = true;
+  itemMenuSlot = null;
+  if (focusRow) row?.focus();
+}
+function openItemMenu(row, item) {
+  closeItemMenu();
+  const title = document.createElement("div");
+  title.className = "item-menu-title";
+  title.textContent = item.name;
+  const choices = (item.uses || ["d"]).map((command) => {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    choice.setAttribute("role", "menuitem");
+    choice.dataset.command = command;
+    choice.className = command === "d" ? "item-menu-drop" : "";
+    const label = document.createElement("span");
+    label.textContent = ITEM_USES[command];
+    const key = document.createElement("kbd");
+    key.textContent = command;
+    choice.append(label, key);
+    choice.addEventListener("click", () => { closeItemMenu(); usePackItem(command, item.key); });
+    return choice;
+  });
+  itemMenu.replaceChildren(title, ...choices);
+  itemMenu.setAttribute("aria-label", `${item.name} actions`);
+  itemMenu.hidden = false;
+  itemMenuSlot = item.key;
+  row.setAttribute("aria-expanded", "true");
+  // Beside the panel where there is room, otherwise over the row's right end.
+  const rect = row.getBoundingClientRect(), panel = $("inventory-panel").getBoundingClientRect();
+  const width = itemMenu.offsetWidth, height = itemMenu.offsetHeight;
+  const left = innerWidth - panel.right - 12 >= width ? panel.right + 8 : Math.max(8, rect.right - width);
+  itemMenu.style.left = `${left}px`;
+  itemMenu.style.top = `${Math.max(8, Math.min(rect.top, innerHeight - height - 8))}px`;
+  choices[0].focus();
+}
+function usePackItem(command, letter) {
+  if (window.ularnOnline?.inMatch?.() && !window.ularnOnline.acceptsInput()) return;
+  if (!state || !state.maze || state.over || state.busy || graphicsLost) return;
+  if (state.prompt) { toast("Finish or cancel the current action first."); return; }
+  stopTravel();
+  if (world) world.lastInputAt = performance.now();
+  engine.usePack(command, letter);
+}
+itemMenu.addEventListener("keydown", (event) => {
+  const choices = [...itemMenu.querySelectorAll("button")], index = choices.indexOf(document.activeElement);
+  if (event.key === "Escape") closeItemMenu(true);
+  else if (event.key === "ArrowDown" || event.key === "ArrowUp") choices[(index + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length]?.focus();
+  else if (event.key === "Enter" || event.key === " " || event.key === "Tab") return;
+  else {
+    // The key shown beside a choice picks it; anything else closes the menu and plays on.
+    const match = choices.find((choice) => choice.dataset.command === event.key);
+    if (!match) { closeItemMenu(); return; }
+    match.click();
+  }
+  event.preventDefault();
+  event.stopPropagation();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (itemMenuSlot !== null && !itemMenu.contains(event.target) && !event.target.closest?.(`#inventory-list [data-slot="${itemMenuSlot}"]`)) closeItemMenu();
+});
 $("inventory-pin").addEventListener("click", toggleInventoryPin);
 $("auto-loot").addEventListener("click", toggleAutoLoot);
 syncInventoryPin();
@@ -299,15 +370,21 @@ function updateInventoryAndEffects() {
   const signature = items
     .map(
       (item) =>
-        `${item.slot}:${item.id}:${item.name}:${(item.equipped || []).join(",")}`,
+        `${item.slot}:${item.id}:${item.name}:${(item.equipped || []).join(",")}:${(item.uses || []).join("")}`,
     )
     .join("|");
   if (signature !== inventorySignature) {
     inventorySignature = signature;
     $("inventory-count").textContent = `${items.length} / 26`;
+    closeItemMenu();
     $("inventory-list").replaceChildren(...items.map((item) => {
-      const row = document.createElement("div");
+      const row = document.createElement("button");
+      row.type = "button";
       row.className = "inventory-item";
+      row.dataset.slot = item.key;
+      row.setAttribute("aria-haspopup", "menu");
+      row.setAttribute("aria-expanded", "false");
+      row.addEventListener("click", () => (itemMenuSlot === item.key ? closeItemMenu(true) : openItemMenu(row, item)));
       const key = document.createElement("kbd");
       key.textContent = item.key;
       const name = document.createElement("span");
@@ -1408,7 +1485,7 @@ $("sound").addEventListener("click", () => {
 // A soft tick under the pointer; the mixer rate-limits it and never lets it crowd out a fight.
 document.addEventListener("pointerover", (event) => {
   if (event.pointerType !== "mouse" || !state) return;
-  const control = event.target.closest?.(".actionbar button, .dpad button, .terminal-footer button, .bestiary-tabs button, .beast");
+  const control = event.target.closest?.(".actionbar button, .dpad button, .terminal-footer button, .bestiary-tabs button, .beast, .inventory-item, .item-menu button");
   if (control && !control.contains(event.relatedTarget)) sound("hover");
 });
 // Feel & accessibility: shake, flashing, numbers, wound bars and motion apply at once.

@@ -28,6 +28,10 @@ test("meeting a creature fills its bestiary page; the rest stay silhouettes", as
   await expect(page.locator(".beast")).toHaveCount(66);
   await expect(page.locator(".beast:not(.unknown)")).toHaveCount(1);
   await expect(page.locator(".beast:not(.unknown) strong")).toHaveText("jackal");
+  // Every card keeps its own height: the next row starts below the last one ends.
+  const rows = await page.locator(".beast").evaluateAll((cards) => cards.slice(0, 12).map((card) => card.getBoundingClientRect()));
+  for (let i = 1; i < rows.length; i++) if (rows[i].top !== rows[i - 1].top) expect(rows[i].top).toBeGreaterThanOrEqual(rows[i - 1].bottom);
+  expect(rows[0].height).toBeGreaterThan(150);
   await page.getByRole("tab", { name: "Slain" }).click();
   await expect(page.locator(".beast")).toHaveCount(0);
   await page.keyboard.press("Escape");

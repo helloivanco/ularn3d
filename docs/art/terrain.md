@@ -46,12 +46,13 @@ licenses are involved.
 
 Floors use `tileScatter()`: the vertex shader hashes each instance's tile position into one of
 eight orientations (four turns × optional mirror) and applies it to the color, normal and
-roughness UVs. Cinematic caves chain it with the cave glow. Walls and caps are not scattered,
-so their courses stay level.
+roughness UVs, and to the emissive UVs where a surface has them. Walls and caps are not
+scattered, so their courses stay level.
 
-In Cinematic caves the same relief maps light the unlit terrain from the hero's lantern
-(`CAVE_RELIEF` in `src/cave-glow.js`, hand height, inside the glow radius only). Stone bevels facing
-the hero brighten and the far sides fall into shade. Auto and Balanced caves keep flat terrain.
+Cinematic caves light the stone for real: floors, walls and caps use the lit PBR surfaces with
+these color, relief and roughness maps, under the lantern and torch lights (`src/cave-light.js`).
+Volcano basalt adds `glowMap("basalt")` as an emissive map, taken from the molten cores of its
+fissures, so lava glows where no light reaches. Auto and Balanced caves keep flat terrain.
 
 Large slabs repeat the map once per tile through `placedTexture()` instead of stretching one map
 across them: the 67 × 17 town ground and the 21 × 16 title-screen field. Gable roof slabs use a

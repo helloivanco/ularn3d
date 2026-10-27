@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { WALL_FULL } from "./wall-cut.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { clone } from "three/addons/utils/SkeletonUtils.js";
+import { WALL_FULL, wallLip } from "./wall-cut.js";
 
 /** Hard cap — a normal overhead view shows one or two, never a row of copies. */
 export const AMBIENT_RAT_POOL = 2;
@@ -9,11 +11,22 @@ export const AMBIENT_RAT_MIN_SEP = 5;
 /** Prefer the pair close enough to share a corridor, still not shoulder to shoulder. */
 const AMBIENT_RAT_MAX_SEP = 6;
 
+/** Rigged rat built by scripts/build-rat.mjs. Faces +Z with its feet on y = 0. */
+export const RAT_MODEL = "/models/creatures/rat.glb";
+/** Each look keeps one resting habit; Run plays while it scurries. */
+export const RAT_POSES = Object.freeze(["Sniff", "Groom", "Rear", "Idle"]);
+export const RAT_RUN = "Run";
+export const RAT_CLIPS = Object.freeze([...RAT_POSES, RAT_RUN]);
+
 const NEAR_SQ = 14 * 14;
 const THINK_INTERVAL = 0.22;
 const SCURRY_SPEED = 2.4;
 const IDLE_MIN = 1.6;
 const IDLE_MAX = 5.5;
+/** Per second. A rat swings round to its new heading within a few frames. */
+const TURN_RATE = 18;
+const RUN_FADE = 0.08;
+const REST_FADE = 0.25;
 
 const dirs = [
   [1, 0],
@@ -29,192 +42,17 @@ const hash = (a, b) => {
 
 const emptyRaycast = () => {};
 
-const SPRITE_W = 51;
-
-const row = (pixels) => {
-  if (pixels.length > SPRITE_W) throw new Error("ambient rat row is too wide");
-  return pixels.padEnd(SPRITE_W, ".");
-};
+/** Fur tints over the model's brown: brown, ash, sooty, sandy, dun, pale. */
+const TINTS = [0xffffff, 0xcfcdcf, 0xaa9f98, 0xf2e2cc, 0xc4b8ae, 0xe2d8d1];
+/** Mid fur brown in the model. */
+const FUR_LIFT = 0xa38d77;
 
 /**
- * Side-view pixel rats. Snout points right. The camera looks down, so each
- * one stands on a billboard instead of a top-down blob.
- * 1 dark back, 2 body, 3 back shade, 4 belly, 5 ear, 6 inner ear,
- * 7 eye, 8 nose, 9 foot, T tail, S tail segment.
- * Poses differ in the ear, the body, and the tail. One drawing is not a flip
- * of another.
- */
-const ALERT_ROWS = [
-  ".TT........................................555...",
-  "TTTS....................................55.565...",
-  ".TTSTT.................................565.565...",
-  "..TSTTT...............111111...........565.555...",
-  "....TTTTS.............3333331111111111111111.....",
-  ".....TTTSTT...........33333333333333333333331....",
-  "......TTSTTTT.........3333333333333333333333771..",
-  "........STTTTSTTTTTTTT222222222222222222222272211",
-  "..........TTTSTTTTSTTT222222222222222222222222228",
-  ".............STTTTSTTT4444444444444444444444444..",
-  "...............TTTST..44444444444444444444444....",
-  "......................444444449944449944499......",
-  "..............................99....99...99......",
-].map(row);
-
-const CROUCH_ROWS = [
-  row(".................................5"),
-  row("................................565"),
-  row("...........111111...............555"),
-  row(".........11333311111111111111111111"),
-  row(".......33333333333333333333333333771"),
-  row(".....2222222222222222222222222222211"),
-  row("TTT44222222222222222222222222222228"),
-  row("TTS4444444444444444444444444444444"),
-  row("TTTS444444444444444444444444444"),
-  row("TTS...444444444444444444444444"),
-  row("TT........9944..9944..9944..99"),
-  row("............99....99....99"),
-  row("............99....99....99"),
-];
-
-const SNIFF_ROWS = [
-  row(".....TT"),
-  row("....TTTS"),
-  row("...TTTS..........1111111"),
-  row("..TSTT.........113333333111111"),
-  row("...TTTT......3333333333333333771"),
-  row(".....STT..22222222222222222222211"),
-  row(".......S22222222222222222222222228"),
-  row(".......4444444444444444444444444"),
-  row(".....444444444444444444444444"),
-  row("...9944..9944..9944..994499"),
-  row("...99....99....99....99"),
-  row("...99....99....99....99"),
-  row("...99....99....99....99"),
-];
-
-const PLUMP_ROWS = [
-  row(".....................5.5"),
-  row("....................56565"),
-  row("..........1111......56565"),
-  row("........11333311....55555"),
-  row("......333333333311111111"),
-  row("....222222222222222222771"),
-  row("..442222222222222222222211"),
-  row(".4422222222222222222222228"),
-  row("444444444444444444444444"),
-  row("4444444444444444444444"),
-  row("99444499444499444499"),
-  row("..99....99....99....99"),
-  row("..99....99....99....99"),
-];
-
-const PALETTE = {
-  ".": [0, 0, 0, 0],
-  1: [0x3e, 0x30, 0x26, 255],
-  2: [0x8c, 0x64, 0x44, 255],
-  3: [0x5a, 0x42, 0x32, 255],
-  4: [0xc8, 0xa2, 0x78, 255],
-  5: [0xf2, 0xc0, 0xb2, 255],
-  6: [0xdc, 0x8c, 0x80, 255],
-  7: [0x12, 0x0e, 0x0c, 255],
-  8: [0xe8, 0xa0, 0x92, 255],
-  9: [0xee, 0xb2, 0xa2, 255],
-  T: [0xf0, 0xc2, 0xb2, 255],
-  S: [0xc2, 0x7e, 0x70, 255],
-};
-
-const CROUCH_PALETTE = {
-  ...PALETTE,
-  1: [0x32, 0x24, 0x1c, 255],
-  2: [0x74, 0x4c, 0x34, 255],
-  3: [0x4e, 0x38, 0x2a, 255],
-  4: [0xb0, 0x84, 0x5e, 255],
-  5: [0xf4, 0xc4, 0xb6, 255],
-  6: [0xd8, 0x90, 0x84, 255],
-  8: [0xe4, 0xa4, 0x96, 255],
-  9: [0xec, 0xb0, 0xa0, 255],
-  T: [0xf2, 0xc6, 0xb8, 255],
-  S: [0xb8, 0x74, 0x66, 255],
-};
-
-const SNIFF_PALETTE = {
-  ...PALETTE,
-  1: [0x3a, 0x32, 0x2a, 255],
-  2: [0x86, 0x6c, 0x56, 255],
-  3: [0x5c, 0x4c, 0x3e, 255],
-  4: [0xb6, 0x98, 0x7a, 255],
-  5: [0xf6, 0xcc, 0xbe, 255],
-  6: [0xe0, 0xa8, 0x98, 255],
-  8: [0xec, 0xb4, 0xa4, 255],
-  9: [0xf0, 0xbc, 0xac, 255],
-  T: [0xf4, 0xce, 0xc0, 255],
-  S: [0xc8, 0x96, 0x84, 255],
-};
-
-const PLUMP_PALETTE = {
-  ...PALETTE,
-  1: [0x46, 0x2c, 0x1e, 255],
-  2: [0x9c, 0x5c, 0x38, 255],
-  3: [0x6a, 0x40, 0x2c, 255],
-  4: [0xbe, 0x88, 0x5c, 255],
-  5: [0xf8, 0xc8, 0xb4, 255],
-  6: [0xe4, 0x98, 0x84, 255],
-  8: [0xf0, 0xa8, 0x90, 255],
-  9: [0xf2, 0xb4, 0x9c, 255],
-  T: [0xf6, 0xc4, 0xb0, 255],
-  S: [0xc4, 0x78, 0x60, 255],
-};
-
-const TINTS = [0xffffff, 0xf4d7c0, 0xd9c3aa, 0xc4a48c, 0xe8d2c2, 0xb89a84];
-
-const paintSprite = (rows, palette) => {
-  const width = rows[0].length;
-  const height = rows.length;
-  const data = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const source = rows[height - 1 - y];
-    if (source.length !== width) throw new Error("ambient rat rows disagree");
-    for (let x = 0; x < width; x++) {
-      const color = palette[source[x]];
-      if (!color) throw new Error(`ambient rat pixel ${source[x]}`);
-      const i = (y * width + x) * 4;
-      data[i] = color[0];
-      data[i + 1] = color[1];
-      data[i + 2] = color[2];
-      data[i + 3] = color[3];
-    }
-  }
-  const texture = new THREE.DataTexture(data, width, height);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  texture.needsUpdate = true;
-  texture.userData.shared = true;
-  return { texture, width, height, data };
-};
-
-const RAT_VARIANTS = [
-  paintSprite(ALERT_ROWS, PALETTE),
-  paintSprite(CROUCH_ROWS, CROUCH_PALETTE),
-  paintSprite(SNIFF_ROWS, SNIFF_PALETTE),
-  paintSprite(PLUMP_ROWS, PLUMP_PALETTE),
-];
-
-/** Pixel buffers for tests. Shared with the billboards. */
-export const ambientRatSprites = () =>
-  RAT_VARIANTS.map((variant) => ({
-    width: variant.width,
-    height: variant.height,
-    data: variant.data,
-  }));
-
-/**
- * Pose, tint, size, and facing for one wall tile.
+ * Habit, tint, size, and resting facing for one wall tile.
  * Stable for that tile: nothing here reads the clock or the camera.
  */
 export const lookFromTile = (x, y) => {
-  const variant = Math.floor(hash(x + 1, y + 4) * RAT_VARIANTS.length) % RAT_VARIANTS.length;
+  const variant = Math.floor(hash(x + 1, y + 4) * RAT_POSES.length) % RAT_POSES.length;
   const tint = TINTS[Math.floor(hash(x + 8, y + 2) * TINTS.length) % TINTS.length];
   const size = 0.82 + Math.floor(hash(x + 5, y + 9) * 5) * 0.08;
   const flip = hash(x + 2, y + 7) < 0.5 ? -1 : 1;
@@ -222,13 +60,41 @@ export const lookFromTile = (x, y) => {
   return { variant, tint, size, flip, yawBias };
 };
 
-/** Small on a wall tile. Wide, because the rat is shown in profile. */
-const RAT_W = 0.74;
-const ALERT = RAT_VARIANTS[0];
-const RAT_H = RAT_W * (ALERT.height / ALERT.width);
+let model = null;
+/** One fetch for every pool. Clones share its geometry and skin material. */
+const loadRat = () => {
+  model ??= new GLTFLoader().loadAsync(RAT_MODEL).then((gltf) => {
+    gltf.scene.traverse((object) => {
+      if (object.geometry) object.geometry.userData.shared = true;
+    });
+    return gltf;
+  });
+  return model;
+};
 
-const ratGeometry = new THREE.PlaneGeometry(1, 1);
-ratGeometry.userData.shared = true;
+/** A soft oval under the body, so the rat sits on the stone instead of hovering. */
+const shadeGeometry = (() => {
+  const shape = new THREE.RingGeometry(0, 1, 20, 3);
+  const position = shape.getAttribute("position");
+  const colors = new Float32Array(position.count * 4);
+  for (let i = 0; i < position.count; i++) {
+    const r = Math.hypot(position.getX(i), position.getY(i));
+    colors.set([1, 1, 1, 1 - THREE.MathUtils.smoothstep(r, 0.35, 1)], i * 4);
+  }
+  shape.setAttribute("color", new THREE.BufferAttribute(colors, 4));
+  shape.userData.shared = true;
+  return shape;
+})();
+const shadeMaterial = new THREE.MeshBasicMaterial({
+  color: 0x000000,
+  transparent: true,
+  opacity: 0.34,
+  depthWrite: false,
+  vertexColors: true,
+  toneMapped: false,
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+});
 
 const makeRatMesh = () => {
   const group = new THREE.Group();
@@ -239,32 +105,32 @@ const makeRatMesh = () => {
     interactive: false,
     decorative: true,
   };
-  const material = new THREE.MeshBasicMaterial({
-    map: ALERT.texture,
-    transparent: true,
-    alphaTest: 0.5,
-    side: THREE.DoubleSide,
-    toneMapped: false,
+  // Turns and scales with the rat. The model lands in here once it loads.
+  const body = new THREE.Group();
+  body.name = "rat-body";
+  const shade = new THREE.Mesh(shadeGeometry, shadeMaterial);
+  shade.name = "rat-shade";
+  shade.rotation.x = -Math.PI / 2;
+  shade.position.set(0, 0.003, -0.03);
+  shade.scale.set(0.085, 0.2, 1);
+  shade.castShadow = false;
+  shade.receiveShadow = false;
+  shade.renderOrder = 1;
+  body.add(shade);
+  group.add(body);
+  group.traverse((object) => {
+    object.raycast = emptyRaycast;
   });
-  const sprite = new THREE.Mesh(ratGeometry, material);
-  sprite.name = "rat-sprite";
-  sprite.scale.set(RAT_W, RAT_H, 1);
-  sprite.position.y = RAT_H / 2 + 0.02;
-  sprite.castShadow = false;
-  sprite.receiveShadow = false;
-  sprite.frustumCulled = false;
-  sprite.raycast = emptyRaycast;
-  group.add(sprite);
-  group.raycast = emptyRaycast;
   group.visible = false;
   group.frustumCulled = false;
   return group;
 };
 
 const chebyshev = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+const turnToward = (from, to) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from));
 
 /**
- * Tiny non-interactive rats that scurry along dungeon wall tops.
+ * Small non-interactive rats that scurry along dungeon wall tops.
  * Lives outside actors/props so pick/combat/inventory never see them.
  */
 export class AmbientRats {
@@ -279,7 +145,8 @@ export class AmbientRats {
       this.group.add(mesh);
       return {
         mesh,
-        art: mesh.getObjectByName("rat-sprite"),
+        body: mesh.getObjectByName("rat-body"),
+        rig: null,
         active: false,
         cell: -1,
         look: null,
@@ -289,7 +156,8 @@ export class AmbientRats {
         idle: 0,
         hidden: false,
         hideFor: 0,
-        yaw: Math.PI / 2,
+        yaw: 0,
+        heading: 0,
       };
     });
     this.wallIndex = new Map();
@@ -300,8 +168,51 @@ export class AmbientRats {
     this.enabled = false;
     this.thinkAccum = 0;
     this.seed = 1;
-    this._camera = null;
+    this.loading = null;
+    this.disposed = false;
     this._scratch = new THREE.Vector3();
+  }
+
+  /** Fetch the rig the first time a cave floor wants rats. Town never pays for it. */
+  load() {
+    this.loading ??= loadRat().then(
+      (gltf) => this.wear(gltf),
+      (error) => {
+        if (typeof window !== "undefined") console.warn("Wall rat model failed to load", error);
+      },
+    );
+    return this.loading;
+  }
+
+  /** Dress every slot in its own clone of the rig, with its own fur material to tint. */
+  wear(gltf) {
+    if (this.disposed) return;
+    for (const slot of this.slots) {
+      if (slot.rig) continue;
+      const model = clone(gltf.scene);
+      model.name = "rat-model";
+      const fur = [];
+      model.traverse((object) => {
+        object.raycast = emptyRaycast;
+        if (!object.isMesh) return;
+        object.castShadow = false;
+        object.receiveShadow = false;
+        // Skinned bounds are the bind pose; a rear or a stride reaches outside them.
+        object.frustumCulled = false;
+        if (object.material.name === "RatFur") {
+          object.material = object.material.clone();
+          fur.push(object.material);
+        }
+      });
+      slot.body.add(model);
+      const mixer = new THREE.AnimationMixer(model);
+      const actions = new Map(gltf.animations.map((clip) => [clip.name, mixer.clipAction(clip)]));
+      slot.rig = { model, mixer, actions, fur, clip: null };
+      if (slot.active) {
+        this.applyLook(slot);
+        this.rest(slot, 0);
+      }
+    }
   }
 
   clear() {
@@ -328,6 +239,7 @@ export class AmbientRats {
       this.clear();
       return;
     }
+    this.load();
     const layoutChanged =
       this.level !== level ||
       this.wallCells.length !== wallCells.length ||
@@ -445,18 +357,26 @@ export class AmbientRats {
     }
   }
 
+  /** The look comes from the tile a rat appears on and stays with it while it scurries. */
   applyLook(slot) {
     const t = this.wallCells[slot.cell];
-    const art = slot.art;
-    if (!t || !art) return;
+    if (!t) return;
     const look = lookFromTile(t.x, t.y);
     slot.look = look;
-    const variant = RAT_VARIANTS[look.variant];
-    if (art.material.map !== variant.texture) {
-      art.material.map = variant.texture;
-      art.material.needsUpdate = true;
+    slot.body.scale.setScalar(look.size);
+    for (const fur of slot.rig?.fur ?? []) {
+      fur.color.setHex(look.tint);
+      // A faint lift of its own colour, so a sooty rat still reads on dark stone in flat caves.
+      fur.emissive.setHex(FUR_LIFT).multiply(fur.color).multiplyScalar(0.14);
     }
-    art.material.color.setHex(look.tint);
+  }
+
+  /** Lie along the wall run, one way or the other, a little askew. */
+  restingYaw(cell, look) {
+    const t = this.wallCells[cell];
+    const next = this.wallCells[this.neighbors[cell]?.[0]];
+    const along = next ? Math.atan2(next.x - t.x, next.y - t.y) : 0;
+    return along + (look.flip < 0 ? Math.PI : 0) + look.yawBias;
   }
 
   activate(slot, cell, idle = IDLE_MIN) {
@@ -466,49 +386,57 @@ export class AmbientRats {
     slot.idle = idle;
     slot.hidden = false;
     slot.hideFor = 0;
-    slot.yaw = Math.PI / 2;
     this.heightAt(cell, slot.from);
     slot.to.copy(slot.from);
     slot.mesh.position.copy(slot.from);
-    slot.mesh.rotation.y = 0;
     slot.mesh.visible = true;
     this.applyLook(slot);
-    this.face(slot);
+    slot.yaw = slot.heading = this.restingYaw(cell, slot.look);
+    slot.body.rotation.y = slot.heading;
+    this.rest(slot, 0);
   }
 
-  /** Billboard the side-view sprite. Resting facing comes from the tile. */
-  face(slot) {
-    const art = slot.art;
-    if (!art) return;
-    const look = slot.look;
-    const variant = RAT_VARIANTS[look?.variant ?? 0];
-    const size = look?.size ?? 1;
-    const w = RAT_W * size;
-    const h = w * (variant.height / variant.width);
-    let sign = look?.flip ?? 1;
-    const camera = this._camera;
+  /** Cross-fade to a looping clip, starting it partway in so two rats never move in step. */
+  play(slot, name, fade) {
+    const rig = slot.rig;
+    if (!rig || rig.clip === name) return;
+    const next = rig.actions.get(name);
+    if (!next) return;
+    const previous = rig.clip ? rig.actions.get(rig.clip) : null;
+    next.reset();
+    next.setLoop(THREE.LoopRepeat, Infinity);
+    next.time = hash(slot.cell + 1, rig.clip ? rig.clip.length : 7) * next.getClip().duration;
+    next.play();
+    if (previous && fade > 0) previous.crossFadeTo(next, fade, false);
+    else {
+      previous?.stop();
+      next.setEffectiveWeight(1);
+    }
+    rig.clip = name;
+    if (!fade) rig.mixer.update(0);
+  }
+
+  /** Mostly its own habit, sometimes a plain idle or a sniff. */
+  rest(slot, fade = REST_FADE) {
+    const roll = hash(slot.cell + 3, this.seed + slot.mesh.userData.slot);
+    const habit = RAT_POSES[slot.look?.variant ?? 0];
+    this.play(slot, roll < 0.2 ? "Idle" : roll < 0.35 ? "Sniff" : habit, fade);
+  }
+
+  /** Swing round toward the way it is running, and play the rig. */
+  animate(slot, dt) {
     if (slot.progress < 1) {
-      const fx = Math.sin(slot.yaw);
-      const fz = Math.cos(slot.yaw);
-      if (camera) {
-        const right = camera.matrixWorld.elements;
-        const side = fx * right[0] + fz * right[2];
-        if (Math.abs(side) > 0.05) sign = side < 0 ? -1 : 1;
-      } else if (fx < -0.05) sign = -1;
+      const target = turnToward(slot.heading, slot.yaw);
+      slot.heading += (target - slot.heading) * (1 - Math.exp(-dt * TURN_RATE));
     }
-    if (camera) {
-      art.quaternion.copy(camera.quaternion);
-      const bias = look?.yawBias ?? 0;
-      if (bias) art.rotateY(bias);
-    }
-    art.scale.set(sign * w, h, 1);
-    art.position.y = h / 2 + 0.02;
+    slot.body.rotation.y = slot.heading;
+    slot.rig?.mixer.update(dt);
   }
 
   heightAt(cell, out) {
     const t = this.wallCells[cell];
-    const h = this.wallHeightAt?.[cell] ?? WALL_FULL;
-    out.set(t.x, h + 0.055, t.y);
+    const lip = wallLip(this.wallHeightAt?.[cell] ?? WALL_FULL);
+    out.set(t.x, lip.y + lip.thickness / 2, t.y);
     return out;
   }
 
@@ -537,8 +465,7 @@ export class AmbientRats {
   /** Returns true while any near-camera rat is mid-scurry (keeps rAF alive briefly). */
   update(dt, cameraOrPos) {
     if (!this.enabled) return false;
-    this._camera = cameraOrPos?.isCamera ? cameraOrPos : null;
-    const cameraPos = this._camera ? this._camera.position : cameraOrPos;
+    const cameraPos = cameraOrPos?.isCamera ? cameraOrPos.position : cameraOrPos;
     let scurryingNear = false;
     this.thinkAccum += dt;
     const think = this.thinkAccum >= THINK_INTERVAL;
@@ -546,7 +473,6 @@ export class AmbientRats {
 
     for (const slot of this.slots) {
       if (!slot.active) continue;
-      if (slot.mesh.visible) this.face(slot);
       const near = this.nearCamera(slot, cameraPos);
 
       if (slot.hidden) {
@@ -571,16 +497,17 @@ export class AmbientRats {
         continue;
       }
 
+      this.animate(slot, dt);
+
       if (slot.progress < 1) {
         slot.progress = Math.min(1, slot.progress + dt * SCURRY_SPEED);
         const t = slot.progress * slot.progress * (3 - 2 * slot.progress);
         slot.mesh.position.lerpVectors(slot.from, slot.to, t);
-        // Tiny bob while scurrying — quiet, not cartoon bounce.
-        slot.mesh.position.y += Math.sin(slot.progress * Math.PI) * 0.012;
         if (near) scurryingNear = true;
         if (slot.progress >= 1) {
           slot.mesh.position.copy(slot.to);
           slot.idle = IDLE_MIN + hash(slot.cell, 4) * (IDLE_MAX - IDLE_MIN);
+          this.rest(slot);
         }
         continue;
       }
@@ -609,12 +536,10 @@ export class AmbientRats {
       }
       slot.from.copy(slot.mesh.position);
       this.heightAt(next, slot.to);
-      const dx = slot.to.x - slot.from.x;
-      const dz = slot.to.z - slot.from.z;
-      slot.yaw = Math.atan2(dx, dz);
+      slot.yaw = Math.atan2(slot.to.x - slot.from.x, slot.to.z - slot.from.z);
       slot.cell = next;
       slot.progress = 0;
-      this.applyLook(slot);
+      this.play(slot, RAT_RUN, RUN_FADE);
       if (near) scurryingNear = true;
     }
     return scurryingNear;
@@ -641,6 +566,8 @@ export class AmbientRats {
           cell: s.cell,
           position: { x: s.mesh.position.x, y: s.mesh.position.y, z: s.mesh.position.z },
           scurrying: s.progress < 1,
+          presentation: s.rig ? "model" : "pending",
+          clip: s.rig?.clip ?? null,
           appearance: s.look
             ? {
                 variant: s.look.variant,
@@ -654,9 +581,19 @@ export class AmbientRats {
   }
 
   dispose() {
-    // Geometry and sprite textures are shared by every pool. Materials are not.
+    // Geometry, the skin material and the shade are shared by every pool. Fur is per slot.
+    this.disposed = true;
     for (const slot of this.slots) {
-      slot.art?.material?.dispose();
+      const rig = slot.rig;
+      if (rig) {
+        rig.mixer.stopAllAction();
+        rig.mixer.uncacheRoot(rig.model);
+        rig.model.traverse((object) => {
+          if (object.isSkinnedMesh) object.skeleton.dispose();
+        });
+        for (const fur of rig.fur) fur.dispose();
+        slot.rig = null;
+      }
       slot.mesh.removeFromParent();
     }
     this.group.removeFromParent();
