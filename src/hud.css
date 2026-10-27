@@ -538,3 +538,37 @@
   .playing .map-stack .camera-tools button { flex:0 0 26px; }
   .playing .map-stack #inventory-panel { max-height:calc(100dvh - var(--dock-height) - var(--map-bottom,220px) - 32px); overflow:auto; }
 }
+
+/* The next step sits under the hero, above the dock: the tile's own action
+   with its key, otherwise where the expedition goes next. */
+.next-step { position: fixed; left: var(--view-center, 50%); bottom: calc(var(--dock-height) + 22px); transform: translateX(-50%); z-index: 6;
+  display: flex; gap: 8px; max-width: min(620px, calc(100vw - 24px)); pointer-events: none; }
+.next-step[hidden] { display: none; }
+.step-action { pointer-events: auto; display: inline-flex; align-items: center; gap: 9px; min-width: 0; min-height: 38px; padding: 7px 14px 7px 8px;
+  border: 1px solid #9bb6ac40; border-radius: 6px; background: #0f1c20e6; color: #e5e7df; font-size: 12px; line-height: 1.2; white-space: nowrap;
+  box-shadow: 0 6px 18px #0007; }
+.step-action.is-hint { padding-left: 14px; }
+button.step-action:hover { border-color: var(--gold); background: #17292cf2; color: #e5e7df; }
+.step-action kbd { min-width: 24px; padding: 4px 6px; border-radius: 4px; border-color: var(--gold); background: var(--gold); color: #10181a;
+  font: 700 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: center; }
+.step-action strong { font-weight: 600; color: #f1e7cd; }
+.step-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #a9bbb1; }
+.step-icon { display: inline-grid; place-items: center; width: 24px; font-size: 17px; color: var(--gold); }
+.next-step.on-tile .step-action:first-child { border-color: #d7bc8399; background: #1c2b27f2; }
+.next-step.on-foe .step-action { border-color: #e2533c88; background: #2a1c1cf2; }
+.next-step.on-foe kbd { background: #e8a08a; border-color: #e8a08a; }
+.playing #toast { bottom: calc(var(--dock-height) + 76px); }
+@media (max-width: 700px) {
+  .next-step { bottom: calc(var(--dock-height) + 16px); gap: 6px; }
+  .step-action { min-height: 36px; padding: 6px 10px 6px 6px; font-size: 11px; gap: 7px; }
+  .next-step .step-action + .step-action .step-detail { display: none; }
+}
+@media (max-height: 600px) and (min-aspect-ratio: 4/3) {
+  /* Short landscape: under the map, clear of the corner notices. */
+  .next-step { left: 12px; transform: none; bottom: calc(var(--dock-height) + 14px); }
+  .step-action { min-height: 32px; padding: 4px 10px 4px 5px; }
+}
+
+/* Keyboard and controller focus share one gold ring. */
+.playing button:focus-visible, #welcome button:focus-visible, .dialog button:focus-visible, .terminal-card button:focus-visible,
+.pad-active :focus { outline: 2px solid var(--gold); outline-offset: 2px; }

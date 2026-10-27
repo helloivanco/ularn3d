@@ -1,90 +1,256 @@
 {
-  "title": {
-    "title": "The Caves Below",
-    "tempo": 72,
-    "beats": 4,
-    "seconds": 53.333333333333336,
+  "method": "Original composition; offline additive, subtractive, Karplus-Strong and formant synthesis in scripts/audio. No samples.",
+  "sampleRates": {
+    "bed": 32000,
+    "stem": 24000
+  },
+  "bits": {
+    "bed": 14,
+    "stem": 12
+  },
+  "targetLufs": -18,
+  "ceilingDbtp": -1.3,
+  "totalBytes": 32581096,
+  "regions": {
+    "caves": {
+      "title": "Stone and Shadow",
+      "tempo": 60,
+      "beats": 4,
+      "bars": 24,
+      "seconds": 96,
+      "bed": {
+        "file": "caves.flac",
+        "sampleRate": 32000,
+        "channels": 2,
+        "frames": 3072000,
+        "bytes": 4760746,
+        "checksum": [
+          -985298943,
+          258174796
+        ],
+        "lufs": -18,
+        "truePeakDb": -5.91,
+        "samplePeak": 0.506
+      },
+      "stem": {
+        "file": "caves-tension.flac",
+        "sampleRate": 24000,
+        "channels": 2,
+        "layers": [
+          "stir",
+          "fray"
+        ],
+        "frames": 2304000,
+        "bytes": 3460439,
+        "checksum": [
+          -778530283,
+          -864787549
+        ],
+        "trimDb": [
+          -1.3,
+          -7.9
+        ],
+        "truePeakDb": -3.54
+      },
+      "intensity": {
+        "rest": -18,
+        "stir": -16.51,
+        "full": -14.3,
+        "fullTruePeakDb": -1.3
+      },
+      "seam": 0.01709
+    },
+    "town": {
+      "title": "Hearth of Ularn",
+      "tempo": 168,
+      "beats": 6,
+      "bars": 32,
+      "seconds": 68.57142857142857,
+      "bed": {
+        "file": "town.flac",
+        "sampleRate": 32000,
+        "channels": 2,
+        "frames": 2194286,
+        "bytes": 4164137,
+        "checksum": [
+          -258588348,
+          1253617325
+        ],
+        "lufs": -18,
+        "truePeakDb": -5.4,
+        "samplePeak": 0.531
+      },
+      "stem": {
+        "file": "town-tension.flac",
+        "sampleRate": 24000,
+        "channels": 2,
+        "layers": [
+          "stir",
+          "fray"
+        ],
+        "frames": 1645714,
+        "bytes": 2485790,
+        "checksum": [
+          -197795275,
+          -1055024610
+        ],
+        "trimDb": [
+          -2.7,
+          -7.5
+        ],
+        "truePeakDb": -4.75
+      },
+      "intensity": {
+        "rest": -18,
+        "stir": -16.5,
+        "full": -14.3,
+        "fullTruePeakDb": -1.44
+      },
+      "seam": 0.01208
+    },
+    "deep": {
+      "title": "The Deep Halls",
+      "tempo": 52,
+      "beats": 4,
+      "bars": 20,
+      "seconds": 92.3076923076923,
+      "bed": {
+        "file": "deep.flac",
+        "sampleRate": 32000,
+        "channels": 2,
+        "frames": 2953846,
+        "bytes": 4562067,
+        "checksum": [
+          857504991,
+          380222968
+        ],
+        "lufs": -18.01,
+        "truePeakDb": -4.4,
+        "samplePeak": 0.6021
+      },
+      "stem": {
+        "file": "deep-tension.flac",
+        "sampleRate": 24000,
+        "channels": 2,
+        "layers": [
+          "stir",
+          "fray"
+        ],
+        "frames": 2215385,
+        "bytes": 2879092,
+        "checksum": [
+          385351383,
+          -574969202
+        ],
+        "trimDb": [
+          -0.2,
+          -7.1
+        ],
+        "truePeakDb": -3.31
+      },
+      "intensity": {
+        "rest": -18.01,
+        "stir": -16.53,
+        "full": -14.32,
+        "fullTruePeakDb": -1.29
+      },
+      "seam": 0.0166
+    },
+    "volcano": {
+      "title": "Beneath the Ember",
+      "tempo": 84,
+      "beats": 4,
+      "bars": 32,
+      "seconds": 91.42857142857143,
+      "bed": {
+        "file": "volcano.flac",
+        "sampleRate": 32000,
+        "channels": 2,
+        "frames": 2925714,
+        "bytes": 5161120,
+        "checksum": [
+          -960730687,
+          65172603
+        ],
+        "lufs": -18.07,
+        "truePeakDb": -4.79,
+        "samplePeak": 0.5748
+      },
+      "stem": {
+        "file": "volcano-tension.flac",
+        "sampleRate": 24000,
+        "channels": 2,
+        "layers": [
+          "stir",
+          "fray"
+        ],
+        "frames": 2194286,
+        "bytes": 3374493,
+        "checksum": [
+          -515510897,
+          -208409084
+        ],
+        "trimDb": [
+          -3.3,
+          -5.6
+        ],
+        "truePeakDb": -1.3
+      },
+      "intensity": {
+        "rest": -18.07,
+        "stir": -16.57,
+        "full": -14.38,
+        "fullTruePeakDb": -1.29
+      },
+      "seam": 0.0127
+    }
+  },
+  "stingers": {
+    "file": "stingers.flac",
+    "sampleRate": 32000,
     "channels": 2,
-    "sampleRate": 22050,
-    "peak": 0.41999998688697815,
-    "rms": 0.08828061996458164,
-    "seam": 0.0011829715222120285
+    "seconds": 33.6,
+    "bytes": 1733212,
+    "checksum": [
+      -89685193,
+      -585286231
+    ],
+    "cues": {
+      "levelup": {
+        "start": 0,
+        "duration": 4.4,
+        "lufs": -17.17,
+        "truePeakDb": -5.83
+      },
+      "descend": {
+        "start": 4.4,
+        "duration": 5.2,
+        "lufs": -17,
+        "truePeakDb": -6.03
+      },
+      "cure": {
+        "start": 9.6,
+        "duration": 5.8,
+        "lufs": -17,
+        "truePeakDb": -6.03
+      },
+      "death": {
+        "start": 15.4,
+        "duration": 7.6,
+        "lufs": -17,
+        "truePeakDb": -3.74
+      },
+      "victory": {
+        "start": 23,
+        "duration": 10.6,
+        "lufs": -17,
+        "truePeakDb": -5.56
+      }
+    }
   },
-  "title-tension": {
-    "title": "The Caves Below",
-    "tempo": 72,
-    "beats": 4,
-    "seconds": 53.333333333333336,
-    "channels": 1,
-    "sampleRate": 22050,
-    "peak": 0.5,
-    "rms": 0.09646323479414126,
-    "seam": 0.0001333387626800686
-  },
-  "town": {
-    "title": "Hearth of Ularn",
-    "tempo": 78,
-    "beats": 3,
-    "seconds": 36.92308390022676,
-    "channels": 2,
-    "sampleRate": 22050,
-    "peak": 0.41999998688697815,
-    "rms": 0.08170003437307756,
-    "seam": 0.005052909255027771
-  },
-  "town-tension": {
-    "title": "Hearth of Ularn",
-    "tempo": 78,
-    "beats": 3,
-    "seconds": 36.92308390022676,
-    "channels": 1,
-    "sampleRate": 22050,
-    "peak": 0.5,
-    "rms": 0.10472608161264432,
-    "seam": 0.0018364489078521729
-  },
-  "caves": {
-    "title": "Stone and Shadow",
-    "tempo": 64,
-    "beats": 4,
-    "seconds": 60,
-    "channels": 2,
-    "sampleRate": 22050,
-    "peak": 0.41999998688697815,
-    "rms": 0.08878196295003643,
-    "seam": 0.0009526908397674561
-  },
-  "caves-tension": {
-    "title": "Stone and Shadow",
-    "tempo": 64,
-    "beats": 4,
-    "seconds": 60,
-    "channels": 1,
-    "sampleRate": 22050,
-    "peak": 0.5,
-    "rms": 0.09494367406061359,
-    "seam": 0.00004508021993387956
-  },
-  "volcano": {
-    "title": "Beneath the Ember",
-    "tempo": 88,
-    "beats": 4,
-    "seconds": 43.636371882086166,
-    "channels": 2,
-    "sampleRate": 22050,
-    "peak": 0.41999998688697815,
-    "rms": 0.08216587862232258,
-    "seam": 0.0012600049376487732
-  },
-  "volcano-tension": {
-    "title": "Beneath the Ember",
-    "tempo": 88,
-    "beats": 4,
-    "seconds": 43.636371882086166,
-    "channels": 1,
-    "sampleRate": 22050,
-    "peak": 0.5,
-    "rms": 0.09902623736311163,
-    "seam": 0.000012868549674749374
+  "preview": {
+    "file": "docs/audio/soundtrack-preview.flac",
+    "seconds": 89.2,
+    "bytes": 3507072
   }
 }

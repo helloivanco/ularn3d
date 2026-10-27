@@ -59,7 +59,7 @@ const types = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
   ".webp": "image/webp", ".ico": "image/x-icon", ".woff": "font/woff",
   ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
-  ".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg",
+  ".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".flac": "audio/flac",
   ".wasm": "application/wasm", ".txt": "text/plain; charset=utf-8",
   ".md": "text/plain; charset=utf-8",
 };

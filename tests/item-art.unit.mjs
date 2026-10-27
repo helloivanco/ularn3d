@@ -41,3 +41,35 @@ test("transparent pixels borrow neighboring item color but stay transparent", ()
     assert.deepEqual([...image.data.slice(i * 4, i * 4 + 3)], [200, 120, 40], `color ${i}`);
   }
 });
+
+test("the fill cannot leak diagonally or into tinted pale art", () => {
+  const image = { data: new Uint8ClampedArray(3 * 3 * 4), width: 3, height: 3 };
+  for (let i = 0; i < 9; i++) rgba(image.data, i, 230, 230, 230, 255);
+  for (const i of [1, 3, 5, 7]) rgba(image.data, i, 30, 30, 30, 255);
+  rgba(image.data, 4, 255, 255, 255, 255);
+  stripPaleSpriteBackground(image);
+  assert.equal(image.data[0 * 4 + 3], 0, "corner card removed");
+  assert.equal(image.data[4 * 4 + 3], 255, "white facet behind a diagonal outline stays");
+  const lavender = { data: new Uint8ClampedArray(2 * 2 * 4), width: 2, height: 2 };
+  for (let i = 0; i < 4; i++) rgba(lavender.data, i, 240, 231, 249, 255);
+  stripPaleSpriteBackground(lavender);
+  assert.equal(lavender.data[3], 255, "a pale lavender bottle is not card");
+});
+
+test("enclosed checker holes clear while highlights inside metal stay", () => {
+  const make = (inside, frame) => {
+    const size = 40, image = { data: new Uint8ClampedArray(size * size * 4), width: size, height: size };
+    for (let y = 5; y < 35; y++) for (let x = 5; x < 35; x++) {
+      const edge = x < 9 || y < 9 || x > 30 || y > 30;
+      rgba(image.data, y * size + x, ...(edge ? frame : inside(x, y)), 255);
+    }
+    return image;
+  };
+  const checker = make((x, y) => ((x >> 1) + (y >> 1)) % 2 ? [255, 255, 255] : [222, 222, 222], [40, 34, 30]);
+  stripPaleSpriteBackground(checker);
+  assert.equal(checker.data[(20 * 40 + 20) * 4 + 3], 0, "ring hole cleared");
+  assert.equal(checker.data[(6 * 40 + 6) * 4 + 3], 255, "ring kept");
+  const polished = make((x) => { const v = 210 + x; return [v, v, v]; }, [150, 152, 158]);
+  stripPaleSpriteBackground(polished);
+  assert.equal(polished.data[(20 * 40 + 20) * 4 + 3], 255, "steel highlight kept");
+});

@@ -284,11 +284,11 @@ export class FeedbackDirector {
       const cause = transitionCause(this.under, next.log || []);
       hud.depthCard({ ...depthLabel(next.level), cause, first: d.newDeepest, level: next.level });
       if (!this.reduced) world.arrive(d.depth.to > d.depth.from ? "down" : "up");
-      audio.play("arrive", { depth: next.level });
+      audio.play("arrive", { depth: next.level, first: d.newDeepest });
       this.note("arrive");
     }
     if (d.eyeGained) this.beat("eye", () => hud.notice({ icon: "eye", title: "The Eye of Larn", line: "Hidden things are revealed to you." }));
-    if (d.cureGained) this.beat("cure", () => hud.notice({ icon: "potion", title: "The cure", line: "Carry it home before time runs out." }));
+    if (d.cureGained) this.beat("cure", () => { hud.notice({ icon: "potion", title: "The cure", line: "Carry it home before time runs out." }); audio.play("cure"); });
   }
   ending() {
     this.queue.length = 0; this.beats.length = 0;

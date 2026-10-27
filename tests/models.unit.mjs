@@ -132,7 +132,9 @@ test("pits dart traps and express elevators use distinct graphics", () => {
   assert.equal(dart.userData.trapKind, "dart");
   assert.equal(up.userData.trapKind, "elevator-up");
   assert.equal(down.userData.trapKind, "elevator-down");
-  assert.equal(arrow.userData.trapKind, "trap");
+  assert.equal(arrow.userData.trapKind, "arrow");
+  assert.equal(itemModel({ id: 75, name: "a trapdoor" }).userData.trapKind, "trapdoor");
+  assert.equal(itemModel({ id: 9, name: "a teleport trap" }).userData.trapKind, "teleport");
 
   assert.ok(pit.getObjectByName("pit-rim"));
   assert.equal(dart.children.filter((c) => c.name === "dart-spike").length, 6);
@@ -252,4 +254,19 @@ test("town portal has its own landmark mesh", () => {
   const portal = itemModel({ id: 102, name: "a town portal" });
   assert.equal(portal.userData.portal, true);
   assert.ok(meshCount(portal) >= 3);
+});
+
+test("the throne shows its jewels until they are pried loose, and the sphere is a void", () => {
+  const throne = itemModel({ id: 2, name: "a handsome jewel encrusted throne" });
+  const massive = itemModel({ id: 79, name: "a massive throne" });
+  let jewels = 0, pried = 0;
+  throne.traverse((o) => { if (o.name === "throne-jewel") jewels++; });
+  massive.traverse((o) => { if (o.name === "throne-jewel") pried++; });
+  assert.equal(jewels, 4);
+  assert.equal(pried, 0);
+  const sphere = itemModel({ id: 82, name: "a sphere of annihilation" });
+  assert.equal(sphere.userData.hazard, "annihilation");
+  assert.ok(sphere.getObjectByName("annihilation-core"));
+  const mirror = itemModel({ id: 11, name: "a mirror" });
+  assert.equal(mirror.getObjectByName("mirror-glass").material.type, "MeshBasicMaterial");
 });

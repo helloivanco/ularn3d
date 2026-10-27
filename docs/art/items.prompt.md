@@ -13,6 +13,30 @@ Potions (`id` 42) select art by `arg` only after the potion is discovered.
 Undiscovered potions share `/art/items/potion-unknown.png`. Scrolls (`id` 41)
 still select art by `arg` from the full scroll table.
 
+## Runtime normalization
+
+The generated PNGs did not come back with clean alpha. About 80 of 100 carry an opaque pale card
+or a baked fake checkerboard, and ring holes keep that checker inside the band. `src/item-art.js`
+strips it once per texture with `stripPaleSpriteBackground`:
+
+1. A 4-connected flood from the image edges through transparent or neutral pale pixels (channel
+   spread ≤ 12, brightness ≥ 168). It cannot slip through a one-pixel diagonal outline, and tinted
+   pale art such as the lavender see-invisible bottle is not card.
+2. Enclosed regions are cleared only when they are a sharp two-tone neutral checker (≥ 12% sharp
+   neighbor steps, ≥ 15% light and ≥ 15% mid tones) ringed mostly (≥ 35%) by dark or saturated item
+   pixels. Polished armor highlights and the amulet's glass sit inside bright material and stay.
+
+Audited on October 26, 2026 across all 100 sprites. No outer card is left in any image frame.
+The update repaired the diamond's facets, the dagger, long sword, two-handed sword and sunsword
+blades, the plate and stainless armor highlights, the forgetfulness and see-invisible potions
+(the latter had been almost entirely erased) and the hand of fear. It also opened the holes of
+the energy ring, seven other rings and the belt of striking. The amulet of invisibility's small
+chain loop still shows a little pale card.
+
+[Old and new strip side by side](../screenshots/loot/strip-before-after.png) ·
+[Loot in Auto caves](../screenshots/loot/loot-auto.png) ·
+[Loot in Cinematic caves](../screenshots/loot/loot-cinematic.png)
+
 ## Shared generation prompt pattern
 
 Use case: stylized-concept. Asset type: one transparent 2D item sprite for a small

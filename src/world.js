@@ -10,7 +10,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { caveGlowMaterial, caveGlowCenter, releaseCaveGlowResources, VignetteShader, CAVE_HERO_LIGHT } from "./cave-glow.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, stoneTint, releaseMaterialResources } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, reliefMap, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { createCreatureModel } from "./creature-models.js";
@@ -380,7 +380,7 @@ export class World {
     const floorGeo = new THREE.BoxGeometry(WALL_TILE_SIZE, FLOOR_HEIGHT, WALL_TILE_SIZE);
     this.floor = new ChunkedTerrainMesh(
       floorGeo,
-      surface("stone", 0xffffff),
+      surface("flags", 0xffffff),
       FLOOR_LIMIT,
     );
     this.floor.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -736,7 +736,7 @@ export class World {
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
         torchReassignments:this.lighting.reassignments,
         antialiasing:this.cinematicRendering() ? "SMAA" : this.msaa ? "MSAA" : "none",
-        caveGlow: !!this.floor.material?.userData?.caveGlow, vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
+        caveGlow: !!this.floor.material?.userData?.caveGlow, caveRelief: !!this.floor.material?.userData?.caveRelief, vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
         wallRelief:!!this.walls.geometry.getAttribute("color"),
         shadowMapEnabled: this.renderer.shadowMap.enabled,
         sunCastShadow: !!this.sun.castShadow,
@@ -1525,24 +1525,27 @@ export class World {
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     if (cinematic) this.markShadowUpdate();
   }
-  floorSurface(kind, color, extra) {
+  floorSurface(kind, color, extra, scatter = false) {
     const dungeon = this.state && this.state.level !== 0;
+    const turned = (material) => (scatter ? tileScatter(material) : material);
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
     // Cinematic adds a warm pool around the hero on the same unlit, mapped material.
     if (dungeon) {
-      const flat = surfaceBasic(kind, color, extra);
-      return this.cinematicRendering() ? caveGlowMaterial(flat) : flat;
+      const flat = turned(surfaceBasic(kind, color, extra));
+      return this.cinematicRendering() ? caveGlowMaterial(flat, reliefMap(kind)) : flat;
     }
-    return this.cinematicRendering()
+    return turned(this.cinematicRendering()
       ? surface(kind, color, extra)
-      : surfaceLambert(kind, color, extra);
+      : surfaceLambert(kind, color, extra));
   }
   applyFloorMaterials() {
     const tint = stoneTint(this.state?.level ?? 0);
     const courses = shiftedTexture("stone", "courses", 0.37, 0.19);
-    this.floor.material = this.floorSurface("stone", tint.floor);
-    this.grassFloor.material = this.floorSurface("grass", 0xffffff);
+    // Floors turn per tile; walls and caps keep their courses level.
+    const volcano = (this.state?.level ?? 0) > 15;
+    this.floor.material = this.floorSurface(volcano ? "basalt" : "flags", tint.floor, undefined, true);
+    this.grassFloor.material = this.floorSurface("grass", 0xffffff, undefined, true);
     this.walls.material = this.floorSurface("stone", tint.wall, { map: courses, vertexColors:true });
     this.caps.material = this.floorSurface("stone", tint.cap, { map: courses, vertexColors:true });
   }
@@ -1550,7 +1553,9 @@ export class World {
     const n = noise(x, y);
     const n2 = noise(x + 11, y + 4);
     if (grass) {
-      this.scratchColor.setRGB(0.52 + n * 0.22, 0.58 + n2 * 0.16, 0.36 + n * 0.08);
+      // Half the former spread around the same mean: the blade map carries the
+      // detail, so the lawn no longer reads as a yellow/green checkerboard.
+      this.scratchColor.setRGB(0.575 + n * 0.11, 0.62 + n2 * 0.08, 0.38 + n * 0.04);
       return this.scratchColor;
     }
     if (!level) {
@@ -1725,14 +1730,14 @@ export class World {
     }
   }
   preview() {
-    block(this.terrain, "stone", 0x66756b, 2, -0.35, 0, 21, 0.55, 16);
-    block(this.terrain, "grass", 0x9eaa77, 2, -0.07, 0, 20.9, 0.06, 15.9);
+    block(this.terrain, "stone", 0x66756b, 2, -0.35, 0, 21, 0.55, 16, { map: placedTexture("stone", "preview-base", { repeat: [21, 16] }) });
+    block(this.terrain, "grass", 0x9eaa77, 2, -0.07, 0, 20.9, 0.06, 15.9, { map: placedTexture("grass", "preview-field", { repeat: [21, 16] }) });
     for (let x = -8; x < 13; x++)
       for (let y = -7; y < 8; y++)
         if (y === 1 || x === 4)
           block(
             this.terrain,
-            "stone",
+            "flags",
             0xc7bda0,
             x,
             0.003,
@@ -1741,6 +1746,7 @@ export class World {
             0.025,
             0.99,
           );
+    const town = new THREE.Group();
     for (const [id, x, z, s] of [
       [69, -2, 4, 1.4],
       [12, 1, 0, 1.25],
@@ -1750,11 +1756,23 @@ export class World {
       [54, 8, -6, 1.5],
     ]) {
       const b = building(id);
-      batch(b);
       b.position.set(x, 0, z);
       b.scale.setScalar(s);
-      this.props.add(b);
+      town.add(b);
     }
+    // The title never fades or cuts away a building, so all six merge by
+    // shared material: one draw per material instead of one per building.
+    // Labels keep their placement by baking each building's transform first.
+    town.updateMatrixWorld(true);
+    const labels = [];
+    town.traverse((o) => { if (o.isSprite) labels.push(o); });
+    for (const sprite of labels) {
+      sprite.matrixWorld.decompose(sprite.position, sprite.quaternion, sprite.scale);
+      sprite.removeFromParent();
+    }
+    batch(town);
+    labels.forEach((sprite) => town.add(sprite));
+    this.props.add(town);
     for (let i = 0; i < 100; i++) {
       const x = noise(i, 9) * 25 - 10,
         y = noise(i, 10) * 21 - 10;
@@ -1933,9 +1951,11 @@ export class World {
         slab.name = "cave-slab";
       } else {
         const base = groundSlab(-0.715);
+        // One texture repeat per tile: the land outside the walls keeps the
+        // same texel density as the plaza instead of one map stretched 67×17.
         block(
           this.terrain,
-          "stone",
+          "grass",
           0x70806e,
           (state.width - 1) / 2,
           base.y,
@@ -1943,6 +1963,7 @@ export class World {
           state.width,
           base.height,
           state.height,
+          { map: placedTexture("grass", `town-ground-${state.width}x${state.height}`, { repeat: [state.width, state.height] }) },
         );
         for (let i = 0; i < 48; i++) {
           const x = noise(i, 63) * (state.width + 6) - 3,
