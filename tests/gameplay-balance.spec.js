@@ -66,11 +66,12 @@ test("minimap paints stairs going down red and stairs going up green", async ({
   await start(page);
   const colors = await page.evaluate(() => {
     newcavelevel(2);
-    player.x = 10;
-    player.y = 8;
+    // The hero's marker and stair arrows cover their neighbours on the whole-floor map; stand clear.
+    player.x = 22;
+    player.y = 12;
     for (let x = 0; x < MAXX; x++)
       for (let y = 0; y < MAXY; y++) {
-        setItem(x, y, x < 7 || x > 14 || y < 5 || y > 11 ? OWALL : OEMPTY);
+        setItem(x, y, x < 7 || x > 24 || y < 5 || y > 13 ? OWALL : OEMPTY);
         setKnow(x, y, KNOWALL);
       }
     setItem(9, 8, OSTAIRSDOWN);
@@ -78,15 +79,10 @@ test("minimap paints stairs going down red and stairs going up green", async ({
     paint();
     const map = document.getElementById("minimap");
     const ctx = map.getContext("2d");
-    const x0 = +map.dataset.x0;
-    const y0 = +map.dataset.y0;
-    const cols = +map.dataset.cols;
-    const cell = map.width / cols / Math.min(1.25, devicePixelRatio || 1);
-    const dpr = Math.min(1.25, devicePixelRatio || 1);
+    const cellX = map.width / +map.dataset.columns;
+    const cellY = map.height / +map.dataset.rows;
     const sample = (gx, gy) => {
-      const px = Math.round(((gx - x0) * cell + cell / 2) * dpr);
-      const py = Math.round(((gy - y0) * cell + cell / 2) * dpr);
-      const [r, g, b] = ctx.getImageData(px, py, 1, 1).data;
+      const [r, g, b] = ctx.getImageData(Math.floor((gx + .5) * cellX), Math.floor((gy + .5) * cellY), 1, 1).data;
       return { r, g, b };
     };
     return { down: sample(9, 8), up: sample(11, 8) };

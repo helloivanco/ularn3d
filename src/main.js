@@ -18,7 +18,7 @@ import { World } from "./world.js";
 import { preloadHero } from "./hero-skin.js";
 import { LANDMARK_NAMES } from "./models.js";
 import { HeldMovement, movementKey, findRoute, isHostile, keyOffset, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
-import { GameMap } from "./map.js";
+import { GameMap, STAIR_COLORS, exitDirection } from "./map.js";
 import { iconMarkup, mountIcons, setIcon } from "./icons.js";
 import { groundHoverInfo } from "./item-tooltips.js";
 import { monsterCardInfo } from "./monster-descriptions.js";
@@ -1298,13 +1298,11 @@ const MAP_GLYPHS = {
   93: "<",
 };
 
-const STAIR_UP_IDS = new Set([5, 93]);
-const STAIR_DOWN_IDS = new Set([13]);
-
+// Ways up are green and ways down red, as the stair compass points to them.
 function mapGlyphColor(tile) {
   if (tile.monster) return "#ffa590";
-  if (STAIR_DOWN_IDS.has(tile.id)) return "#e07070";
-  if (STAIR_UP_IDS.has(tile.id)) return "#6ecf7a";
+  const exit = exitDirection(tile);
+  if (exit) return STAIR_COLORS[exit];
   if (tile.store) return "#c4d7ab";
   return "#f0d7a0";
 }
