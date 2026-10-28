@@ -106,6 +106,102 @@ test("found stairs point the way from the player: green up, red down", async ({ 
   expect(compass.movedUp).toEqual([110, 207, 122]);
 });
 
+test("charting a way says so once and lights the map in its arrow's color", async ({ page }) => {
+  await start(page);
+  const notices = () => page.locator(".notice", { hasText: "A way down found" });
+  // Arriving: nothing is announced for what the floor already shows.
+  await page.evaluate(() => {
+    newcavelevel(2);
+    for (let x = 0; x < MAXX; x++)
+      for (let y = 0; y < MAXY; y++) {
+        setItem(x, y, x < 4 || x > 22 || y < 3 || y > 15 ? OWALL : OEMPTY);
+        setMonster(x, y, null);
+        setKnow(x, y, KNOWALL);
+      }
+    setItem(18, 8, OSTAIRSDOWN);
+    setKnow(18, 8, 0);
+    player.x = 10; player.y = 8; paint();
+  });
+  await expect(page.locator(".notice", { hasText: /A way (up|down) found/ })).toHaveCount(0);
+  // Seeing the stairs: one notice, and the map panel glows red.
+  await page.evaluate(() => { setKnow(18, 8, KNOWALL); paint(); });
+  await expect(notices()).toHaveCount(1);
+  await expect(notices()).toContainText("red arrow");
+  await expect(page.locator(".map-panel")).toHaveClass(/way-found.*down|down.*way-found/);
+  // Walking about the same floor does not repeat it.
+  await page.evaluate(() => { player.x = 12; paint(); player.x = 10; paint(); });
+  await expect(notices()).toHaveCount(1);
+});
+
+test("a real descent: arrows appear only once stairs are seen, and keep pointing at them", async ({ page }) => {
+  test.setTimeout(150000);
+  await start(page);
+  // Every stop: the map holds still, each arrow belongs to a charted way and
+  // points at it from the hero, and every charted way has its arrow.
+  const check = () => page.evaluate(() => {
+    const map = document.getElementById("minimap"), compass = JSON.parse(map.dataset.compass);
+    const snap = ularn.snapshot(), problems = [];
+    if (+map.dataset.x0 || +map.dataset.y0 || +map.dataset.columns !== MAXX || +map.dataset.rows !== MAXY) problems.push("map moved");
+    const ways = { up: [5, 56, 93], down: [13, 54] };
+    for (const arrow of compass) {
+      const tile = snap.tiles.find((t) => t.x === arrow.x && t.y === arrow.y);
+      if (!tile || !(getKnow(arrow.x, arrow.y) & HAVESEEN)) problems.push(`${arrow.direction} arrow to an unseen tile`);
+      if (!ways[arrow.direction].includes(tile?.id)) problems.push(`${arrow.direction} arrow to a non-exit`);
+      const want = Math.round(Math.atan2(arrow.y - player.y, arrow.x - player.x) * 180 / Math.PI);
+      if (arrow.angle !== want) problems.push(`${arrow.direction} arrow at ${arrow.angle}, not ${want}`);
+    }
+    for (const [direction, ids] of Object.entries(ways)) {
+      const charted = snap.tiles.some((t) => ids.includes(t.id) && !t.stair?.blocked && (t.x !== player.x || t.y !== player.y));
+      if (charted !== compass.some((arrow) => arrow.direction === direction)) problems.push(`${direction}: charted ${charted}, arrow ${!charted}`);
+    }
+    return { level, at: [player.x, player.y], arrows: compass.map((a) => a.direction).sort().join(","), problems };
+  });
+  // Exploring stops for creatures and never opens doors, so keep the way clear.
+  const calm = () => page.evaluate(() => {
+    player.HP = player.HPMAX = 2000;
+    for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) {
+      if (monsterAt(x, y) && Math.max(Math.abs(x - player.x), Math.abs(y - player.y)) <= 6) setMonster(x, y, null);
+      if (itemAt(x, y).matches(OCLOSEDDOOR)) setItem(x, y, createObject(OOPENDOOR));
+    }
+  });
+  const explore = async (until) => {
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      await calm();
+      await page.locator("#explore").click();
+      await expect.poll(() => page.evaluate(() => !activeExplorer), { timeout: 20000 }).toBe(true);
+      const view = await check();
+      expect(view.problems, JSON.stringify(view)).toEqual([]);
+      seen.push(view);
+      if (until(view)) break;
+    }
+    return seen;
+  };
+
+  // Into the caves through the entrance: the red arrow already points there in town.
+  expect((await check()).arrows).toBe("down");
+  await page.keyboard.press(">");
+  await expect.poll(() => page.evaluate(() => itemAt(player.x, player.y).matches(OENTRANCE))).toBe(true);
+  await page.keyboard.press(">");
+  await expect.poll(() => page.evaluate(() => level)).toBe(1);
+  const arrival = await check();
+  expect(arrival.problems).toEqual([]);
+  const depth1 = await explore((view) => view.arrows.includes("down"));
+  expect(depth1.at(-1).arrows).toContain("down");
+
+  // A new floor: nothing is charted on arrival, so no arrows until exploring finds a way.
+  await calm();
+  await page.evaluate(() => { const down = ularn.snapshot().tiles.find((t) => t.id === 13); player.x = down.x; player.y = down.y; paint(); });
+  await page.keyboard.press(">");
+  await expect.poll(() => page.evaluate(() => level)).toBe(2);
+  const fresh = await check();
+  expect(fresh.problems).toEqual([]);
+  const charted = await page.evaluate(() => ularn.snapshot().tiles.filter((t) => [5, 13].includes(t.id)).length);
+  if (!charted) expect(fresh.arrows).toBe("");
+  const depth2 = await explore((view) => view.arrows === "down,up");
+  expect(depth2.some((view) => view.arrows)).toBe(true);
+});
+
 test("the D1 town exit is reachable and returns the player to town every time", async ({ page }) => {
   await start(page);
   const trials = await page.evaluate(() => {

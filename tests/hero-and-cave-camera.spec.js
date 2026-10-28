@@ -46,9 +46,9 @@ test("when the rigged hero cannot load, the built-in one shows instead", async (
   await expect.poll(() => hero(page)).toEqual({ dressed: false, visible: true });
 });
 
-test("caves open close on the hero, and the old far cave zoom is forgotten", async ({ page }) => {
+test("caves open on the wider view, and the 1.7.2 close cave zoom is forgotten", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("ularn3d.camera",
-    JSON.stringify({ radius: 8.949, elevation: 15.5, caves: { radius: 7.6, elevation: 13 } })));
+    JSON.stringify({ radius: 8.949, elevation: 15.5, caves: { radius: 7.6, elevation: 13 }, caveView: { radius: 5.8, elevation: 10 } })));
   await begin(page);
   const town = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
   const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("ularn3d.camera")));
@@ -59,12 +59,13 @@ test("caves open close on the hero, and the old far cave zoom is forgotten", asy
   await expect.poll(() => page.evaluate(() => {
     const [x, y, z] = ularnGraphics.metrics().cameraOffset;
     return Math.round(Math.hypot(x, z) * 10) / 10;
-  })).toBe(5.8);
+  })).toBe(7.6);
   const cave = await page.evaluate(() => ularnGraphics.metrics().cameraOffset);
-  expect(Math.hypot(...cave)).toBeLessThan(0.7 * Math.hypot(...town));
+  expect(Math.hypot(...cave)).toBeLessThan(Math.hypot(...town));
   // Re-centering in the caves keeps the town zoom as it was.
   await page.locator("#camera-reset").click();
   await page.waitForTimeout(600);
-  await expect.poll(stored).toMatchObject({ radius, elevation, caveView: { elevation: 10 } });
+  await expect.poll(stored).toMatchObject({ radius, elevation, caveWide: { elevation: 13 } });
   expect((await stored()).caves).toBeUndefined();
+  expect((await stored()).caveView).toBeUndefined();
 });

@@ -21,7 +21,10 @@ async function launch() {
   const page = await desktop.firstWindow();
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error" && !testingNetworkBlock) console.error(`Desktop renderer: ${message.text()}`);
+    if (message.type() !== "error" || testingNetworkBlock) return;
+    console.error(`Desktop renderer: ${message.text()}`);
+    // A blocked texture only logs; it is still a failure (it drew every model white).
+    errors.push(message.text());
   });
   await page.waitForFunction(() => window.ularn && document.querySelector("#loading")?.hidden, null, { timeout: 60000 })
     .catch(async (error) => {
@@ -45,6 +48,7 @@ try {
   await page.locator("#begin").click();
   await expect(page.locator("#hud")).toHaveJSProperty("hidden", false);
   await expect.poll(() => page.evaluate(() => ularnAudio.metrics().playingRegion), { timeout: 10000 }).toBe("town");
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().heroTextured), { timeout: 15000 }).toBe(true);
   assert.equal(await page.evaluate(() => ularnAudio.metrics().contextState), "running", "Music unlocks on Play through the offline desktop host");
   await page.keyboard.press(".");
   await page.keyboard.press("S");

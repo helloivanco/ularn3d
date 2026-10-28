@@ -9,7 +9,7 @@ import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader, CAVE_LIGHT, OCCLUDER_LAYER, caveEnvironmentScene } from "./cave-light.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, glowMap, stoneTint, releaseMaterialResources } from "./materials.js";
+import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, worldMasonry, glowMap, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
 import { monsterSprite, faceMonster, monsterArtMetrics, releaseMonsterArtResources } from "./monster-art.js";
 import { createCreatureModel } from "./creature-models.js";
@@ -26,7 +26,7 @@ import { heroBody, creatureBody, CharacterRig } from "./hero-skin.js";
 import { SetDressing, chestModel } from "./set-dressing.js";
 import { TorchLighting, stabilizeShadow, TOWN_LIGHT, townSkyScene } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { wallHeight, wallLip, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
+import { wallHeight, hidesFocus, FOCUS_REACH, wallLip, WALL_CUT, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import { auraControl } from "./cooperation-aura.js";
 import {
@@ -105,7 +105,7 @@ const TOWN_BLOOM = Object.freeze({ strength: 0.1, radius: 0.4, threshold: 1.45 }
 const AUTO_TIER_KEY = "ularn3d.autoTier";
 const EMBER_COLOR = 0xff7a3c;
 /* Cinematic vignette strength: deeper in the caves, faint in town. */
-const VIGNETTE = { town: 0.16, caves: 0.42, volcano: 0.36 };
+const VIGNETTE = { town: 0.16, caves: 0.12, volcano: 0.14 };
 const AUTO_CAPS = [0.65, 0.75, 1, 1.5, 2];
 const AUTO_LABELS = ["low", "balanced", "high", "sharp", "native"];
 export const autoTierLimit = (ratio = globalThis.devicePixelRatio || 1) => ratio > 1.5 + 1e-6 ? 4 : ratio > 1 + 1e-6 ? 3 : 2;
@@ -122,13 +122,13 @@ const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y
   return new THREE.Vector3(0, y, horiz);
 };
 /*
- * Caves frame closer than town so the hero and a freshly lit corridor fill the
- * view rather than a field of dark. Town and caves remember zoom separately;
- * the top-level fields stay the town preference, so older saved preferences
- * still read. The cave zoom is kept under `caveView`: the old `caves` entry
- * held the farther 7.6 / 13 framing (saved every turn), so it is dropped once.
+ * Caves frame a little closer than town. Town and caves remember zoom
+ * separately; the top-level fields stay the town preference, so older saved
+ * preferences still read. The cave zoom is kept under `caveWide`: 1.7.2 moved
+ * the caves in to 5.8 / 10 (`caveView`), which showed too little around the
+ * hero, so that entry and the older `caves` one are dropped once.
  */
-const CAVE_CAMERA = Object.freeze({ radius: 5.8, elevation: 10 });
+const CAVE_CAMERA = Object.freeze({ radius: 7.6, elevation: 13 });
 const cameraRegion = (level) => (level > 0 ? "caves" : "town");
 const cameraEntry = (value) => {
   const radius = Number(value?.radius), elevation = Number(value?.elevation);
@@ -148,7 +148,7 @@ const readCameraStore = () => {
 };
 const readCameraPrefs = (level = 0) => {
   const stored = readCameraStore();
-  if (cameraRegion(level) === "caves") return cameraEntry(stored?.caveView) || { ...CAVE_CAMERA };
+  if (cameraRegion(level) === "caves") return cameraEntry(stored?.caveWide) || { ...CAVE_CAMERA };
   return cameraEntry(stored);
 };
 let writtenCameraPrefs = "";
@@ -156,9 +156,9 @@ const writeCameraPrefs = (offset, level = 0) => {
   try {
     const entry = { radius: Math.hypot(offset.x, offset.z), elevation: offset.y };
     const stored = { ...readCameraStore() };
-    delete stored.caves;
+    delete stored.caves; delete stored.caveView;
     const next = cameraRegion(level) === "caves"
-      ? { ...stored, caveView: entry }
+      ? { ...stored, caveWide: entry }
       : { ...stored, ...entry };
     const value = JSON.stringify(next);
     // Every turn captures the camera; storage is touched only when zoom or tilt changed.
@@ -168,6 +168,15 @@ const writeCameraPrefs = (offset, level = 0) => {
     writtenCameraPrefs = value;
   } catch {}
 };
+/** Value noise eased between lattice points `span` tiles apart: neighbours differ by a few percent. */
+function smoothNoise(x, y, span, seed) {
+  const fx = x / span, fy = y / span, x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const ease = (t) => t * t * (3 - 2 * t), sx = ease(fx - x0), sy = ease(fy - y0);
+  const at = (i, j) => noise(i + seed, j + seed * 7);
+  const top = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * sx;
+  const bottom = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * sx;
+  return top + (bottom - top) * sy;
+}
 function destroy(group) {
   group.traverse((o) => {
     if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
@@ -751,6 +760,8 @@ export class World {
         routePoints: this.routePointCount, routeVisible: false,
         heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect, viewFocus: this.viewFocus,
         heroSkin: this.heroRig ? { ...this.heroSkin, clip: this.heroRig.clip } : null,
+        // A rigged body whose embedded texture failed to load draws plain white.
+        heroTextured: !!this.heroRig && (() => { let mapped = false; this.heroRig.body.traverse((o) => { if (o.isMesh && o.material?.map) mapped = true; }); return mapped; })(),
         heroVisible: this.player.visible,
         ...creatureMetrics(), ...this.dressing.metrics(), ...window.ularnPersistence?.metrics(),
         idle: performance.now() > this.activeUntil,
@@ -798,6 +809,7 @@ export class World {
         )?.castShadow,
         floorMapped: !!this.floor.material?.map,
         wallMapped: !!this.walls.material?.map,
+        wallLaid: !!(this.walls.material?.userData?.worldMasonry && this.caps.material?.userData?.worldMasonry),
         floorColor: this.floor.material?.color?.getHexString?.() ?? null,
         wallColor: this.walls.material?.color?.getHexString?.() ?? null,
         floorAnisotropy: this.floor.material?.map?.anisotropy ?? null,
@@ -1694,16 +1706,20 @@ export class World {
     this.composer?.setPixelRatio(this.renderer.getPixelRatio());
     if (cinematic) this.markShadowUpdate();
   }
-  floorSurface(kind, color, extra, scatter = false) {
+  floorSurface(kind, color, extra, layout = (material) => material) {
     const dungeon = this.state && this.state.level !== 0;
-    const turned = (material) => (scatter ? tileScatter(material) : material);
+    const turned = layout;
     // Flat caves: MeshBasic (constant light, no torch/zoom dim) WITH stone/grass
     // maps. Do not strip map/texture unless Ivan explicitly asks for texture changes.
     // Cinematic caves are lit: the same maps on PBR stone, with lava giving off light.
     if (dungeon) {
       if (!this.cinematicRendering()) return turned(surfaceBasic(kind, color, extra));
       const hot = kind === "basalt" && glowMap(kind);
-      const lit = turned(surface(kind, color, hot ? { ...extra, emissiveMap: hot, emissive: CAVE_LIGHT.lava.color, emissiveIntensity: CAVE_LIGHT.lava.intensity } : extra));
+      // Painted lighter than the flat tint (CAVE_LIGHT.stone); the name keeps
+      // each tint its own cached material once the lighter color clamps.
+      const stone = new THREE.Color(color).multiplyScalar(CAVE_LIGHT.stone);
+      const lit = turned(surface(kind, stone, { ...extra, name: `lit-stone:${new THREE.Color(color).getHexString()}`,
+        ...(hot ? { emissiveMap: hot, emissive: CAVE_LIGHT.lava.color, emissiveIntensity: CAVE_LIGHT.lava.intensity } : {}) }));
       lit.userData.caveLit = true;
       return lit;
     }
@@ -1713,13 +1729,16 @@ export class World {
   }
   applyFloorMaterials() {
     const tint = stoneTint(this.state?.level ?? 0);
-    const courses = shiftedTexture("stone", "courses", 0.37, 0.19);
-    // Floors turn per tile; walls and caps keep their courses level.
+    // Course joints fall on whole tiles, so a joint meets the floor at every wall's foot.
+    const courses = shiftedTexture("stone", "masonry", 0.37, 0);
+    // Floors turn per tile; walls and caps are laid in world space, so their
+    // courses run on from block to block (worldMasonry).
     const volcano = (this.state?.level ?? 0) > 15;
-    this.floor.material = this.floorSurface(volcano ? "basalt" : "flags", tint.floor, undefined, true);
-    this.grassFloor.material = this.floorSurface("grass", 0xffffff, undefined, true);
-    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses, vertexColors:true });
-    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses, vertexColors:true });
+    const laid = (material) => worldMasonry(material, WALL_BASE_Y);
+    this.floor.material = this.floorSurface(volcano ? "basalt" : "flags", tint.floor, undefined, tileScatter);
+    this.grassFloor.material = this.floorSurface("grass", 0xffffff, undefined, tileScatter);
+    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses, vertexColors:true }, laid);
+    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses, vertexColors:true }, laid);
   }
   floorVariation(level, grass, x, y) {
     const n = noise(x, y);
@@ -2725,6 +2744,12 @@ export class World {
     if (toward.lengthSq() < 1e-8) return;
     toward.normalize();
     const town = this.state.level === 0;
+    // Walls also lower in front of anything the player knows is there, not only
+    // the hero: creatures, loot, stairs, chests and fountains stand shorter than
+    // a wall and were hidden behind it. Doors sit in the walls and need nothing.
+    const focus = town ? [] : (this.state.tiles || []).filter((t) => (t.monster || (t.id && !t.wall && t.doorFacing == null)) &&
+      (t.x !== this.state.x || t.y !== this.state.y) &&
+      Math.max(Math.abs(t.x - this.state.x), Math.abs(t.y - this.state.y)) <= FOCUS_REACH);
     // Town heights never change. Skip player/orbit from the cache key so a
     // plaza walk does not rebuild every wall matrix.
     const viewKey = town
@@ -2735,6 +2760,7 @@ export class World {
           Math.round(toward.x * 50),
           Math.round(toward.z * 50),
           this.wallLayout,
+          focus.map((t) => t.y * 64 + t.x).join(","),
         ].join(":");
     if (this.wallView === viewKey) return;
     this.wallView = viewKey;
@@ -2746,16 +2772,15 @@ export class World {
       const t = this.wallCells[i],
         dx = t.x - this.state.x,
         dz = t.y - this.state.y;
-      const h = wallHeight(dx, dz, toward.x, toward.z, town);
+      const h = !town && focus.some((f) => hidesFocus(t.x - f.x, t.y - f.y, toward.x, toward.z))
+        ? WALL_CUT : wallHeight(dx, dz, toward.x, toward.z, town);
       if (!layoutChanged && this.wallHeightAt[i] === h) continue;
       this.wallHeightAt[i] = h;
       changed++;
       this.scratchPosition.set(t.x, h / 2 + WALL_BASE_Y, t.y);
       this.scratchScale.set(WALL_TILE_SIZE, h, WALL_TILE_SIZE);
-      this.spinQ.setFromAxisAngle(
-        UP,
-        Math.floor(noise(t.x + 4, t.y + 9) * 4) * (Math.PI / 2),
-      );
+      // Blocks stand square: a turned block turned its baked side shading with it.
+      this.spinQ.identity();
       this.scratchMatrix.compose(
         this.scratchPosition,
         this.spinQ,
@@ -2763,13 +2788,15 @@ export class World {
       );
       this.walls.setMatrixAt(i, this.scratchMatrix);
       if (layoutChanged) {
-        const drift = 0.93 + noise(t.x + 17, t.y + 6) * 0.1;
-        const moss = noise(t.x + 2, t.y + 21) > 0.84;
+        // Tone and moss drift across several tiles, so neighbouring blocks
+        // read as one wall instead of a checkerboard of tints.
+        const drift = 0.94 + smoothNoise(t.x, t.y, 7, 17) * 0.08;
+        const moss = Math.max(0, Math.min(1, (smoothNoise(t.x, t.y, 7, 21) - 0.55) / 0.45));
         const scorch = this.state.level > 15 ? 0.82 : 1;
         this.scratchColor.setRGB(
-          drift * (moss ? 0.9 : 1) * scorch,
-          drift * (moss ? 1.04 : 1) * scorch,
-          drift * (moss ? 0.88 : 1) * scorch,
+          drift * (1 - moss * 0.04) * scorch,
+          drift * (1 + moss * 0.02) * scorch,
+          drift * (1 - moss * 0.05) * scorch,
         );
         this.walls.setColorAt(i, this.scratchColor);
         this.caps.setColorAt(i, this.scratchColor);
@@ -2794,7 +2821,9 @@ export class World {
       if (layoutChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       if (layoutChanged) mesh.computeBoundingSphere();
     }
+    // A lowered wall must stop casting its full-height torch shadow too.
     if (layoutChanged) { this.markShadowUpdate(); this.refreshTorchShadows(); }
+    else this.refreshTorchShadows();
   }
 
   pick(e) {

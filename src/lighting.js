@@ -31,7 +31,9 @@ export const TOWN_LIGHT = Object.freeze({
   // The sky now fills the shade, so the old flat fill drops back.
   hemisphere: { sky: 0x9fc4e2, ground: 0x4d5733, intensity: 0.5 },
   fill: 0.25,
-  sky: { intensity: 0.32, turbidity: 4.5, rayleigh: 1.5, mie: 0.004 },
+  // The sky fills the shade, faintly: brighter, it lit the light-colored heroes
+  // from every side on top of the sun, and the knight's silver read white.
+  sky: { intensity: 0.15, turbidity: 4.5, rayleigh: 1.5, mie: 0.004 },
 });
 
 /**

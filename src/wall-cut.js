@@ -19,13 +19,18 @@ export const groundSlab = bottom => ({
 export const WALL_LIP = 0.08;
 export const WALL_LIP_CUT = 0.028;
 
-export const wallHeight = (dx, dz, towardX, towardZ, town = false) => {
-  if (town) return WALL_FULL;
+/** Whether a wall `dx, dz` tiles from a point stands between it and the camera. */
+export const hidesFocus = (dx, dz, towardX, towardZ) => {
   const along = dx * towardX + dz * towardZ;
   const sideways = Math.abs(dx * towardZ - dz * towardX);
-  if (along > 0.2 && along < 1.55 && sideways < 0.7) return WALL_CUT;
-  return WALL_FULL;
+  return along > 0.2 && along < 1.55 && sideways < 0.7;
 };
+
+export const wallHeight = (dx, dz, towardX, towardZ, town = false) =>
+  !town && hidesFocus(dx, dz, towardX, towardZ) ? WALL_CUT : WALL_FULL;
+
+/** How far from the hero a known creature or object still lowers the walls hiding it. */
+export const FOCUS_REACH = 10;
 
 /** Thickness, overhang, and cap center for the existing wall top. */
 export const wallLip = (height, town = false) => {

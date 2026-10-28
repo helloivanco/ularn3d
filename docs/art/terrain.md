@@ -47,7 +47,11 @@ licenses are involved.
 Floors use `tileScatter()`: the vertex shader hashes each instance's tile position into one of
 eight orientations (four turns × optional mirror) and applies it to the color, normal and
 roughness UVs, and to the emissive UVs where a surface has them. Walls and caps are not
-scattered, so their courses stay level.
+scattered: `worldMasonry()` lays their courses from world position instead of each block's own
+faces (one texture period per tile, a course joint on the floor line). Rows run level from block
+to block and around corners, bricks keep one size on full and cut-down walls, and wall tops pave
+on in one direction. Blocks stand square, and their tone and moss drift over several tiles rather
+than block by block.
 
 Cinematic caves light the stone for real: floors, walls and caps use the lit PBR surfaces with
 these color, relief and roughness maps, under the lantern and torch lights (`src/cave-light.js`).

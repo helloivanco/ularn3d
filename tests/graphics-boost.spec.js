@@ -62,7 +62,7 @@ test("texture scales align and all regions retain cheap mapped terrain at Auto h
   for(const scene of scenes){
     expect(scene.effectiveQuality).toBe("high");expect(scene.pixelRatio).toBe(1);expect(scene.antialiasing).toBe("MSAA");
     expect(scene.composer).toBe(false);expect(scene.shadowMapEnabled).toBe(false);
-    expect(scene.pointLights).toBe(0);expect(scene.floorMapped&&scene.wallMapped&&scene.wallRelief).toBe(true);
+    expect(scene.pointLights).toBe(0);expect(scene.floorMapped&&scene.wallMapped&&scene.wallRelief).toBe(true);expect(scene.wallLaid).toBe(true);
   }
   await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("cinematic");
   await page.locator("#resume-game").click();
@@ -105,9 +105,9 @@ test("Cinematic caves are lit by the lantern and torches while Auto caves stay f
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
   const cave=await page.evaluate(()=>ularnGraphics.metrics());
   expect(cave.caveLit).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights-cave.candleLights).toBeLessThanOrEqual(5);expect(cave.candleLights).toBeLessThanOrEqual(3);
-  // Lit PBR stone with its maps, a shadowing lantern, wall-only torch shadows, a dim bounce and no studio reflection.
-  expect(cave.floorMaterial).toBe("MeshStandardMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
-  expect(cave.lanternShadow).toBe(true);expect(cave.torchShadows).toBeLessThanOrEqual(4);expect(cave.ambient).toBeLessThan(0.6);
+  // Lit PBR stone with its maps, a shadowing lantern, wall-only torch shadows and a bounce bright enough to read every corner.
+  expect(cave.floorMaterial).toBe("MeshStandardMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);expect(cave.wallLaid).toBe(true);
+  expect(cave.lanternShadow).toBe(true);expect(cave.torchShadows).toBeLessThanOrEqual(4);expect(cave.ambient).toBeGreaterThanOrEqual(1.2);
   await page.locator("#pause").click();await page.locator("#graphics-quality").selectOption("auto");
   await page.locator("#resume-game").click();
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().composer)).toBe(false);

@@ -847,6 +847,7 @@ function update() {
   world?.update(state);
   director.applyDiff(previous, state);
   feedbackHud.sync(state);
+  noteWays(state);
   if (previous?.gameID !== state.gameID) runMemory = { lowHp: false };
   if (!previous || previous.actorRev !== state.actorRev || previous.level !== state.level) noteSightings(state);
   if (previous && !state.over && (previous.level !== state.level || previous.rank !== state.rank || previous.gold !== state.gold ||
@@ -1308,6 +1309,27 @@ function mapGlyphColor(tile) {
 }
 
 function drawMap() { gameMap.update(state); }
+
+// The first time a way up or down is charted on a floor, say so and light the
+// map, whose arrow points to it. Ways already known on arriving are not news.
+let chartedWays = { floor: "", ways: new Set() };
+function noteWays(state) {
+  const ways = new Set(state.tiles.filter((tile) => exitDirection(tile) && !tile.stair?.blocked).map(exitDirection));
+  const floor = `${state.gameID}:${state.level}`;
+  if (chartedWays.floor !== floor) { chartedWays = { floor, ways }; return; }
+  for (const way of ways) {
+    if (chartedWays.ways.has(way)) continue;
+    chartedWays.ways.add(way);
+    feedbackHud.notice({ icon: "stairs", title: way === "up" ? "A way up found" : "A way down found",
+      line: `The ${way === "up" ? "green" : "red"} arrow on your map points to it` });
+    const panel = document.querySelector(".map-panel");
+    if (!panel || reduced) continue;
+    panel.classList.remove("way-found", "up", "down");
+    void panel.offsetWidth;
+    panel.classList.add("way-found", way);
+  }
+}
+document.querySelector(".map-panel")?.addEventListener("animationend", (event) => event.currentTarget.classList.remove("way-found", "up", "down"));
 
 function setRoute(points=[]) { route=points; gameMap.setRoute?.(points); world?.setRoute(points); }
 function stopTravel() {
