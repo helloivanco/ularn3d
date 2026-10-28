@@ -8,8 +8,8 @@ release/
 .env
 .env.*
 .vercel/
-# Not served or built by the site: docs, tests, Supabase sources, local config.
+# Not served or built by the site: docs, tests, local config. Keep supabase/:
+# the play page imports its shared leaderboard code.
 docs/
 tests/
-supabase/
 .claude/
