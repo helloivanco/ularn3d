@@ -211,9 +211,8 @@ test("undiscovered potions share one art path", () => {
 });
 
 test("minimap stairs are color coded green up and red down", () => {
-  assert.match(main, /STAIR_UP_IDS/);
-  assert.match(main, /STAIR_DOWN_IDS/);
-  assert.match(main, /#e07070/);
-  assert.match(main, /#6ecf7a/);
+  const map = readFileSync("src/map.js", "utf8");
+  assert.match(map, /STAIR_COLORS = Object\.freeze\(\{ up: "#6ecf7a", down: "#e07070" \}\)/);
   assert.match(main, /function mapGlyphColor/);
+  assert.match(main, /if \(exit\) return STAIR_COLORS\[exit\]/);
 });

@@ -138,19 +138,20 @@ test("two adventurers show the turn strip", async ({ page }) => {
   const allyOnMap = await page.evaluate(() => {
     const ally = ularn.party().find(member => member.name === "Bea");
     const canvas = document.getElementById("minimap");
-    const x = (ally.x - Number(canvas.dataset.originX)) * 16 + 2;
-    const y = (ally.y - Number(canvas.dataset.originY)) * 16 + 2;
-    return [...canvas.getContext("2d").getImageData(x, y, 1, 1).data];
+    const x = (ally.x + .5) * canvas.width / Number(canvas.dataset.columns);
+    const y = (ally.y + .5) * canvas.height / Number(canvas.dataset.rows);
+    return [...canvas.getContext("2d").getImageData(Math.floor(x), Math.floor(y), 1, 1).data];
   });
   expect(allyOnMap).toEqual([159, 215, 200, 255]);
   const pingChangedMap = await page.evaluate(() => {
     const tile = ularn.snapshot().tiles.find(tile => (tile.x !== player.x || tile.y !== player.y) &&
       Math.abs(tile.x-player.x) < 8 && Math.abs(tile.y-player.y) < 4 &&
       !ularn.party().some(member => member.x === tile.x && member.y === tile.y));
+    // The ping's outline sits just outside the tile's left edge.
     const canvas = document.getElementById("minimap");
-    const x = (tile.x - Number(canvas.dataset.originX)) * 16 + 1;
-    const y = (tile.y - Number(canvas.dataset.originY)) * 16 + 5;
-    const pixel = () => [...canvas.getContext("2d").getImageData(x, y, 1, 1).data].join(",");
+    const x = tile.x * canvas.width / Number(canvas.dataset.columns) - Math.min(2, devicePixelRatio || 1);
+    const y = (tile.y + .5) * canvas.height / Number(canvas.dataset.rows);
+    const pixel = () => [...canvas.getContext("2d").getImageData(Math.floor(x), Math.floor(y), 1, 1).data].join(",");
     const before = pixel();
     ularnOnline.dropPing(tile);
     window.dispatchEvent(new Event("ularn:update"));

@@ -26,76 +26,84 @@ const mapView = () => {
   };
 };
 
-test("the compact map follows the player and Expand shows the entire floor", async ({ page }) => {
+test("the compact map shows the whole floor and stays put while the player moves", async ({ page }) => {
   await start(page);
   const town = await page.evaluate(mapView);
   expect(town.overflow === "visible" || town.overflow === "hidden").toBeTruthy();
-  expect(town.cols).toBeGreaterThanOrEqual(18);
-  expect(town.rows).toBe(13);
-  expect(town.cell).toBeGreaterThanOrEqual(11);
-  const afterWalk = await page.evaluate(() => {
-    const origin = { x: player.x, y: player.y };
-    ularn.key("l");
-    ularn.key("j");
-    ularn.key("l");
-    paint();
-    const map = document.getElementById("minimap");
-    return {
-      moved: player.x !== origin.x || player.y !== origin.y,
-      x0: +map.dataset.x0,
-      y0: +map.dataset.y0,
-      cols: +map.dataset.cols,
-      rows: +map.dataset.rows,
-    };
-  });
-  expect(afterWalk.moved).toBe(true);
-  expect(afterWalk).toMatchObject({
-    cols: town.cols,
-    rows: town.rows,
-  });
+  expect(town).toMatchObject({ x0: 0, y0: 0, cols: town.floor.width, rows: town.floor.height });
+  // Square tiles: the canvas takes the floor's own shape.
+  expect(Math.abs(town.height - town.width * town.floor.height / town.floor.width)).toBeLessThan(2);
+  expect(town.width).toBeGreaterThan(280);
 
   const dungeon = await page.evaluate(() => {
-    for (let x = 0; x < MAXX; x++)
-      for (let y = 0; y < MAXY; y++) setKnow(x, y, KNOWALL);
     newcavelevel(2);
-    player.x = 6;
-    player.y = 6;
     for (let x = 0; x < MAXX; x++)
       for (let y = 0; y < MAXY; y++) setKnow(x, y, KNOWALL);
-    paint();
     const map = document.getElementById("minimap");
-    const first = {
-      x0: +map.dataset.x0,
-      y0: +map.dataset.y0,
-      cols: +map.dataset.cols,
-      rows: +map.dataset.rows,
-      cell: map.getBoundingClientRect().width / +map.dataset.cols,
+    const view = () => {
+      const cell = map.width / +map.dataset.columns, rows = map.height / +map.dataset.rows;
+      const [r, g, b] = map.getContext("2d").getImageData(Math.round((player.x + .5) * cell), Math.round((player.y + .5) * rows), 1, 1).data;
+      return { x0: +map.dataset.x0, y0: +map.dataset.y0, cols: +map.dataset.cols, rows: +map.dataset.rows,
+        size: [map.width, map.height], marker: [r, g, b], at: [player.x, player.y] };
     };
-    player.x = MAXX - 4;
-    player.y = MAXY - 4;
-    paint();
-    return {
-      first,
-      after: {
-        x0: +map.dataset.x0,
-        y0: +map.dataset.y0,
-        cols: +map.dataset.cols,
-        rows: +map.dataset.rows,
-      },
-      size: { width: MAXX, height: MAXY },
-    };
+    player.x = 6; player.y = 6; paint();
+    const first = view();
+    player.x = MAXX - 4; player.y = MAXY - 4; paint();
+    return { first, after: view(), size: { width: MAXX, height: MAXY } };
   });
-  expect(dungeon.first.cols).toBeLessThan(dungeon.size.width);
-  expect(dungeon.first.rows).toBeLessThan(dungeon.size.height);
-  expect(dungeon.first.cell).toBeGreaterThanOrEqual(11);
-  expect(dungeon.after.x0).toBeGreaterThan(dungeon.first.x0);
-  expect(dungeon.after.y0).toBeGreaterThan(dungeon.first.y0);
+  // The frame never scrolls or recenters: the gold marker moves across it.
+  expect(dungeon.first).toMatchObject({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height });
+  expect(dungeon.after).toMatchObject({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height, size: dungeon.first.size });
+  expect(dungeon.first.marker).toEqual([244, 214, 146]);
+  expect(dungeon.after.marker).toEqual([244, 214, 146]);
   await page.locator("#map-expand").click();
   const expanded = await page.locator("#expanded-map").evaluate(map => ({
     x0: +map.dataset.x0, y0: +map.dataset.y0, cols: +map.dataset.cols, rows: +map.dataset.rows,
   }));
   expect(expanded).toEqual({ x0: 0, y0: 0, cols: dungeon.size.width, rows: dungeon.size.height });
+});
 
+test("found stairs point the way from the player: green up, red down", async ({ page }) => {
+  await start(page);
+  const compass = await page.evaluate(() => {
+    newcavelevel(2);
+    for (let x = 0; x < MAXX; x++)
+      for (let y = 0; y < MAXY; y++) {
+        setItem(x, y, x < 4 || x > 22 || y < 3 || y > 15 ? OWALL : OEMPTY);
+        setMonster(x, y, null);
+        setKnow(x, y, KNOWALL);
+      }
+    setItem(18, 8, OSTAIRSUP);
+    setItem(10, 14, OSTAIRSDOWN);
+    setKnow(18, 8, 0);
+    setKnow(10, 14, 0);
+    player.x = 10; player.y = 8; paint();
+    const map = document.getElementById("minimap");
+    const read = () => JSON.parse(map.dataset.compass);
+    // A pixel on an arrow's shaft, just past the player's marker.
+    const along = (degrees) => {
+      const cell = map.width / +map.dataset.columns, unit = Math.min(2, devicePixelRatio || 1);
+      const radius = Math.max(cell * .85, 3.5 * unit), reach = radius + 6 * unit, angle = degrees * Math.PI / 180;
+      const x = (player.x + .5) * cell + Math.cos(angle) * reach, y = (player.y + .5) * map.height / +map.dataset.rows + Math.sin(angle) * reach;
+      return [...map.getContext("2d").getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3);
+    };
+    const unseen = read();
+    setKnow(18, 8, KNOWALL); paint();
+    const upOnly = read(), upShaft = along(0);
+    setKnow(10, 14, KNOWALL); paint();
+    const both = read(), downShaft = along(90);
+    // Walk past the stairs: the arrows turn to keep pointing at them.
+    player.x = 20; player.y = 12; paint();
+    const moved = read(), movedUp = along(moved[0].angle);
+    return { unseen, upOnly, upShaft, both, downShaft, moved, movedUp };
+  });
+  expect(compass.unseen).toEqual([]);
+  expect(compass.upOnly).toEqual([{ direction: "up", x: 18, y: 8, angle: 0 }]);
+  expect(compass.upShaft).toEqual([110, 207, 122]);
+  expect(compass.both).toEqual([{ direction: "up", x: 18, y: 8, angle: 0 }, { direction: "down", x: 10, y: 14, angle: 90 }]);
+  expect(compass.downShaft).toEqual([224, 112, 112]);
+  expect(compass.moved).toEqual([{ direction: "up", x: 18, y: 8, angle: -117 }, { direction: "down", x: 10, y: 14, angle: 169 }]);
+  expect(compass.movedUp).toEqual([110, 207, 122]);
 });
 
 test("the D1 town exit is reachable and returns the player to town every time", async ({ page }) => {

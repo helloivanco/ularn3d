@@ -481,10 +481,10 @@ button.inventory-item:focus-visible { outline: 1px solid #d7bc83aa; outline-offs
 .chat-tabs .acting { color: #f3d48a; }
 
 
-/* The local map stays legible while the expanded map owns floor planning. */
+/* The compact map holds the whole floor at the canvas's own shape; the expanded map zooms in for planning. */
 .playing { --map-width: min(340px, calc(100vw - 24px)); }
 .playing .map-panel { width: var(--map-width); }
-.playing #minimap { aspect-ratio: 27 / 13; }
+.playing #minimap { aspect-ratio: auto; }
 .map-stack { position: absolute; top: 64px; left: 18px; width: var(--map-width); display: flex; flex-direction: column; gap: 12px; max-height: calc(100dvh - var(--dock-height) - 88px); pointer-events: none; }
 .map-stack > * { pointer-events: auto; }
 .playing .map-stack .camera-tools { position: fixed; top: 64px; right: 18px; left: auto; }
@@ -512,7 +512,6 @@ button.inventory-item:focus-visible { outline: 1px solid #d7bc83aa; outline-offs
 .audio-settings input[type=range] { width: 100%; accent-color: var(--gold); cursor: pointer; }
 .audio-settings .audio-track { font: italic 12px Georgia; color: #c6b78d; margin: 4px 0 0; }
 #audio-status { margin: 0; font-size: 11px; color: #c6b78d; line-height: 1.5; }
-@media (max-height: 599px) { .playing #minimap { aspect-ratio: 27 / 7; } }
 @media (max-width: 700px) {
   .playing { --map-width: min(330px, calc(100vw - 24px)); }
   .playing .camera-tools { top: calc(var(--map-bottom, 260px) + 12px); }
@@ -539,6 +538,8 @@ button.inventory-item:focus-visible { outline: 1px solid #d7bc83aa; outline-offs
 
 /* Fit the compact map canvas inside the stack, including narrow phones. */
 .playing .map-stack #minimap { width:100%; height:auto; max-width:100%; }
+/* Short portrait screens keep the old strip's height: the whole floor narrows instead of pushing the travel menu under the next step. */
+@media (max-height: 599px) and (max-aspect-ratio: 4/3) { .playing .map-stack #minimap { width:auto; height:72px; margin-inline:auto; } }
 @media (max-width:700px) {
   .playing .map-stack .camera-tools { z-index:7; position:relative; inset:auto; align-self:start; }
   .playing .map-stack #inventory-panel { z-index:1; }

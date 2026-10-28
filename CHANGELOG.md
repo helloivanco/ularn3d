@@ -4,6 +4,15 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.8.0 — The whole floor at a glance
+
+- The map in the corner now shows the whole floor at once. It no longer scrolls with you: your gold marker moves across it, and ground you have not explored stays dark
+- Once you have seen a way up or down, a green arrow (up) or red arrow (down) points from you toward the nearest one, like a compass. It turns as you walk. Dead ends get no arrow, and the Expand map shows the same arrows
+- In Cinematic, creatures, your hero and the things you find no longer burn white beside a wall torch or under your lantern. They keep their colors, faces and shading
+- In Cinematic, a creature standing between you and the camera no longer shows a black front, while the caves keep their darkness away from the light
+- On short phone screens the map stays a slim strip, so the destination menu is never covered
+- The classic rules are unchanged
+
 ## 1.7.2 — Candlelight and a breeze
 
 - Candles in the caves burn: every wick has a small flame that sways, stretches and brightens on its own beat, with a soft glow around it

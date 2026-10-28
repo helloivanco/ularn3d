@@ -132,11 +132,12 @@ test("character stats sit beside the adventurer frame and the compact map stays 
   expect(layout.besideHero).toBe(true);
   expect(layout.xpBesideStats).toBe(true);
   expect(layout.journalMoved).toBe(true);
-  expect(layout.cellWidth).toBeGreaterThanOrEqual(11);
-  expect(layout.cellHeight).toBeGreaterThanOrEqual(11);
+  // The compact map holds the whole floor in square tiles.
+  expect(layout.cols).toBe(layout.mapWidth);
+  expect(layout.cellWidth).toBeGreaterThanOrEqual(4);
+  expect(Math.abs(layout.cellWidth - layout.cellHeight)).toBeLessThan(.2);
   expect(layout.boxWidth).toBeGreaterThan(240);
   expect(layout.boxWidth).toBeLessThan(760);
-  expect(layout.cols).toBeGreaterThanOrEqual(18);
   await page.screenshot({ path: "test-results/hud_stats_beside_hero.png" });
 });
 

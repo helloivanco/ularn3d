@@ -16,7 +16,8 @@ test("bottom HUD, symbol map, pinned inventory, and loot shortcut stay in sync",
   const map = await page.locator("#minimap").boundingBox();
   expect(map.width).toBeGreaterThan(280);
   expect(map.width).toBeLessThan(360);
-  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", "27");
+  // The whole floor, not a window that follows the hero.
+  await expect(page.locator("#minimap")).toHaveAttribute("data-columns", String(await page.evaluate(() => MAXX)));
   await page.locator("#map-expand").click();
   await expect(page.locator("#map-dialog")).toBeVisible();
   await page.getByRole("button", {name:"Close explored map"}).click();
