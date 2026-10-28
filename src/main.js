@@ -15,6 +15,7 @@ import { itemArtImage } from "./item-art.js";
 import { audioSettings, musicRegion } from "./audio-score.js";
 import { createCueReader } from "./expedition-cues.js";
 import { World } from "./world.js";
+import { preloadHero } from "./hero-skin.js";
 import { LANDMARK_NAMES } from "./models.js";
 import { HeldMovement, movementKey, findRoute, isHostile, keyOffset, DIRECTIONS, MOVE_INTERVAL } from "./navigation.js";
 import { GameMap } from "./map.js";
@@ -450,6 +451,7 @@ for (const [name, , description] of classes) {
   button.innerHTML = `<img class="class-portrait" src="/art/classes/${name.toLowerCase()}.webp" alt="" width="160" height="192" />${name}`;
   button.addEventListener("click", () => {
     character = name;
+    preloadHero(name);
     document
       .querySelectorAll(".class-choice")
       .forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
@@ -458,6 +460,9 @@ for (const [name, , description] of classes) {
   $("classes").appendChild(button);
 }
 $("class-description").textContent = classes.find(([name]) => name === character)[2];
+// Fetch the rigged heroes this title can start (chosen calling, saved run, this
+// week's challenge) while it waits, so play opens with the hero already dressed.
+preloadHero(character);
 // Title records: only once there is something to show.
 if (profile.runs > 0) {
   const best = profile.best || {}, last = profile.history?.[0];
@@ -482,6 +487,7 @@ if (hasExpedition) {
   // Continue says who is waiting below, and where.
   const saved = engine.saveSummary?.();
   if (saved) {
+    preloadHero(saved.character);
     $("continue-summary").textContent = [
       saved.name && saved.name !== saved.character ? saved.name : "", saved.character,
       saved.level ? (saved.level > 15 ? `Volcano ${saved.level - 15}` : `Depth ${saved.level}`) : "In town",
@@ -504,6 +510,7 @@ const closesIn = (closesAt) => {
 const plainFate = (fate) => String(fate || "").replace(/<[^>]*>/g, "");
 {
   const result = weekly.attempt?.result;
+  preloadHero(weekly.character);
   $("weekly").hidden = false;
   $("weekly-title").textContent = `Weekly challenge · Week ${weekly.week}`;
   $("weekly-rules").textContent = `One dungeon for everyone, as a ${weekly.character} on difficulty ${weekly.difficulty}. Closes in ${closesIn(weekly.closesAt)}.`;

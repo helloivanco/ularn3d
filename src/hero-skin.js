@@ -63,6 +63,12 @@ const ATTACKS = Object.freeze({
 });
 
 export const heroBody = (character) => loadBody(HERO_BODIES[character] || HERO_BODIES.Adventurer);
+/** Start fetching a calling's body and the shared clips, so play opens with the hero already dressed. */
+export const preloadHero = (character) => {
+  const fit = HERO_BODIES[character] || HERO_BODIES.Adventurer;
+  // A failure stays cached; the hero then keeps its built-in body, as when loading in play fails.
+  Promise.all([fetchModel(`characters/${fit.file}.glb`), fetchModel("rig-clips.glb")]).catch(() => {});
+};
 /** A pack body for this species, or null when it keeps its procedural model. */
 export const creatureBody = (model) => (CREATURE_BODIES[model] ? loadBody(CREATURE_BODIES[model]) : null);
 

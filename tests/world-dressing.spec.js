@@ -20,9 +20,13 @@ test("Cinematic wall torches light the stone and the nearest few cast light", as
   await expect.poll(() => page.evaluate(() => ularnGraphics.dressing().torches.length)).toBeGreaterThan(0);
   const torch = (await page.evaluate(() => ularnGraphics.dressing())).torches[0];
   await page.evaluate(([x, z]) => { player.x = Math.round(x); player.y = Math.round(z + 0.5); paint(); }, [torch.x, torch.z]);
-  // The hero's light plus up to four torches.
-  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().pointLights)).toBeGreaterThan(1);
-  expect(await page.evaluate(() => ularnGraphics.metrics().pointLights)).toBeLessThanOrEqual(5);
+  // The hero's light plus up to four torches, and up to three candles beside them.
+  // Torches fade in over several frames, and the test renderer draws Cinematic
+  // at about a frame a second, so allow them time (main took up to 11 s).
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().pointLights), { timeout: 20000 }).toBeGreaterThan(1);
+  const lights = await page.evaluate(() => ularnGraphics.metrics());
+  expect(lights.pointLights - lights.candleLights).toBeLessThanOrEqual(5);
+  expect(lights.candleLights).toBeLessThanOrEqual(3);
   await page.locator("#pause").click(); await page.locator("#graphics-quality").selectOption("balanced");
   await page.locator("#resume-game").click();
   await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().pointLights)).toBe(0);

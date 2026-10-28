@@ -90,7 +90,9 @@ test("the town dresses its lawns but never a path, a shop's doorstep or another 
   const plan = townPlan(tiles, paths);
   assert.deepEqual(plan, townPlan(tiles, paths));
   assert.ok(plan.decor.length > 20 && plan.posts.length > 0);
-  for (const piece of plan.decor) {
+  // Cinematic's extra meadow grass keeps the same rules as the rest of the lawn.
+  assert.ok(plan.meadow.length > plan.decor.length / 2 && plan.meadow.every((piece) => piece.kind === "tuft"));
+  for (const piece of [...plan.decor, ...plan.meadow]) {
     const x = Math.round(piece.x), y = Math.round(piece.z);
     assert.ok(!paths.has(`${x},${y}`), `${piece.kind} on a path`);
     for (const shop of shops) assert.ok(Math.max(Math.abs(shop.x - x), Math.abs(shop.y - y)) > 1, `${piece.kind} at a shop`);

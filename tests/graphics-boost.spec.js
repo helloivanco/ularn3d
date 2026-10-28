@@ -104,7 +104,7 @@ test("Cinematic caves are lit by the lantern and torches while Auto caves stay f
   await page.evaluate(()=>{newcavelevel(1);paint();});
   await expect.poll(()=>page.evaluate(()=>ularnGraphics.metrics().playerLight)).toBe(true);
   const cave=await page.evaluate(()=>ularnGraphics.metrics());
-  expect(cave.caveLit).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights).toBeLessThanOrEqual(5);
+  expect(cave.caveLit).toBe(true);expect(cave.caveRelief).toBe(true);expect(cave.vignette).toBe(true);expect(cave.pointLights).toBeGreaterThanOrEqual(1);expect(cave.pointLights-cave.candleLights).toBeLessThanOrEqual(5);expect(cave.candleLights).toBeLessThanOrEqual(3);
   // Lit PBR stone with its maps, a shadowing lantern, wall-only torch shadows, a dim bounce and no studio reflection.
   expect(cave.floorMaterial).toBe("MeshStandardMaterial");expect(cave.floorMapped&&cave.wallMapped).toBe(true);
   expect(cave.lanternShadow).toBe(true);expect(cave.torchShadows).toBeLessThanOrEqual(4);expect(cave.ambient).toBeLessThan(0.6);

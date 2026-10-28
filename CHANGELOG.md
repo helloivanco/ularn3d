@@ -4,6 +4,18 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.7.2 — Candlelight and a breeze
+
+- Candles in the caves burn: every wick has a small flame that sways, stretches and brightens on its own beat, with a soft glow around it
+- In Cinematic, the candles nearest you light their corner with a warm, wavering glow, alongside your lantern and the wall torches
+- In Cinematic, the town's lawns grow a thicker meadow, and the grass, wildflowers and bushes sway in a breeze that rolls across the town
+- Cinematic keeps flames and grass moving smoothly while you stand still. Reduced motion holds them still
+- The caves open closer on your hero, so they no longer look small on entering. Your earlier zoom in the caves is reset once to the new view
+- Your hero no longer flashes in as the old character before the new one loads. The title starts loading your hero while you choose, so play opens with them ready
+- The calling portraits on the title screen and the end-of-run recap show the new heroes
+- Re-centering the camera in the caves no longer changes your zoom in town
+- Entering a cave in Cinematic no longer logs graphics errors. The classic rules are unchanged
+
 ## 1.7.1 — Fewer dead ends
 
 - When the only way on is a closed door, the next step walks you to it instead of telling you to explore. Exploring still never opens doors for you, since a door can shock or weaken whoever opens it

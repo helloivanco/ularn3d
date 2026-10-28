@@ -3,7 +3,7 @@ import * as THREE from "three";
 /*
  * Cinematic caves only: the stone is lit, not painted. Floors and walls use
  * the lit surfaces (color, relief and roughness maps), and the light comes
- * from the hero's lantern, the nearest wall torches and a dim, cool bounce,
+ * from the hero's lantern, the nearest wall torches and candles, and a dim, cool bounce,
  * falling off by the inverse square. The lantern casts live shadows. Each
  * torch's shadow holds only the walls, so torchlight stops at stone instead
  * of bleeding into the next corridor, and it is redrawn only when the torch
@@ -24,6 +24,9 @@ export const CAVE_LIGHT = Object.freeze({
     flicker: 0.07,
     color: { caves: 0xff9440, volcano: 0xff6633 },
   },
+  // The candles nearest the hero light their corner: small, warm, short-reaching
+  // and quicker to waver than a torch. No shadows, so they stay cheap.
+  candle: { count: 3, color: 0xffb35c, intensity: 2.4, distance: 3.2, flicker: 0.22, rate: 2.4 },
   // Volcano fissures give off their own light, so they glow beyond the lantern.
   lava: { color: 0xff5a1e, intensity: 1.4 },
   // Flames, lava and the brightest stone bloom; the town keeps its softer glow.

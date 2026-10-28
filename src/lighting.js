@@ -62,6 +62,8 @@ export class TorchLighting {
     this.peak = 5;
     // Share of the peak a flame wavers by. Town lamps barely breathe.
     this.flicker = 0.012;
+    // How fast the flames waver; candles run quicker than torches.
+    this.rate = 1;
     this.reassignments = 0;
     this.clear();
   }
@@ -103,7 +105,8 @@ export class TorchLighting {
       if (slot.gain !== target || changing) moving = true;
       const phase = slot.lamp ? slot.lamp.point.x * .71 + slot.lamp.point.z * 1.13 : 0;
       // Source-anchored warmth: a slow swell with a quicker shiver on top, never a strobe.
-      const waver = Math.sin(time * 1.4 + phase) * .6 + Math.sin(time * 3.7 + phase * 2.3) * .28 + Math.sin(time * 8.9 + phase * .7) * .12;
+      const t = time * this.rate;
+      const waver = Math.sin(t * 1.4 + phase) * .6 + Math.sin(t * 3.7 + phase * 2.3) * .28 + Math.sin(t * 8.9 + phase * .7) * .12;
       slot.light.intensity = this.peak * slot.gain * (reduced ? 1 : 1 + waver * this.flicker);
     }
     return moving;
