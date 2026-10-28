@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bleedTransparentEdges, stripPaleSpriteBackground } from "../src/item-art.js";
+import { bleedTransparentEdges, stripPaleSpriteBackground } from "../scripts/sprite-cleanup.mjs";
 
 const rgba = (data, i, r, g, b, a) => {
   data[i * 4] = r;

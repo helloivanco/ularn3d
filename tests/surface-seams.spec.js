@@ -16,7 +16,7 @@ test("the actual world wall matrices close neighboring seams and meet the floor/
     scratchOffset:new THREE.Vector3(),scratchPosition:new THREE.Vector3(),scratchScale:new THREE.Vector3(),
     scratchMatrix:new THREE.Matrix4(),scratchColor:new THREE.Color(),spinQ:new THREE.Quaternion(),
     walls:new THREE.InstancedMesh(geometry,material,2),caps:new THREE.InstancedMesh(geometry,material,2),
-    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},
+    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},torchLights:[],
   });
   for(const level of [0,1,16])for(const y of [6,7]){
     world.state={x:8,y,level};world.wallView=null;world.wallLayoutKey=null;world.updateWalls();
@@ -39,7 +39,7 @@ test("wall blocks stand square and their tone drifts across tiles instead of blo
     scratchOffset:new THREE.Vector3(),scratchPosition:new THREE.Vector3(),scratchScale:new THREE.Vector3(),
     scratchMatrix:new THREE.Matrix4(),scratchColor:new THREE.Color(),spinQ:new THREE.Quaternion(),
     walls:new THREE.InstancedMesh(geometry,material,run.length),caps:new THREE.InstancedMesh(geometry,material,run.length),
-    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},
+    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},torchLights:[],
   });
   world.updateWalls();
   const matrix=new THREE.Matrix4(),turn=new THREE.Quaternion(),color=new THREE.Color(),previous=new THREE.Color();
@@ -67,7 +67,7 @@ test("walls lower in front of creatures and loot the player knows about, not onl
     scratchOffset:new THREE.Vector3(),scratchPosition:new THREE.Vector3(),scratchScale:new THREE.Vector3(),
     scratchMatrix:new THREE.Matrix4(),scratchColor:new THREE.Color(),spinQ:new THREE.Quaternion(),
     walls:new THREE.InstancedMesh(geometry,material,row.length),caps:new THREE.InstancedMesh(geometry,material,row.length),
-    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},
+    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},torchLights:[],
   });
   world.updateWalls();
   const height=x=>world.wallHeightAt[row.findIndex(t=>t.x===x)];
@@ -75,7 +75,8 @@ test("walls lower in front of creatures and loot the player knows about, not onl
   // Elsewhere, and in front of a door, the row stands full.
   for(const x of [7,12,13,14,19])expect(height(x)).toBe(WALL_FULL);
   // The gnome walks off: its wall stands again.
-  tiles[16]={x:18,y:5,id:0,monster:{id:2}};world.updateWalls();
+  // Each engine update brings a new snapshot.
+  tiles[16]={x:18,y:5,id:0,monster:{id:2}};world.state={...world.state};world.updateWalls();
   expect(height(16)).toBe(WALL_FULL);expect(height(10)).toBe(WALL_CUT);
 });
 
@@ -141,6 +142,8 @@ test("roof mip filtering blends LODs while retaining the existing terrain maps",
 });
 
 test("whole-building fades keep the hero clear from every camera side and settle",async({page})=>{
+  // A Cinematic town under software GL: eight camera sides, each waiting for fades to finish.
+  test.slow();
   await page.setViewportSize({width:720,height:540});
   await page.route('**/src/world.js*',async route=>{
     const response=await route.fetch();
@@ -153,6 +156,9 @@ test("whole-building fades keep the hero clear from every camera side and settle
     const tile=ularn.snapshot().tiles.find(tile=>tile.id===12);
     player.x=tile.x;player.y=tile.y;paint();return {x:tile.x,y:tile.y};
   });
+  // Neighbouring buildings fade too; count shadow redraws only once every fade has finished.
+  const settled=()=>page.evaluate(()=>ularnGraphics.buildings().every(b=>b.parts.every(part=>part.opacity===0||part.opacity===1)));
+  let first=true;
   for(const [x,z] of [[0,12],[12,0],[0,-12],[-12,0],[8.5,8.5],[8.5,-8.5],[-8.5,-8.5],[-8.5,8.5]]){
     await page.evaluate(({x,z,store})=>{
       const world=window.__surfaceWorld;
@@ -164,7 +170,9 @@ test("whole-building fades keep the hero clear from every camera side and settle
       const parts=(await read()).parts;
       return parts.filter(part=>part.part!=='base').every(part=>!part.visible)&&
         parts.filter(part=>part.part==='base').every(part=>part.visible&&part.opacity===1);
-    }).toBe(true);
+    },{timeout:first?20000:5000}).toBe(true);
+    first=false;
+    await expect.poll(settled).toBe(true);
     const before=await page.evaluate(()=>ularnGraphics.metrics().shadowUpdates);
     await page.evaluate(async()=>{
       for(let frame=0;frame<12;frame++) await new Promise(requestAnimationFrame);

@@ -5,26 +5,26 @@ import { itemArtPath, itemArtCatalog } from "../src/item-art.js";
 
 test("undiscovered scrolls share one graphic; discovered keep unique art", () => {
   const unknown = itemArtPath(41, 0, false);
-  assert.equal(unknown, "/art/items/scroll-unknown.png");
+  assert.equal(unknown, "/art/items/scroll-unknown.webp");
   assert.equal(itemArtPath(41, 8, false), unknown);
   assert.equal(itemArtPath(41, 24, false), unknown);
-  assert.equal(itemArtPath(41, 0, true), "/art/items/scroll-enchant-armor.png");
-  assert.equal(itemArtPath(41, 24, true), "/art/items/scroll-teleport-to-town.png");
+  assert.equal(itemArtPath(41, 0, true), "/art/items/scroll-enchant-armor.webp");
+  assert.equal(itemArtPath(41, 24, true), "/art/items/scroll-teleport-to-town.webp");
   assert.notEqual(itemArtPath(41, 0, true), itemArtPath(41, 1, true));
 });
 
 test("scroll art assets exist on disk including town portal and unknown", () => {
   const catalog = itemArtCatalog();
   assert.equal(catalog.scrolls, 25);
-  assert.equal(catalog.unknownScroll, "/art/items/scroll-unknown.png");
+  assert.equal(catalog.unknownScroll, "/art/items/scroll-unknown.webp");
   for (const path of [
-    "public/art/items/scroll-unknown.png",
-    "public/art/items/scroll-teleport-to-town.png",
+    "public/art/items/scroll-unknown.webp",
+    "public/art/items/scroll-teleport-to-town.webp",
   ]) {
     const bytes = readFileSync(path);
     assert.ok(bytes.length > 100);
-    assert.equal(bytes[0], 0x89);
-    assert.equal(bytes[1], 0x50); // PNG
+    assert.equal(bytes.toString("latin1", 0, 4), "RIFF");
+    assert.equal(bytes.toString("latin1", 8, 12), "WEBP");
   }
 });
 

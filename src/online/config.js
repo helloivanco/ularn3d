@@ -39,6 +39,3 @@ export const getSupabase = async () => {
   return clientPromise;
 };
 
-export const resetSupabaseForTests = () => {
-  clientPromise = null;
-};

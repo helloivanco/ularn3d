@@ -77,8 +77,8 @@ test("monster hover card respects visibility and leaves items on the label", asy
     setMonster(12, 6, createMonster(GNOME));
     setMonster(10, 6, createMonster(KOBOLD));
     setMonster(14, 10, createMonster(INVISIBLESTALKER));
-    // Clear of the minimap now that the hero is framed at screen center.
-    setMonster(7, 6, createMonster(MIMIC));
+    // Beside the hero at screen center, clear of the map and HUD panels.
+    setMonster(12, 8, createMonster(MIMIC));
     setItem(8, 10, createGold(40));
     setMazeMode(true);
     paint();
@@ -94,8 +94,8 @@ test("monster hover card respects visibility and leaves items on the label", asy
           known: at(12, 6)?.monster?.known ?? null,
           stalker: at(14, 10)?.monster ? "visible" : null,
           floor: at(14, 10)?.name ?? null,
-          mimic: at(7, 6)?.monster?.name ?? null,
-          mimicKnown: at(7, 6)?.monster?.known ?? null,
+          mimic: at(12, 8)?.monster?.name ?? null,
+          mimicKnown: at(12, 8)?.monster?.known ?? null,
           gold: at(8, 10)?.name ?? null,
         };
       }),
@@ -112,6 +112,9 @@ test("monster hover card respects visibility and leaves items on the label", asy
   await page.locator("#camera-reset").click();
   const moveTo = async (x, y) => {
     const point = await page.evaluate(({ x, y }) => ularnGraphics.projectTile(x, y, 0.35), { x, y });
+    // A HUD panel over the tile would swallow the hover; fail here, not on the card.
+    expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest("#world"), point),
+      `tile ${x},${y} is under a HUD panel`).toBe(true);
     await page.mouse.move(point.x, point.y);
   };
 
@@ -166,11 +169,11 @@ test("monster hover card respects visibility and leaves items on the label", asy
 
   await test.step("unidentified mimic keeps the plain name", async () => {
     const disguise = await page.evaluate(() => {
-      const monster = ularn.snapshot().tiles.find((tile) => tile.x === 7 && tile.y === 6).monster;
+      const monster = ularn.snapshot().tiles.find((tile) => tile.x === 12 && tile.y === 8).monster;
       return monster.name;
     });
     expect(disguise.toLowerCase()).not.toBe("mimic");
-    await moveTo(7, 6);
+    await moveTo(12, 8);
     await expect(page.locator("#monster-card")).toBeHidden();
     await expect(page.locator("#tile-label")).toHaveText(disguise);
     await expect(page.locator("#tile-label")).not.toContainText(/wearing some other shape/i);

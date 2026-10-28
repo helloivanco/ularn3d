@@ -109,21 +109,21 @@ test("notable artifacts use unique camera-facing art that mirrors with orbit", a
   const props = await page.evaluate(() => ularnGraphics.props());
   const byId = Object.fromEntries(props.map((p) => [p.id, p]));
   const paths = {
-    3: "/art/items/orb-of-enlightenment.png",
-    26: "/art/items/sword-of-slashing.png",
-    27: "/art/items/bessmans-flailing-hammer.png",
-    45: "/art/items/amulet-of-invisibility.png",
-    46: "/art/items/orb-of-dragon-slaying.png",
-    47: "/art/items/scarab-of-negate-spirit.png",
-    48: "/art/items/cube-of-undead-control.png",
-    49: "/art/items/device-of-theft-prevention.png",
-    85: "/art/items/brass-lamp.png",
-    86: "/art/items/hand-of-fear.png",
-    87: "/art/items/talisman-of-the-sphere.png",
-    88: "/art/items/wand-of-wonder.png",
-    89: "/art/items/staff-of-power.png",
-    91: "/art/items/slayer.png",
-    92: "/art/items/elven-chain.png",
+    3: "/art/items/orb-of-enlightenment.webp",
+    26: "/art/items/sword-of-slashing.webp",
+    27: "/art/items/bessmans-flailing-hammer.webp",
+    45: "/art/items/amulet-of-invisibility.webp",
+    46: "/art/items/orb-of-dragon-slaying.webp",
+    47: "/art/items/scarab-of-negate-spirit.webp",
+    48: "/art/items/cube-of-undead-control.webp",
+    49: "/art/items/device-of-theft-prevention.webp",
+    85: "/art/items/brass-lamp.webp",
+    86: "/art/items/hand-of-fear.webp",
+    87: "/art/items/talisman-of-the-sphere.webp",
+    88: "/art/items/wand-of-wonder.webp",
+    89: "/art/items/staff-of-power.webp",
+    91: "/art/items/slayer.webp",
+    92: "/art/items/elven-chain.webp",
   };
   for (const { id } of expected) {
     expect(byId[id].art).toBe(paths[id]);
@@ -166,36 +166,36 @@ test("weapons armor rings gems and consumable tables use unique art", async ({ p
   });
   await expect.poll(() => page.evaluate(() => ularnGraphics.props().length)).toBe(40);
   const byKey = Object.fromEntries(result.map((p) => [`${p.id}:${p.arg}`, p.art]));
-  expect(byKey["28:0"]).toBe("/art/items/sunsword.png");
-  expect(byKey["29:0"]).toBe("/art/items/two-handed-sword.png");
-  expect(byKey["30:0"]).toBe("/art/items/spear.png");
-  expect(byKey["31:0"]).toBe("/art/items/dagger.png");
-  expect(byKey["57:0"]).toBe("/art/items/battle-axe.png");
-  expect(byKey["58:0"]).toBe("/art/items/long-sword.png");
-  expect(byKey["59:0"]).toBe("/art/items/flail.png");
-  expect(byKey["65:0"]).toBe("/art/items/lance-of-death.png");
-  expect(byKey["90:0"]).toBe("/art/items/vorpal-blade.png");
-  expect(byKey["25:0"]).toBe("/art/items/leather-armor.png");
-  expect(byKey["24:0"]).toBe("/art/items/chain-mail.png");
-  expect(byKey["23:0"]).toBe("/art/items/plate-mail.png");
-  expect(byKey["63:0"]).toBe("/art/items/plate-armor.png");
-  expect(byKey["64:0"]).toBe("/art/items/stainless-plate-armor.png");
-  expect(byKey["68:0"]).toBe("/art/items/shield.png");
-  expect(byKey["32:0"]).toBe("/art/items/ring-extra-regeneration.png");
-  expect(byKey["40:0"]).toBe("/art/items/belt-of-striking.png");
-  expect(byKey["50:0"]).toBe("/art/items/diamond.png");
-  expect(byKey["18:50"] || byKey["18:0"]).toMatch(/\/art\/items\/gold-pile\.png/);
-  expect(byKey["43:0"]).toBe("/art/items/book.png");
-  expect(byKey["83:0"]).toBe("/art/items/cookie.png");
+  expect(byKey["28:0"]).toBe("/art/items/sunsword.webp");
+  expect(byKey["29:0"]).toBe("/art/items/two-handed-sword.webp");
+  expect(byKey["30:0"]).toBe("/art/items/spear.webp");
+  expect(byKey["31:0"]).toBe("/art/items/dagger.webp");
+  expect(byKey["57:0"]).toBe("/art/items/battle-axe.webp");
+  expect(byKey["58:0"]).toBe("/art/items/long-sword.webp");
+  expect(byKey["59:0"]).toBe("/art/items/flail.webp");
+  expect(byKey["65:0"]).toBe("/art/items/lance-of-death.webp");
+  expect(byKey["90:0"]).toBe("/art/items/vorpal-blade.webp");
+  expect(byKey["25:0"]).toBe("/art/items/leather-armor.webp");
+  expect(byKey["24:0"]).toBe("/art/items/chain-mail.webp");
+  expect(byKey["23:0"]).toBe("/art/items/plate-mail.webp");
+  expect(byKey["63:0"]).toBe("/art/items/plate-armor.webp");
+  expect(byKey["64:0"]).toBe("/art/items/stainless-plate-armor.webp");
+  expect(byKey["68:0"]).toBe("/art/items/shield.webp");
+  expect(byKey["32:0"]).toBe("/art/items/ring-extra-regeneration.webp");
+  expect(byKey["40:0"]).toBe("/art/items/belt-of-striking.webp");
+  expect(byKey["50:0"]).toBe("/art/items/diamond.webp");
+  expect(byKey["18:50"] || byKey["18:0"]).toMatch(/\/art\/items\/gold-pile\.webp/);
+  expect(byKey["43:0"]).toBe("/art/items/book.webp");
+  expect(byKey["83:0"]).toBe("/art/items/cookie.webp");
   // Undiscovered potions share one bottle; unique art appears after learning.
   // Cure dianthroritis is known from the start of an expedition.
-  expect(byKey["42:0"]).toBe("/art/items/potion-unknown.png");
-  expect(byKey["42:1"]).toBe("/art/items/potion-unknown.png");
-  expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.png");
+  expect(byKey["42:0"]).toBe("/art/items/potion-unknown.webp");
+  expect(byKey["42:1"]).toBe("/art/items/potion-unknown.webp");
+  expect(byKey["42:21"]).toBe("/art/items/potion-cure-dianthroritis.webp");
   // Undiscovered scrolls share one parchment until read or identified.
-  expect(byKey["41:0"]).toBe("/art/items/scroll-unknown.png");
-  expect(byKey["41:19"]).toBe("/art/items/scroll-unknown.png");
-  expect(byKey["41:21"]).toBe("/art/items/scroll-unknown.png");
+  expect(byKey["41:0"]).toBe("/art/items/scroll-unknown.webp");
+  expect(byKey["41:19"]).toBe("/art/items/scroll-unknown.webp");
+  expect(byKey["41:21"]).toBe("/art/items/scroll-unknown.webp");
   await page.screenshot({ path: "test-results/item-art-catalog.png" });
 });
 
@@ -215,10 +215,10 @@ test("discovered potions switch from the shared bottle to unique art", async ({ 
   });
   const before = Object.fromEntries(result.before.map((p) => [`${p.id}:${p.arg}`, p.art]));
   const after = Object.fromEntries(result.after.map((p) => [`${p.id}:${p.arg}`, p.art]));
-  expect(before["42:0"]).toBe("/art/items/potion-unknown.png");
-  expect(before["42:1"]).toBe("/art/items/potion-unknown.png");
-  expect(after["42:0"]).toBe("/art/items/potion-sleep.png");
-  expect(after["42:1"]).toBe("/art/items/potion-unknown.png");
+  expect(before["42:0"]).toBe("/art/items/potion-unknown.webp");
+  expect(before["42:1"]).toBe("/art/items/potion-unknown.webp");
+  expect(after["42:0"]).toBe("/art/items/potion-sleep.webp");
+  expect(after["42:1"]).toBe("/art/items/potion-unknown.webp");
 });
 
 test("discovered scrolls switch from the shared parchment to unique art", async ({ page }) => {
@@ -237,33 +237,15 @@ test("discovered scrolls switch from the shared parchment to unique art", async 
   });
   const before = Object.fromEntries(result.before.map((p) => [`${p.id}:${p.arg}`, p.art]));
   const after = Object.fromEntries(result.after.map((p) => [`${p.id}:${p.arg}`, p.art]));
-  expect(before["41:0"]).toBe("/art/items/scroll-unknown.png");
-  expect(before["41:19"]).toBe("/art/items/scroll-unknown.png");
-  expect(after["41:0"]).toBe("/art/items/scroll-enchant-armor.png");
-  expect(after["41:19"]).toBe("/art/items/scroll-unknown.png");
+  expect(before["41:0"]).toBe("/art/items/scroll-unknown.webp");
+  expect(before["41:19"]).toBe("/art/items/scroll-unknown.webp");
+  expect(after["41:0"]).toBe("/art/items/scroll-enchant-armor.webp");
+  expect(after["41:19"]).toBe("/art/items/scroll-unknown.webp");
 });
 
-test("floor loot art strips pale card backgrounds without shrinking the sprite plane", async ({ page }) => {
+test("floor loot art arrives without its pale card and keeps the sprite plane", async ({ page }) => {
+  // The clean-up itself runs once, offline (tests/item-art.unit.mjs); the floor shows the baked art.
   await room(page);
-  const isolated = await page.evaluate(async () => {
-    const { stripPaleSpriteBackground } = await import("/src/item-art.js");
-    const data = { data: new Uint8ClampedArray(16), width: 2, height: 2 };
-    for (let i = 0; i < 4; i++) {
-      data.data[i * 4] = 224;
-      data.data[i * 4 + 1] = 224;
-      data.data[i * 4 + 2] = 224;
-      data.data[i * 4 + 3] = i === 3 ? 255 : 180;
-    }
-    data.data[12] = 40;
-    data.data[13] = 90;
-    data.data[14] = 30;
-    data.data[15] = 255;
-    stripPaleSpriteBackground(data);
-    return { pale: data.data[3], item: data.data[15], itemRed: data.data[12] };
-  });
-  expect(isolated.pale).toBe(0);
-  expect(isolated.item).toBe(255);
-  expect(isolated.itemRed).toBe(40);
   await page.evaluate(() => {
     setItem(8, 8, OCOOKIE);
     setItem(9, 8, createObject(OPOTION, 1));

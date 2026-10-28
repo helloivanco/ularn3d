@@ -124,9 +124,9 @@ test("undiscovered floor scrolls share art; shop lists identified stock", async 
     const floorName = createObject(OSCROLL, 0).toString(false);
     return { a, b, c, price, shopName, floorName, knownAfterBrowse: !!player.knownScrolls[0] };
   });
-  expect(art.a).toBe("/art/items/scroll-unknown.png");
+  expect(art.a).toBe("/art/items/scroll-unknown.webp");
   expect(art.b).toBe(art.a);
-  expect(art.c).toBe("/art/items/scroll-enchant-armor.png");
+  expect(art.c).toBe("/art/items/scroll-enchant-armor.webp");
   expect(art.price).toBe(1000);
   expect(art.shopName).toContain("enchant armor");
   expect(art.floorName).not.toContain("enchant armor");

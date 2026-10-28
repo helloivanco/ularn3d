@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mat, matBasic, surface, noise, placedTexture } from "./materials.js";
+import { mat, matBasic, surface, placedTexture } from "./materials.js";
 import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { compact, disposeGeometry, featherContact } from "./graphics-utils.js";

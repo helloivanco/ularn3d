@@ -120,7 +120,6 @@ const heldKeys = new Set();
 const gameMap = new GameMap({ compact: $("minimap"), expanded: $("expanded-map"), dialog: $("map-dialog"), viewport: $("map-viewport"), travel: (tile) => travel(tile), stop: () => stopTravel(),
   glyph: tile => tile.monster?.symbol || MAP_GLYPHS[tile.id] || tile.symbol || (tile.id ? "?" : "."), color: mapGlyphColor,
   allies: () => engine.party?.() || [], pings: () => window.ularnOnline?.mapPings?.() || [] });
-let journalSignature = "", statsSignature = "";
 const systemMotion = matchMedia("(prefers-reduced-motion: reduce)");
 let feel = loadFeel(localStorage);
 let reduced = motionReduced(feel, systemMotion.matches);
@@ -1331,7 +1330,7 @@ function noteWays(state) {
 }
 document.querySelector(".map-panel")?.addEventListener("animationend", (event) => event.currentTarget.classList.remove("way-found", "up", "down"));
 
-function setRoute(points=[]) { route=points; gameMap.setRoute?.(points); world?.setRoute(points); }
+function setRoute(points=[]) { route=points; world?.setRoute(points); }
 function stopTravel() {
   travelRevision++;
   held.stop();

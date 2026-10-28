@@ -21,7 +21,7 @@ const loader = new THREE.TextureLoader();
 
 export function monsterArtPath(id) {
   if (!Number.isInteger(id) || id < 1 || id > 66) return null;
-  if (id === 1) return "/art/monsters/lemming.png";
+  if (id === 1) return "/art/monsters/lemming.webp";
   // Loot goblin reuses the hobgoblin silhouette with a distinct engine char (?).
   if (id === 66) return "/engine/img/m3.png";
   const suffix = [19, 34].includes(id) ? "u" : id === 39 || (id >= 57 && id <= 65) ? "v" : "";

@@ -2,7 +2,8 @@
 
 Generated with the built-in image generation tool on September 18, 2026.
 
-Assets live in `public/art/items/*.png` (transparent PNGs, 256×256). Presentation-only
+The generated originals live in `docs/art/items/*.png` (256×256). The game ships them baked to
+`public/art/items/*.webp` by `node scripts/bake-item-art.mjs` (below). Presentation-only
 floor replacements for weapons, armor, rings, consumables, artifacts, and gems in the
 3D game. Original engine item identities, attributes, behavior, spawn rules, and classic
 `public/engine/img/o{id}.png` sprites remain unchanged. Each texture is loaded once and
@@ -10,14 +11,17 @@ shared. Camera-facing planes mirror left/right as the overhead camera orbits, ma
 the monster art convention (single view, not eight-direction sheets).
 
 Potions (`id` 42) select art by `arg` only after the potion is discovered.
-Undiscovered potions share `/art/items/potion-unknown.png`. Scrolls (`id` 41)
+Undiscovered potions share `/art/items/potion-unknown.webp`. Scrolls (`id` 41)
 still select art by `arg` from the full scroll table.
 
-## Runtime normalization
+## Baked normalization
 
 The generated PNGs did not come back with clean alpha. About 80 of 100 carry an opaque pale card
-or a baked fake checkerboard, and ring holes keep that checker inside the band. `src/item-art.js`
-strips it once per texture with `stripPaleSpriteBackground`:
+or a baked fake checkerboard, and ring holes keep that checker inside the band.
+`scripts/bake-item-art.mjs` strips it with `stripPaleSpriteBackground` (`scripts/sprite-cleanup.mjs`),
+bleeds edge colors into the cleared pixels, and writes WebP (quality 90, lossless alpha). Until
+1.8.2 the game did this in the browser for every sprite; baking it took the art from 11.9 MB to
+1.4 MB and the pixel pass off the main thread. The strip:
 
 1. A 4-connected flood from the image edges through transparent or neutral pale pixels (channel
    spread ≤ 12, brightness ≥ 168). It cannot slip through a one-pixel diagonal outline, and tinted

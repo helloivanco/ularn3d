@@ -3,9 +3,13 @@ dist
 test-results
 playwright-report
 .verification/
-scripts/smoke.mjs
 
 release/
 .env
 .env.*
 .vercel/
+# Not served or built by the site: docs, tests, Supabase sources, local config.
+docs/
+tests/
+supabase/
+.claude/

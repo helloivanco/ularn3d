@@ -4,6 +4,16 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.8.2 — Lighter and quicker
+
+- The game downloads much less: the item pictures went from 12 MB to under 2 MB, the classic rules script is about 40% smaller, and the Cinematic effects are fetched only if you play in Cinematic
+- After an update, your browser keeps the 3D engine it already has instead of downloading it again
+- In Cinematic, turning the camera or walking near wall torches is smoother: their shadows are redrawn only when a wall they light actually moves, once the camera settles
+- Loot appears without a hitch: item pictures arrive ready to draw, instead of being cleaned up in your browser one by one
+- The first time you walk behind a building in town, it fades without a stutter
+- The corner map does less work on each step
+- The classic rules are unchanged
+
 ## 1.8.1 — Clear sight in the caves
 
 - On Windows, heroes, skeletons and every chest, barrel, crate, candle and torch show their colors again. Since 1.6.0 the desktop app had drawn them plain white

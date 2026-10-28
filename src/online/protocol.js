@@ -1,7 +1,5 @@
 import { shouldAutoRest } from "./reliability.js";
 
-export const ROOM_EVENTS = ["action", "state", "ack", "ping", "emote", "chat", "snapshot"];
-
 const REST_GAP_MS = 1000;
 
 export const packState = (body, compress) => {
