@@ -76,7 +76,9 @@ function assetHeaders(file, projectURL) {
       "default-src 'self'", `script-src 'self'${legacyPage ? " 'unsafe-inline'" : ""}`,
       `script-src-attr ${legacyPage ? "'unsafe-inline'" : `'unsafe-hashes' 'sha256-${reloadHash}'`}`,
       "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
-      "font-src 'self' data:", "media-src 'self' blob:", `connect-src 'self'${scoreOrigin(projectURL) ? ` ${scoreOrigin(projectURL)}` : ""}`,
+      // blob: lets three.js decode the textures embedded in its .glb models, which it
+      // fetches from blob URLs the page makes itself; without it every model drew white.
+      "font-src 'self' data:", "media-src 'self' blob:", `connect-src 'self' blob:${scoreOrigin(projectURL) ? ` ${scoreOrigin(projectURL)}` : ""}`,
       "worker-src 'self' blob:", "object-src 'none'", "base-uri 'none'",
       "frame-src 'none'", "frame-ancestors 'none'", "form-action 'none'",
     ].join("; "),

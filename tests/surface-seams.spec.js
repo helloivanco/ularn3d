@@ -30,6 +30,55 @@ test("the actual world wall matrices close neighboring seams and meet the floor/
   }
 });
 
+test("wall blocks stand square and their tone drifts across tiles instead of block by block",()=>{
+  const world=Object.create(World.prototype),geometry=new THREE.BoxGeometry(),material=new THREE.MeshBasicMaterial();
+  const run=Array.from({length:16},(_,i)=>({x:4+i,y:3}));
+  Object.assign(world,{
+    state:{x:4,y:9,level:3},camera:{position:new THREE.Vector3(10,20,20)},controls:{target:new THREE.Vector3(10,0,6)},
+    wallLayout:7,wallCells:run,wallHeightAt:[],
+    scratchOffset:new THREE.Vector3(),scratchPosition:new THREE.Vector3(),scratchScale:new THREE.Vector3(),
+    scratchMatrix:new THREE.Matrix4(),scratchColor:new THREE.Color(),spinQ:new THREE.Quaternion(),
+    walls:new THREE.InstancedMesh(geometry,material,run.length),caps:new THREE.InstancedMesh(geometry,material,run.length),
+    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},
+  });
+  world.updateWalls();
+  const matrix=new THREE.Matrix4(),turn=new THREE.Quaternion(),color=new THREE.Color(),previous=new THREE.Color();
+  const tones=[];
+  run.forEach((_,i)=>{
+    // A turned block turned its baked side shading with it.
+    world.walls.getMatrixAt(i,matrix);matrix.decompose(new THREE.Vector3(),turn,new THREE.Vector3());
+    expect(Math.abs(turn.w)).toBeCloseTo(1,6);
+    world.walls.getColorAt(i,color);tones.push(color.r);
+    if(i){for(const channel of ["r","g","b"])expect(Math.abs(color[channel]-previous[channel])).toBeLessThan(.035);}
+    previous.copy(color);
+  });
+  // Still some drift along a long wall, just never a checkerboard.
+  expect(Math.max(...tones)-Math.min(...tones)).toBeGreaterThan(.01);
+});
+
+test("walls lower in front of creatures and loot the player knows about, not only the hero",()=>{
+  const world=Object.create(World.prototype),geometry=new THREE.BoxGeometry(),material=new THREE.MeshBasicMaterial();
+  // A wall row at y 9; a chest and a gnome stand just north of it, the hero well south.
+  const row=Array.from({length:15},(_,i)=>({x:6+i,y:9,wall:true}));
+  const tiles=[...row,{x:10,y:8,id:3},{x:16,y:8,id:0,monster:{id:2}},{x:12,y:7,id:19,doorFacing:0}];
+  Object.assign(world,{
+    state:{x:13,y:13,level:3,tiles},camera:{position:new THREE.Vector3(13,20,33)},controls:{target:new THREE.Vector3(13,0,13)},
+    wallLayout:9,wallCells:row,wallHeightAt:[],
+    scratchOffset:new THREE.Vector3(),scratchPosition:new THREE.Vector3(),scratchScale:new THREE.Vector3(),
+    scratchMatrix:new THREE.Matrix4(),scratchColor:new THREE.Color(),spinQ:new THREE.Quaternion(),
+    walls:new THREE.InstancedMesh(geometry,material,row.length),caps:new THREE.InstancedMesh(geometry,material,row.length),
+    ambientRats:{enabled:true,setLayout(){}},markShadowUpdate(){},
+  });
+  world.updateWalls();
+  const height=x=>world.wallHeightAt[row.findIndex(t=>t.x===x)];
+  expect(height(10)).toBe(WALL_CUT);expect(height(16)).toBe(WALL_CUT);
+  // Elsewhere, and in front of a door, the row stands full.
+  for(const x of [7,12,13,14,19])expect(height(x)).toBe(WALL_FULL);
+  // The gnome walks off: its wall stands again.
+  tiles[16]={x:18,y:5,id:0,monster:{id:2}};world.updateWalls();
+  expect(height(16)).toBe(WALL_FULL);expect(height(10)).toBe(WALL_CUT);
+});
+
 test("town and dungeon bases meet floor bottoms without overlapping edge faces",async({page})=>{
   await page.route('**/src/world.js*',async route=>{
     const response=await route.fetch();

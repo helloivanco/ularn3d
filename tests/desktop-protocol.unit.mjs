@@ -51,7 +51,8 @@ test("desktop responses use correct module types and restrictive CSP", () => {
   assert.equal(headers["x-content-type-options"], "nosniff");
   assert.match(headers["content-security-policy"], /script-src 'self';/);
   assert.match(headers["content-security-policy"], /connect-src 'self'/);
-  assert.match(headers["content-security-policy"], /connect-src 'self' https:\/\/ularn-test\.supabase\.co;/);
+  // Embedded .glb textures load from page-made blob URLs; blocking them drew every model white.
+  assert.match(headers["content-security-policy"], /connect-src 'self' blob: https:\/\/ularn-test\.supabase\.co;/);
   assert.match(headers["content-security-policy"], /object-src 'none'/);
   assert.doesNotMatch(headers["content-security-policy"], /unsafe-eval/);
   assert.match(protocol.assetHeaders(path.join(root, "engine", "larn_local.html"))["content-security-policy"], /script-src 'self' 'unsafe-inline'/);

@@ -2,10 +2,11 @@ import * as THREE from "three";
 
 /*
  * Cinematic caves only: the stone is lit, not painted. Floors and walls use
- * the lit surfaces (color, relief and roughness maps), and the light comes
- * from the hero's lantern, the nearest wall torches and candles, a dim, cool bounce
- * and faint distant torchlight. Lights fall off by the inverse square, as
- * lights a tile across (LIGHT_SIZE). The lantern casts live shadows. Each
+ * the lit surfaces (color, relief and roughness maps). A soft, near-white
+ * bounce keeps every explored floor, wall and creature as readable as Auto
+ * shows them, and the hero's lantern, the nearest wall torches and candles
+ * lay warm pools on top. Lights fall off by the inverse square, as lights a
+ * tile across (LIGHT_SIZE). The lantern casts live shadows. Each
  * torch's shadow holds only the walls, so torchlight stops at stone instead
  * of bleeding into the next corridor, and it is redrawn only when the torch
  * or the walls change. Balanced and Auto keep the flat, unlit caves.
@@ -26,26 +27,30 @@ THREE.ShaderChunk.lights_pars_begin = THREE.ShaderChunk.lights_pars_begin.replac
   `float distanceFalloff = 1.0 / ( pow( lightDistance, decayExponent ) + ${(LIGHT_SIZE * LIGHT_SIZE).toFixed(4)} );`);
 
 export const CAVE_LIGHT = Object.freeze({
-  // What the dark keeps: enough to read a room's shape, not to light it.
-  bounce: { sky: 0x6f8ba0, ground: 0x2a2219, intensity: 0.3 },
+  // The light every explored corner keeps. Dark caves away from the lights read
+  // as gloomy and hid what lay past the walls, so the bounce lights them as
+  // evenly as Auto, from above (sky) and off the floor (ground).
+  bounce: { sky: 0xd8dbe0, ground: 0xc4b49c, intensity: 1.85 },
+  // Lit stone is painted lighter than the flat caves' tints (STONE_TINT, chosen
+  // for unlit display), so the bounce alone brings it to their brightness and
+  // the light that also falls on creatures and the hero stays moderate.
+  stone: 2.3,
   // The cave's distant torchlight (caveEnvironmentScene) gives armor its sheen
-  // and lights the sides the lantern misses: a creature between the hero and
-  // the camera turned its unlit front to the player and showed it black.
-  // Floors face its black sky, so the stone keeps its dark.
-  reflection: 1.2,
-  // Held above the head and a little toward the camera, so the hero lights the
+  // and fills the sides of creatures that face away from the lights.
+  reflection: 0.45,
+  // Held above the head and a little toward the camera, so the hero warms the
   // floor around them and every creature, crate and pillar throws its shadow
   // away from them. Intensities are for lights a tile across (LIGHT_SIZE).
-  lantern: { color: 0xffb06a, intensity: 14, distance: 12, height: 2.6, reach: 0.6, shadow: 1024 },
+  lantern: { color: 0xffb06a, intensity: 3, distance: 12, height: 2.6, reach: 0.6, shadow: 1024 },
   torch: {
-    count: 4, intensity: 14, distance: 8, shadow: 256,
+    count: 4, intensity: 6.3, distance: 8, shadow: 256,
     // Slow swell and a quicker shiver, small enough not to strobe.
     flicker: 0.07,
     color: { caves: 0xff9440, volcano: 0xff6633 },
   },
   // The candles nearest the hero light their corner: small, warm, short-reaching
   // and quicker to waver than a torch. No shadows, so they stay cheap.
-  candle: { count: 3, color: 0xffb35c, intensity: 5, distance: 3.2, flicker: 0.22, rate: 2.4 },
+  candle: { count: 3, color: 0xffb35c, intensity: 2.8, distance: 3.2, flicker: 0.22, rate: 2.4 },
   // Volcano fissures give off their own light, so they glow beyond the lantern.
   lava: { color: 0xff5a1e, intensity: 1.4 },
   // Flames, lava and the brightest stone bloom; the town keeps its softer glow.

@@ -584,3 +584,15 @@ button.step-action:hover { border-color: var(--gold); background: #17292cf2; col
 /* Keyboard and controller focus share one gold ring. */
 .playing button:focus-visible, #welcome button:focus-visible, .dialog button:focus-visible, .terminal-card button:focus-visible,
 .pad-active :focus { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* A way up or down was just charted: the map glows once in its arrow's color. */
+.map-panel.way-found { animation: way-found 1.6s ease-out; }
+.map-panel.way-found.up { --way: #6ecf7a; }
+.map-panel.way-found.down { --way: #e07070; }
+@keyframes way-found {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  25% { box-shadow: 0 0 0 2px var(--way), 0 0 22px var(--way); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.reduce-motion .map-panel.way-found { animation: none; }
+@media (prefers-reduced-motion: reduce) { .map-panel.way-found { animation: none; } }

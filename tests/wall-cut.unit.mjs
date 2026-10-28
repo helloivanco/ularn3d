@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { WALL_CUT, WALL_FULL, wallHeight } from "../src/wall-cut.js";
+import { FOCUS_REACH, WALL_CUT, WALL_FULL, hidesFocus, wallHeight } from "../src/wall-cut.js";
 
 const towardSouth = { x: 0, z: 1 };
 const towardGame = (() => {
@@ -31,4 +31,14 @@ test("walking beside a long camera-facing wall does not bite a 2.8-tile hole", (
   assert.ok(cut <= 2, `expected at most two lowered tiles, got ${cut}`);
   assert.equal(full, heights.length - cut);
   assert.equal(wallHeight(-2, 1, towardGame.x, towardGame.z, false), WALL_FULL);
+});
+
+test("a wall hides whatever stands just behind it from the camera, hero or not", () => {
+  // The camera looks from the south: the wall one tile south of a chest hides it.
+  assert.equal(hidesFocus(0, 1, towardSouth.x, towardSouth.z), true);
+  // Behind it, beside it, or two tiles toward the camera, a wall hides nothing.
+  assert.equal(hidesFocus(0, -1, towardSouth.x, towardSouth.z), false);
+  assert.equal(hidesFocus(1, 0, towardSouth.x, towardSouth.z), false);
+  assert.equal(hidesFocus(0, 2, towardSouth.x, towardSouth.z), false);
+  assert.ok(FOCUS_REACH >= 8, "things across the view still get their walls lowered");
 });

@@ -3,6 +3,7 @@ import * as THREE from "three";
 const maps = new Map();
 const materials = new Map();
 const scattered = new Map();
+const masonry = new Map();
 const TEX = 128;
 // Texels per tile. Every map paints one logical 128-unit pattern, so color,
 // normal and roughness detail line up; 512 keeps joints crisp where a tile
@@ -671,6 +672,43 @@ export function tileScatter(base) {
   return material;
 }
 
+// Walls and caps lay their courses by where they stand, not by each block's own
+// faces: rows run level from block to block and around corners, bricks keep one
+// size on full and cut-down walls, and wall tops pave on in one direction
+// instead of turning block by block. One texture period is one tile.
+const WORLD_MASONRY = (base) => `#include <uv_vertex>
+#ifdef USE_INSTANCING
+  {
+    vec3 masonryAt = ( modelMatrix * instanceMatrix * vec4( position, 1.0 ) ).xyz;
+    vec3 masonryFace = abs( mat3( instanceMatrix ) * normal );
+    vec2 masonryUv = masonryFace.y > max( masonryFace.x, masonryFace.z ) ? masonryAt.xz
+      : vec2( masonryFace.x > masonryFace.z ? masonryAt.z : masonryAt.x, masonryAt.y - ${base.toFixed(4)} );
+    #ifdef USE_MAP
+      vMapUv = ( mapTransform * vec3( masonryUv, 1.0 ) ).xy;
+    #endif
+    #ifdef USE_NORMALMAP
+      vNormalMapUv = ( normalMapTransform * vec3( masonryUv, 1.0 ) ).xy;
+    #endif
+    #ifdef USE_ROUGHNESSMAP
+      vRoughnessMapUv = ( roughnessMapTransform * vec3( masonryUv, 1.0 ) ).xy;
+    #endif
+  }
+#endif`;
+/** The world-laid variant of a wall material, with a course joint at `base` (cached per base material). */
+export function worldMasonry(base, floorLine = 0) {
+  const key = `${base.uuid}@${floorLine}`;
+  let material = masonry.get(key);
+  if (material) return material;
+  material = base.clone();
+  material.userData.worldMasonry = true;
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", WORLD_MASONRY(floorLine));
+  };
+  material.customProgramCacheKey = () => `world-masonry:${floorLine}`;
+  masonry.set(key, material);
+  return material;
+}
+
 /** D11 and below, including the volcano, share one warmer stone multiply. */
 export const WARM_STONE_LEVEL = 11;
 
@@ -713,4 +751,5 @@ export function releaseMaterialResources() {
   details.forEach(({ normalMap, roughnessMap }) => { normalMap.dispose(); roughnessMap.dispose(); });
   materials.forEach((material) => material.dispose());
   scattered.forEach((material) => material.dispose());
+  masonry.forEach((material) => material.dispose());
 }

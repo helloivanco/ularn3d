@@ -4,6 +4,10 @@ import { FOREARM_REST, weaponRestX } from "./hero-motion.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { compact, disposeGeometry, featherContact } from "./graphics-utils.js";
 import { WALL_BASE_Y, FLOOR_CENTER_Y, FLOOR_HEIGHT, FLOOR_BOTTOM_Y } from "./wall-cut.js";
+import { STAIR_COLORS } from "./map.js";
+
+// Ways up are green and ways down red, the same colors as their map glyphs and compass arrows.
+const WAY = Object.freeze({ up: new THREE.Color(STAIR_COLORS.up).getHex(), down: new THREE.Color(STAIR_COLORS.down).getHex() });
 export { mat } from "./materials.js";
 const shared = new Map();
 const weaponModels = new Map();
@@ -1041,9 +1045,9 @@ export function itemModel(tile) {
     ring(g, 0xc47a3a, 0.4, 0.14);
     for (const x of [-0.12, 0.12]) box(g, 0x8a7050, x, 0.48, 0.08, 0.04, 0.72, 0.04);
     for (const y of [0.28, 0.48, 0.68]) box(g, 0x8a7050, 0, y, 0.08, 0.28, 0.03, 0.03);
-    const arrow = cone(g, 0xffe08a, 0, 0.98, 0, 0.13, 0.2, 3);
+    const arrow = cone(g, WAY.up, 0, 0.98, 0, 0.13, 0.2, 3);
     arrow.name = "up-arrow";
-    unlitAccent(g, 0xffe08a, 0, 0.16, 0, 0.72, 0.04, 0.72, "stair-accent");
+    unlitAccent(g, WAY.up, 0, 0.16, 0, 0.72, 0.04, 0.72, "stair-accent");
     return g;
   }
   if ([5, 13, 93].includes(id)) {
@@ -1067,7 +1071,7 @@ export function itemModel(tile) {
         box(g, 0x8a9a80, x, 0.42, -0.42, 0.05, 0.87, 0.05);
         beam(g, 0xa6b898, [x, 0.3, 0.4], [x, 0.84, -0.42], 0.025);
       }
-      unlitAccent(g, id === 93 ? 0xffe08a : 0xb6f0bc, 0, 0.554, -0.275, 0.72, 0.008, 0.03,
+      unlitAccent(g, WAY.up, 0, 0.554, -0.275, 0.72, 0.008, 0.03,
         id === 93 ? "town-exit-accent" : "stair-accent");
     } else {
       // The stairwell is cut into the floor (see opensFloor): a stone rim, a
@@ -1085,7 +1089,7 @@ export function itemModel(tile) {
       });
       mesh(g, boxGeo, matBasic(0x050709), 0, FLOOR_BOTTOM_Y + 0.005, -0.32, 0.76, 0.01, 0.16).name = "stair-depth";
       rest = { y: FLOOR_BOTTOM_Y + 0.012, z: -0.32 };
-      unlitAccent(g, 0xffc078, 0, rim + 0.003, 0.415, 0.76, 0.006, 0.03, "stair-accent");
+      unlitAccent(g, WAY.down, 0, rim + 0.003, 0.415, 0.76, 0.006, 0.03, "stair-accent");
     }
     if (blocked) {
       const landing = new THREE.Group();
@@ -1113,7 +1117,7 @@ export function itemModel(tile) {
             .map(([x, y]) => new THREE.Vector2(x, y)));
           return new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
         }),
-        matBasic(up ? 0xb2e3b9 : 0xefbb7d, { toneMapped: false }),
+        matBasic(up ? WAY.up : WAY.down, { toneMapped: false }),
       );
       arrow.position.set(0, rest.y + 0.004, rest.z);
       if (!up) arrow.rotation.y = Math.PI;

@@ -4,6 +4,18 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.8.1 — Clear sight in the caves
+
+- On Windows, heroes, skeletons and every chest, barrel, crate, candle and torch show their colors again. Since 1.6.0 the desktop app had drawn them plain white
+- In Cinematic, the caves are as easy to read as Auto: a soft light fills every corner you have explored, and your lantern, the torches and the candles add warm pools on top. The dark edge around the screen is lighter
+- In the Cinematic town, the knight's silver no longer burns white in the sun
+- Walls lower in front of any creature, item, chest, staircase or fountain you know about, not only in front of your hero, so nothing hides behind them
+- The caves open on the wider view again, so you see more around you. Your cave zoom is reset once
+- The first time you find a way up or down on a floor, a notice tells you, and your map glows in the color of the arrow that now points to it
+- Wall bricks run in level courses from block to block, and wall tops are paved in one direction instead of a patchwork
+- Stairs up are marked green and stairs down red, matching their map symbols and compass arrows
+- The classic rules are unchanged
+
 ## 1.8.0 — The whole floor at a glance
 
 - The map in the corner now shows the whole floor at once. It no longer scrolls with you: your gold marker moves across it, and ground you have not explored stays dark
