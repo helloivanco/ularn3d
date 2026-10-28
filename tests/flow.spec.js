@@ -23,6 +23,17 @@ const clearRoom = (page) => page.evaluate(() => {
   paint();
 });
 const step = (page) => page.locator("#next-step");
+// The hero starts at the town's center, and about one town in 30 puts a store,
+// home, entrance or shaft there; then the step is that tile's action instead.
+const offTownFeatures = (page) => page.evaluate(() => {
+  if (itemAt(player.x, player.y).matches(OEMPTY)) return;
+  for (let r = 1; r < 6; r++)
+    for (let dx = -r; dx <= r; dx++)
+      for (let dy = -r; dy <= r; dy++)
+        if (itemAt(player.x + dx, player.y + dy).matches(OEMPTY) && !monsterAt(player.x + dx, player.y + dy)) {
+          player.x += dx; player.y += dy; paint(); return;
+        }
+});
 
 test("the title answers Enter at once, and Continue names the saved hero", async ({ page }) => {
   await open(page);
@@ -43,6 +54,7 @@ test("the next step walks to the caves, then enters them", async ({ page }) => {
   await open(page);
   await page.locator("#begin").click();
   await playing(page);
+  await offTownFeatures(page);
   await expect(step(page)).toBeVisible();
   await expect(step(page)).toContainText("Head into the caves");
   await expect(step(page).locator("kbd")).toHaveText(">");

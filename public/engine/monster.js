@@ -54,6 +54,11 @@ function createMonster(monst) {
     monster.mimiccounter = monst.mimiccounter ? monst.mimiccounter : 0;
   }
 
+  /* a loot goblin keeps its countdown to vanishing across a save and reload */
+  if (monst.lootGoblinTurns !== undefined) {
+    monster.lootGoblinTurns = monst.lootGoblinTurns;
+  }
+
   return monster;
 }
 
