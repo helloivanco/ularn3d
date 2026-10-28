@@ -88,7 +88,7 @@ export const ensureVm = async () => {
 };
 
 /** Hash of the bundled engine-source.js. A changed bundle is refused by the unit test. */
-export const ENGINE_SOURCE_SHA256 = "f827b83b4da9b6c7b547b1f419572b598bbd52813666a4172f1504ab236eea63";
+export const ENGINE_SOURCE_SHA256 = "ea64c2a5cf50d36c36485b236f5949a3fa0eaf12041d9bbff8714f9c550b7aa3";
 
 let cachedSource = null;
 

@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.8.3 — The goblin keeps its clock
+
+- A loot goblin no longer starts its countdown over when you continue a saved game. It still vanishes 200 turns after it appears, as it does in one sitting
+- The classic rules are unchanged
+
 ## 1.8.2 — Lighter and quicker
 
 - The game downloads much less: the item pictures went from 12 MB to under 2 MB, the classic rules script is about 40% smaller, and the Cinematic effects are fetched only if you play in Cinematic

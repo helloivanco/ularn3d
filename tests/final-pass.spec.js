@@ -129,6 +129,14 @@ test("all generated floors and changed inventory survive a save and reload", asy
   await start(page);
   const saved = await page.evaluate(() => {
     for (let depth = 1; depth <= 20; depth++) newcavelevel(depth);
+    // A loot goblin part-way to vanishing keeps its countdown through the reload.
+    let spot = null;
+    for (let x = 1; x < MAXX - 1 && !spot; x++)
+      for (let y = 1; y < MAXY - 1 && !spot; y++)
+        if (itemAt(x, y).matches(OEMPTY) && !monsterAt(x, y) && (x !== player.x || y !== player.y)) spot = { x, y };
+    const goblin = createMonster(LOOTGOBLIN);
+    goblin.lootGoblinTurns = 37;
+    setMonster(spot.x, spot.y, goblin);
     take(createObject(OLARNEYE));
     take(createObject(OPOTION, 21));
     learnSpell("pro");
@@ -146,11 +154,14 @@ test("all generated floors and changed inventory survive a save and reload", asy
       level: s.level,
       gold: s.player.GOLD,
       bank: s.player.BANKACCOUNT,
+      spot,
+      goblinTurns: monsterAt(spot.x, spot.y)?.lootGoblinTurns,
     };
   });
+  expect(saved.goblinTurns, "the test goblin was placed").toBe(37);
   await page.reload();
   await page.locator("#continue").click();
-  const loaded = await page.evaluate(() => {
+  const loaded = await page.evaluate((spot) => {
     const s = new GameState(false);
     return {
       levels: JSON.stringify(s.LEVELS),
@@ -161,8 +172,10 @@ test("all generated floors and changed inventory survive a save and reload", asy
       level: s.level,
       gold: s.player.GOLD,
       bank: s.player.BANKACCOUNT,
+      spot,
+      goblinTurns: monsterAt(spot.x, spot.y)?.lootGoblinTurns,
     };
-  });
+  }, saved.spot);
   // Compare large fields as booleans to avoid dumping an entire save on a failure.
   expect(
     loaded.levels === saved.levels,

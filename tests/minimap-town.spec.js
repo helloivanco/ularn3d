@@ -156,12 +156,18 @@ test("a real descent: arrows appear only once stairs are seen, and keep pointing
     }
     return { level, at: [player.x, player.y], arrows: compass.map((a) => a.direction).sort().join(","), problems };
   });
-  // Exploring stops for creatures and never opens doors, so keep the way clear.
+  // Exploring stops for creatures, never opens doors and never crosses a known
+  // trap (a revealed one in a corridor walls off the rest), so keep the way clear.
+  // Arriving keeps the hero's x,y, and a new floor is built under them; the
+  // wand of wonder escapes a trapdoor there instead of dropping another floor.
   const calm = () => page.evaluate(() => {
     player.HP = player.HPMAX = 2000;
+    if (!isCarrying(OWWAND)) take(createObject(OWWAND));
     for (let x = 0; x < MAXX; x++) for (let y = 0; y < MAXY; y++) {
       if (monsterAt(x, y) && Math.max(Math.abs(x - player.x), Math.abs(y - player.y)) <= 6) setMonster(x, y, null);
       if (itemAt(x, y).matches(OCLOSEDDOOR)) setItem(x, y, createObject(OOPENDOOR));
+      const item = itemAt(x, y);
+      if (item.isTrap() || [OIVTRAPDOOR, OIVDARTRAP, OIVTELETRAP].some((trap) => item.matches(trap))) setItem(x, y, OEMPTY);
     }
   });
   const explore = async (until) => {
@@ -180,6 +186,7 @@ test("a real descent: arrows appear only once stairs are seen, and keep pointing
 
   // Into the caves through the entrance: the red arrow already points there in town.
   expect((await check()).arrows).toBe("down");
+  await calm();
   await page.keyboard.press(">");
   await expect.poll(() => page.evaluate(() => itemAt(player.x, player.y).matches(OENTRANCE))).toBe(true);
   await page.keyboard.press(">");
