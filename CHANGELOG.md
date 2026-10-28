@@ -4,6 +4,11 @@ Player-facing notes for **Ularn 3D**. The marketing [What’s New](https://ularn
 
 When shipping a product version, add a short entry here and on `/changelog/`, then bump with `npm version patch|minor|major`.
 
+## 1.8.4 — A clear first step
+
+- A new game never starts with you standing on a town building. Buildings are still placed at random, but they keep off your square, the way classic Larn keeps new monsters off it
+- The classic rules are unchanged
+
 ## 1.8.3 — The goblin keeps its clock
 
 - A loot goblin no longer starts its countdown over when you continue a saved game. It still vanishes 200 turns after it appears, as it does in one sitting

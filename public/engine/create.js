@@ -1850,7 +1850,9 @@ function fillTownBuilding(what, arg) {
   var safe = 400;
   var x = b.x0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
   var y = b.y0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
-  while (!(itemAt(x, y).matches(OEMPTY) && townBuildingClearanceOk(x, y))) {
+  /* never on the player's own cell, as fillmonst() keeps monsters off it */
+  while (!(itemAt(x, y).matches(OEMPTY) && townBuildingClearanceOk(x, y) &&
+           (!player || x != player.x || y != player.y))) {
     x = b.x0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
     y = b.y0 + 1 + rund(Math.max(1, TOWN_SIZE - 2));
     if (safe-- == 0) {
