@@ -11,7 +11,9 @@ import { heroBody } from "../src/hero-skin.js";
 export const CALLINGS = ["Adventurer", "Wizard", "Rogue", "Elf", "Dwarf", "Ogre", "Klingon", "Rambo"];
 
 // The wind-up of a chop: the weapon raised, ready for the caves.
-export async function renderCallings({ width = 320, height = 380, scale = 2, clip = "1H_Melee_Attack_Chop", at = 0.25 } = {}) {
+// `fill` frames small portraits on the body alone: its height fills that share
+// of the frame, so the hero reads at icon size and a long spear cannot shrink it.
+export async function renderCallings({ width = 320, height = 380, scale = 2, clip = "1H_Melee_Attack_Chop", at = 0.25, fill = 0 } = {}) {
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(scale);
   renderer.setSize(width, height);
@@ -47,6 +49,15 @@ export async function renderCallings({ width = 320, height = 380, scale = 2, cli
       if (fits) return;
     }
   };
+  const fillWith = (body) => {
+    // The visible skin only: the weapon hangs from a hand bone, and hidden hats still have bounds.
+    const box = new THREE.Box3();
+    body.traverse((object) => { if (object.isSkinnedMesh && object.visible) box.expandByObject(object, true); });
+    const center = box.getCenter(new THREE.Vector3());
+    const distance = (box.max.y - box.min.y) / (2 * fill * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    camera.position.copy(center).addScaledVector(FRAME.clone().sub(AIM).normalize(), distance);
+    camera.lookAt(center);
+  };
 
   const images = [];
   for (const name of CALLINGS) {
@@ -73,7 +84,7 @@ export async function renderCallings({ width = 320, height = 380, scale = 2, cli
     mixer.setTime(at);
     scene.add(player);
     player.updateMatrixWorld(true);
-    frame(player);
+    if (fill) fillWith(body); else frame(player);
     renderer.render(scene, camera);
     images.push({ name, data: renderer.domElement.toDataURL("image/webp", 0.9).split(",")[1] });
     scene.remove(player);

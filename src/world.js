@@ -91,6 +91,8 @@ const GAME_CAMERA_Y = 15.5;
 const GAME_CAMERA_DIST = Math.hypot(2.8, 8.5);
 const GAME_CAMERA = new THREE.Vector3(0, GAME_CAMERA_Y, GAME_CAMERA_DIST);
 const CAMERA_PREF_KEY = "ularn3d.camera";
+/* How long the hero stays hidden waiting for its rigged body before the built-in one shows. */
+const HERO_DRESS_WAIT_MS = 4000;
 /* The hero leaves screen center only to stay this far (CSS px) clear of a side panel. */
 const FRAME_CLEARANCE = 160;
 /** Town glow: half-res and faint, so lamps and windows soften without blooming the grass. */
@@ -120,11 +122,13 @@ const northCameraOffset = (radius = GAME_CAMERA_DIST, elevationY = GAME_CAMERA_Y
   return new THREE.Vector3(0, y, horiz);
 };
 /*
- * Caves frame closer than town so a freshly lit corridor fills the view rather
- * than a field of dark. Town and caves remember zoom separately; the top-level
- * fields stay the town preference, so older saved preferences still read.
+ * Caves frame closer than town so the hero and a freshly lit corridor fill the
+ * view rather than a field of dark. Town and caves remember zoom separately;
+ * the top-level fields stay the town preference, so older saved preferences
+ * still read. The cave zoom is kept under `caveView`: the old `caves` entry
+ * held the farther 7.6 / 13 framing (saved every turn), so it is dropped once.
  */
-const CAVE_CAMERA = Object.freeze({ radius: 7.6, elevation: 13 });
+const CAVE_CAMERA = Object.freeze({ radius: 5.8, elevation: 10 });
 const cameraRegion = (level) => (level > 0 ? "caves" : "town");
 const cameraEntry = (value) => {
   const radius = Number(value?.radius), elevation = Number(value?.elevation);
@@ -144,16 +148,17 @@ const readCameraStore = () => {
 };
 const readCameraPrefs = (level = 0) => {
   const stored = readCameraStore();
-  if (cameraRegion(level) === "caves") return cameraEntry(stored?.caves) || { ...CAVE_CAMERA };
+  if (cameraRegion(level) === "caves") return cameraEntry(stored?.caveView) || { ...CAVE_CAMERA };
   return cameraEntry(stored);
 };
 let writtenCameraPrefs = "";
 const writeCameraPrefs = (offset, level = 0) => {
   try {
     const entry = { radius: Math.hypot(offset.x, offset.z), elevation: offset.y };
-    const stored = readCameraStore() || {};
+    const stored = { ...readCameraStore() };
+    delete stored.caves;
     const next = cameraRegion(level) === "caves"
-      ? { ...stored, caves: entry }
+      ? { ...stored, caveView: entry }
       : { ...stored, ...entry };
     const value = JSON.stringify(next);
     // Every turn captures the camera; storage is touched only when zoom or tilt changed.
@@ -488,6 +493,16 @@ export class World {
     this.torchShadowsDirty = false;
     this.torchShadowTarget = null;
     this.lighting = new TorchLighting(this.torchLights);
+    // The candles nearest the hero, in Cinematic caves: a fixed pool, so the
+    // lit materials never recompile as the hero walks between them.
+    this.candleLights = Array.from({ length: CAVE_LIGHT.candle.count }, () => {
+      const light = new THREE.PointLight(CAVE_LIGHT.candle.color, 0, CAVE_LIGHT.candle.distance, 2);
+      light.visible = false;
+      this.scene.add(light);
+      return light;
+    });
+    this.candleLighting = new TorchLighting(this.candleLights);
+    Object.assign(this.candleLighting, { peak: CAVE_LIGHT.candle.intensity, flicker: CAVE_LIGHT.candle.flicker, rate: CAVE_LIGHT.candle.rate });
     this.marker = new THREE.Group();
     ring(this.marker, 0xf0d491, 0.46, 0.018);
     this.marker.visible = false;
@@ -736,6 +751,7 @@ export class World {
         routePoints: this.routePointCount, routeVisible: false,
         heroPosition: this.player.position.toArray(), heroScreen: this.project(this.player.position), viewport: this.viewportRect, viewFocus: this.viewFocus,
         heroSkin: this.heroRig ? { ...this.heroSkin, clip: this.heroRig.clip } : null,
+        heroVisible: this.player.visible,
         ...creatureMetrics(), ...this.dressing.metrics(), ...window.ularnPersistence?.metrics(),
         idle: performance.now() > this.activeUntil,
         suspended: document.hidden || this.paused || this.lost,
@@ -753,8 +769,9 @@ export class World {
         fogDensity: this.scene.fog?.density ?? 0,
         sunVisible: !!(this.sun.visible && this.sun.intensity > 0),
         fillVisible: !!(this.fill.visible && this.fill.intensity > 0),
-        pointLights: this.torchLights.filter((l) => l.visible && l.intensity > 0).length +
+        pointLights: [...this.torchLights, ...this.candleLights].filter((l) => l.visible && l.intensity > 0).length +
           (this.playerLight.visible && this.playerLight.intensity > 0 ? 1 : 0),
+        candleLights: this.candleLights.filter((l) => l.visible && l.intensity > 0).length,
         monsterActors: this.monsters.size,
         propGroups: this.objects.size,
         floorInstances: this.floor.count + this.grassFloor.count,
@@ -930,7 +947,7 @@ export class World {
     if (idle && this.state && ["auto", "balanced"].includes(this.quality) && !this.hasMotion && !follow && !this.cameraLive)
       return 0;
     if (this.state && (this.cameraLive || this.hasMotion || follow || !idle)) return 60;
-    return 12;
+    return this.ambientLife && !this.paused ? 30 : 12;
   }
   stopFrames() {
     clearTimeout(this.frameTimer);
@@ -1155,12 +1172,26 @@ export class World {
   }
   /**
    * Wear the rigged body once it loads. The procedural rig keeps posing
-   * invisibly; only its weapon and lantern move to the rigged hands.
+   * invisibly; only its weapon and lantern move to the rigged hands. Until
+   * then the hero is hidden, so the old built-in body never flashes in; it
+   * shows only if the rigged one fails to load or takes too long.
    */
   dressHero(character) {
     const player = this.player;
+    clearTimeout(this.heroDressTimer);
+    this.heroDressing = true;
+    const wearBuiltIn = () => {
+      clearTimeout(this.heroDressTimer);
+      if (player !== this.player) return;
+      this.heroDressing = false;
+      // Placed on the map already (syncMovers ran): show it now, not on the next turn.
+      if (this.playerTarget) player.visible = true;
+      this.invalidate();
+    };
+    this.heroDressTimer = setTimeout(wearBuiltIn, HERO_DRESS_WAIT_MS);
     heroBody(character).then(({ body, clips, file }) => {
       if (this.disposed || player !== this.player) return;
+      wearBuiltIn();
       player.add(body);
       for (const [slot, part] of [["handslotr", this.heroWeapon], ["handslotl", player.getObjectByName("lantern")]]) {
         const bone = body.getObjectByName(slot);
@@ -1182,7 +1213,10 @@ export class World {
       this.heroSkin = { file, character };
       if (this.collapsedAt != null) this.heroRig.die();
       this.invalidate();
-    }).catch((error) => console.warn("Rigged hero unavailable; keeping the built-in body.", error));
+    }).catch((error) => {
+      console.warn("Rigged hero unavailable; keeping the built-in body.", error);
+      wearBuiltIn();
+    });
   }
   /** Undead swap their procedural body for a rigged one; the actor keeps gliding and turning. */
   dressCreature(uid, actor) {
@@ -1590,7 +1624,9 @@ export class World {
   disablePointLights() {
     this.playerLight.visible = false;
     this.playerLight.intensity = 0;
-    this.torchLights.forEach((light) => {
+    this.candleLighting.clear();
+    this.candleKey = null;
+    [...this.torchLights, ...this.candleLights].forEach((light) => {
       light.visible = false;
       light.intensity = 0;
     });
@@ -1727,7 +1763,10 @@ export class World {
     const pending = this.renderer.shadowMap.needsUpdate;
     this.torchShadowTarget ??= new THREE.WebGLRenderTarget(1, 1);
     const target = this.renderer.getRenderTarget();
-    lantern.autoUpdate = false;
+    // The lit walls here sample the lantern's map too. On a floor's first frame
+    // it has none yet, and an empty shadow sampler fails the draw, so the
+    // lantern draws its map in this pass; otherwise it waits for the main one.
+    lantern.autoUpdate = follows && !lantern.map;
     this.torchLights.forEach((light) => { light.shadow.needsUpdate = light.visible && light.castShadow; });
     camera.layers.set(OCCLUDER_LAYER);
     this.renderer.shadowMap.needsUpdate = true;
@@ -1771,6 +1810,11 @@ export class World {
     const rev = town ? `t${this.lampRev}` : `c${this.dressing.flameRev}`;
     const key = this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${rev}` : null;
     if (key && key !== this.lightKey) { this.lightKey = key; this.lighting.assign(town ? this.lamps : this.dressing.flames(),this.playerTarget,count); }
+    // Candles light only the caves; town has none.
+    const candle = CAVE_LIGHT.candle;
+    this.candleLights.forEach((light) => { light.visible = !town; });
+    const candleKey = !town && this.playerTarget ? `${this.playerTarget.x},${this.playerTarget.z}|${this.dressing.candleRev}` : null;
+    if (candleKey && candleKey !== this.candleKey) { this.candleKey = candleKey; this.candleLighting.assign(this.dressing.candleLights(), this.playerTarget, candle.count); }
   }
   setQuality(value, persist = true) {
     this.quality = ["auto", "cinematic", "balanced"].includes(value)
@@ -2571,7 +2615,7 @@ export class World {
     glide.plan(now, ms, 0, along / actor.length, cruise ? actor.nominal / ms / actor.length : 0);
   }
   syncMovers(state, old) {
-    this.player.visible = true;
+    this.player.visible = !this.heroDressing;
     if (!this.playerTarget) this.playerTarget = new THREE.Vector3();
     const target = this.playerTarget.set(state.x, 0, state.y);
     if (!this.lastPlayer) {
@@ -2841,7 +2885,7 @@ export class World {
       this.finishStepTiles();
       this.yawEase = false;
       this.controls.update();
-      writeCameraPrefs(this.heldCameraOffset);
+      writeCameraPrefs(this.heldCameraOffset, this.state.level);
       this.tweenCamera(this.heldCameraOffset.clone());
     }
   }
@@ -3185,7 +3229,8 @@ export class World {
     if (this.cinematicRendering() && this.state) this.syncPlayerLight();
     if (this.cinematicRendering() && this.state) {
       const lightsMoving = this.lighting.update(dt,this.tick,this.reduced);
-      this.hasMotion ||= lightsMoving;
+      const candlesMoving = this.state.level > 0 && this.candleLighting.update(dt, this.tick, this.reduced);
+      this.hasMotion ||= lightsMoving || candlesMoving;
       if (this.state.level===0) { if(this.playerTarget)stabilizeShadow(this.sun,this.playerTarget); }
       // A torch that moved to a new flame redraws its wall shadow there.
       else if (this.lighting.reassignments !== this.torchMoves) {
@@ -3193,7 +3238,8 @@ export class World {
         this.refreshTorchShadows();
       }
     }
-    this.dressing.update(now);
+    // Flames, torches and lawns that keep moving hold Cinematic's idle frames smooth.
+    this.ambientLife = this.dressing.update(now, this.reduced) && this.cinematicRendering();
     // Cheap transform updates only; does not allocate. Near-camera scurries
     // briefly keep the frame loop alive, then Balanced can idle again.
     this.ambientRatsNear = this.ambientRats?.update(dt, this.camera) || false;
@@ -3299,6 +3345,7 @@ export class World {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    clearTimeout(this.heroDressTimer);
     this.heroRig?.dispose();
     for (const actor of this.monsters.values()) actor.rig?.dispose();
     this.dressing.dispose();

@@ -3,6 +3,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { noise } from "./materials.js";
 import { WALL_BASE_Y, WALL_FULL } from "./wall-cut.js";
+import { CandleFlames, candleSpots } from "./candle-flames.js";
 
 /*
  * Cave set dressing from the KayKit Dungeon pack (CC0, Kay Lousberg): props in
@@ -132,7 +133,8 @@ export function dressingPlan(tiles, level) {
  * lamp post, so the hero is never hidden.
  */
 export function townPlan(tiles, paths) {
-  const plan = { props: [], decor: [], posts: [] };
+  // `meadow` is the extra grass Cinematic grows, in patches, on the same lawns.
+  const plan = { props: [], decor: [], posts: [], meadow: [] };
   const stores = tiles.filter((t) => t.store);
   const isPath = (x, y) => paths.has(`${x},${y}`);
   const nearStore = (x, y) => stores.some((s) => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
@@ -148,6 +150,11 @@ export function townPlan(tiles, paths) {
     if (t.wall || t.store || t.id !== 0 || isPath(t.x, t.y) || nearStore(t.x, t.y)) continue;
     const pathSide = SIDES.find(([dx, dz]) => isPath(t.x + dx, t.y + dz));
     const a = noise(t.x + 61, t.y + 13), b = noise(t.x + 7, t.y + 77), c = noise(t.x + 19, t.y + 5);
+    const lush = noise(Math.floor(t.x / 3) + 41, Math.floor(t.y / 3) + 23) * 0.6 + noise(t.x + 3, t.y + 91) * 0.4;
+    for (let i = 0; i < Math.round(lush * 7); i++) {
+      const x = t.x + (noise(t.x + i * 7, t.y + 101) - 0.5) * 0.92, z = t.y + (noise(t.x + 103, t.y + i * 5) - 0.5) * 0.92;
+      plan.meadow.push({ kind: "tuft", x, z, angle: noise(x * 5, z * 7) * Math.PI * 2, size: 1 + noise(z * 3, x * 9) * 0.7, tint: noise(x * 11, z) });
+    }
     if (pathSide && a < 0.2 && !plan.posts.some((post) => Math.abs(post.tx - t.x) + Math.abs(post.ty - t.y) < 6)) {
       const [dx, dz] = pathSide;
       plan.posts.push({ tx: t.x, ty: t.y, x: t.x + dx * 0.4, z: t.y + dz * 0.4, angle: Math.atan2(dx, dz),
@@ -171,13 +178,13 @@ export function townPlan(tiles, paths) {
 /* Low-poly lawn pieces in tile units, base on the ground. */
 const merge = (parts) => mergeGeometries(parts.map((part) => (part.index ? part.toNonIndexed() : part)));
 const DECOR = {
-  tuft: { color: [0x6f8f4a, 0x86a35a], shadow: false, build: () => merge([-1, 0, 1, 2].map((i) =>
+  tuft: { color: [0x6f8f4a, 0x86a35a], shadow: false, sway: 2, build: () => merge([-1, 0, 1, 2].map((i) =>
     new THREE.ConeGeometry(0.022, 0.15 + (i % 2) * 0.05, 3).rotateZ(i * 0.22 - 0.2).translate(i * 0.03 - 0.02, 0.08, (i % 2) * 0.03 - 0.015))) },
-  flower: { color: [0xf2d36b, 0xf4efe2, 0xb79ad8, 0xe0796a], shadow: false, build: () => merge([
+  flower: { color: [0xf2d36b, 0xf4efe2, 0xb79ad8, 0xe0796a], shadow: false, sway: 3, build: () => merge([
     new THREE.CylinderGeometry(0.006, 0.006, 0.09, 3).translate(0, 0.045, 0),
     new THREE.IcosahedronGeometry(0.028, 0).translate(0, 0.095, 0)]) },
   stone: { color: [0x8d8f86, 0xa29f92], shadow: true, build: () => new THREE.IcosahedronGeometry(0.11, 0).scale(1, 0.55, 0.85).translate(0, 0.04, 0) },
-  bush: { color: [0x4f6e3c, 0x5f7f44], shadow: true, build: () => merge([
+  bush: { color: [0x4f6e3c, 0x5f7f44], shadow: true, sway: 0.25, build: () => merge([
     new THREE.IcosahedronGeometry(0.17, 0).translate(0, 0.14, 0),
     new THREE.IcosahedronGeometry(0.13, 0).translate(0.14, 0.1, 0.03),
     new THREE.IcosahedronGeometry(0.12, 0).translate(-0.12, 0.09, -0.04)]) },
@@ -197,6 +204,33 @@ const decorGeometry = (kind) => {
   }
   return decorGeometries.get(kind);
 };
+
+/*
+ * A breeze over the lawns: slow gusts roll across the town and a quicker
+ * ripple runs through them. Each piece bends from its base, more toward its
+ * tip, along one world direction, so neighbouring tufts lean together.
+ */
+const BREEZE = Object.freeze({ x: 0.8, z: 0.6 });
+const swayShader = (shader, uniforms) => {
+  Object.assign(shader.uniforms, uniforms);
+  shader.vertexShader = "uniform float windTime;\nuniform float windStrength;\n" + shader.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  vec3 root = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  float gust = 0.55 + 0.45 * sin(windTime * 0.9 + root.x * 0.21 + root.z * 0.13);
+  float ripple = sin(windTime * 2.6 + root.x * 1.3 + root.z * 0.7) * 0.5 + sin(windTime * 4.1 + root.x * 0.6 - root.z * 1.4) * 0.25;
+  float lean = windStrength * max(position.y, 0.0) * max(position.y, 0.0) * (gust * 1.4 + ripple * 0.6);
+  mat3 basis = mat3(instanceMatrix);
+  // World bend back into the piece's own turned, scaled frame.
+  transformed += transpose(basis) * (vec3(${BREEZE.x.toFixed(2)}, 0.0, ${BREEZE.z.toFixed(2)}) * lean) / dot(basis[0], basis[0]);
+#endif`);
+};
+function swayMaterial(windTime, strength) {
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 });
+  const windStrength = { value: strength };
+  // Each kind bends by its own strength; the compiled program is shared.
+  material.onBeforeCompile = (shader) => swayShader(shader, { windTime, windStrength });
+  return material;
+}
 
 function shadeTexture() {
   const canvas = document.createElement("canvas");
@@ -235,6 +269,8 @@ export class SetDressing {
     this.town = townPlan([], new Set());
     this.decor = new Map();
     this.decorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 });
+    this.windTime = { value: 0 };
+    this.swayMaterials = new Map(Object.entries(DECOR).filter(([, spec]) => spec.sway).map(([kind, spec]) => [kind, swayMaterial(this.windTime, spec.sway)]));
     this.lanternMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
     this.tint = new THREE.Color();
     const shadeGeometry = new THREE.PlaneGeometry(1, SHADE_DEPTH).rotateX(-Math.PI / 2);
@@ -251,6 +287,8 @@ export class SetDressing {
     this.glow.name = "torch-glow";
     this.glow.frustumCulled = false;
     this.group.add(this.glow);
+    this.candles = new CandleFlames(this.group, this.glow.material.map);
+    this.candlePoints = []; this.candleRev = 0;
     this.matrix = new THREE.Matrix4(); this.quaternion = new THREE.Quaternion();
     this.position = new THREE.Vector3(); this.scale = new THREE.Vector3(1, 1, 1);
     this.up = new THREE.Vector3(0, 1, 0);
@@ -260,6 +298,8 @@ export class SetDressing {
     this.plan = dressingPlan(tiles, level);
     this.town = level ? townPlan([], paths) : townPlan(tiles, paths);
     const revision = ++this.revision;
+    // Candles burn once their models stand (build), never ahead of them.
+    if (this.candles.count) this.lightCandles([], []);
     const kinds = new Set([...this.plan.props, ...this.town.props].map((p) => p.kind));
     if (this.plan.torches.length) kinds.add("torch_mounted");
     Promise.all([...kinds].map((kind) => loadProp(kind).then((geometry) => [kind, geometry])))
@@ -273,6 +313,7 @@ export class SetDressing {
   buildDecor() {
     const groups = new Map(Object.keys(DECOR).map((kind) => [kind, []]));
     for (const piece of this.town.decor) groups.get(piece.kind).push(piece);
+    if (this.cinematic) groups.get("tuft").push(...this.town.meadow);
     for (const post of this.town.posts) {
       groups.get("post").push({ ...post, size: 1, tint: 0 });
       groups.get("lantern").push({ ...post, size: 1, tint: 0 });
@@ -282,7 +323,7 @@ export class SetDressing {
       let mesh = this.decor.get(kind);
       if (mesh && mesh.instanceMatrix.count < pieces.length) { mesh.removeFromParent(); mesh.dispose(); mesh = null; }
       if (!mesh && pieces.length) {
-        mesh = new THREE.InstancedMesh(decorGeometry(kind), spec.unlit ? this.lanternMaterial : this.decorMaterial, pieces.length + 32);
+        mesh = new THREE.InstancedMesh(decorGeometry(kind), spec.unlit ? this.lanternMaterial : this.swayMaterials.get(kind) || this.decorMaterial, pieces.length + 32);
         mesh.name = `decor-${kind}`;
         mesh.frustumCulled = false;
         this.decor.set(kind, mesh);
@@ -334,6 +375,8 @@ export class SetDressing {
       props.forEach((prop, i) => this.place(mesh, i, prop.x, WALL_BASE_Y, prop.z, prop.angle));
       mesh.instanceMatrix.needsUpdate = true;
     }
+    const { flames, lights } = candleSpots(this.plan.props, PROPS.candle_triple.scale, WALL_BASE_Y);
+    this.lightCandles(flames, lights);
     if (geometries.has("torch_mounted")) {
       this.instances("torch_mounted", geometries.get("torch_mounted"), this.plan.torches.length);
       this.wallHeights(this.heights);
@@ -373,6 +416,15 @@ export class SetDressing {
   flames() {
     return this.flamePoints.filter((_, i) => this.flameShown[i]);
   }
+  lightCandles(flames, lights) {
+    this.candles.set(flames, lights);
+    this.candlePoints = lights.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    this.candleRev++;
+  }
+  /** Burning candles, one light point each, for the candle lights. `candleRev` changes with it. */
+  candleLights() {
+    return this.candlePoints;
+  }
   /** Torches stand only on full-height walls; a cutaway column hides its torch. */
   wallHeights(heights) {
     this.heights = heights;
@@ -397,13 +449,22 @@ export class SetDressing {
     this.glow.material.opacity = cinematic ? 0.5 : 1;
     for (const mesh of this.meshes.values()) mesh.castShadow = mesh.receiveShadow = cinematic;
     for (const [kind, mesh] of this.decor) { mesh.castShadow = DECOR[kind].shadow && cinematic; mesh.receiveShadow = !DECOR[kind].unlit && cinematic; }
+    this.candles.setCinematic(cinematic);
     this.buildShade();
+    this.buildDecor();
   }
-  /** Cinematic flames breathe; returns true while that needs frames. */
-  update(now) {
-    if (!this.cinematic || !(this.plan.torches.length || this.town.posts.length)) return false;
+  /**
+   * Candle flames flicker and, in Cinematic, torches breathe and the lawns
+   * sway. Reduced motion holds them all still. Returns true while something
+   * on this floor keeps moving, so the world keeps drawing it smoothly.
+   */
+  update(now, still = false) {
+    if (still) return false;
+    const burning = this.candles.update(now / 1000);
+    if (!this.cinematic) return burning;
+    this.windTime.value = now / 1000;
     this.glow.material.size = 0.55 + Math.sin(now * 0.011) * 0.04 + Math.sin(now * 0.027) * 0.03;
-    return true;
+    return burning || this.town.decor.length > 0 || this.plan.torches.length > 0 || this.town.posts.length > 0;
   }
   snapshot() {
     return {
@@ -416,12 +477,15 @@ export class SetDressing {
     let props = 0;
     for (const [kind, mesh] of this.meshes) if (kind !== "torch_mounted") props += mesh.count;
     return { dressingProps: props, dressingTorches: this.plan.torches.length, wallShade: this.shade.count,
-      townDecor: this.town.decor.length, townLampPosts: this.town.posts.length };
+      townDecor: this.town.decor.length, townLampPosts: this.town.posts.length,
+      candleFlames: this.candles.count, meadowTufts: this.cinematic ? this.town.meadow.length : 0 };
   }
   dispose() {
     for (const mesh of this.meshes.values()) mesh.dispose();
     for (const mesh of this.decor.values()) mesh.dispose();
     this.decorMaterial.dispose(); this.lanternMaterial.dispose();
+    for (const material of this.swayMaterials.values()) material.dispose();
+    this.candles.dispose();
     this.shade.dispose(); this.shade.geometry.dispose(); this.shade.material.alphaMap.dispose(); this.shade.material.dispose();
     this.glow.geometry.dispose(); this.glow.material.map.dispose(); this.glow.material.dispose();
     this.group.removeFromParent();
