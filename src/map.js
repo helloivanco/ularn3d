@@ -79,8 +79,12 @@ export class GameMap {
     // A new panel size repaints the whole overview; otherwise only changed tiles.
     const resized = this.sizeOverview();
     const overview = this.overview.getContext("2d");
+    // The snapshot's map revision changes with any charted tile or creature; while
+    // it holds, the tiles (and the compass, unless the player moved) are as drawn.
+    const charted = reset || resized || state.mapRev === undefined || state.mapRev !== this.mapRev;
+    this.mapRev = state.mapRev;
     const known = new Set(); let changed = reset || resized;
-    for (const tile of state.tiles) {
+    if (charted) for (const tile of state.tiles) {
       const id = tile.y * state.width + tile.x; known.add(id);
       const signature = `${tile.id}:${tile.wall}:${tile.store}:${this.glyph(tile)}:${!!tile.monster}:${!!tile.stair?.blocked}`;
       if (this.tiles.get(id) === signature && !resized) continue;
@@ -88,14 +92,15 @@ export class GameMap {
       changed = true;
       this.drawOverviewTile(overview, tile);
     }
-    for (const id of this.tiles.keys()) if (!known.has(id)) {
+    if (charted) for (const id of this.tiles.keys()) if (!known.has(id)) {
       this.tiles.delete(id); changed = true;
       ctx.fillStyle = "#09191e"; ctx.fillRect(id % state.width * CELL, Math.floor(id / state.width) * CELL, CELL, CELL);
       this.clearOverviewTile(overview, id % state.width, Math.floor(id / state.width));
     }
     this.party = this.allies().filter(ally => ally.alive && ally.dungeon === state.level);
     this.markers = this.pings();
-    this.compass = stairCompass(state);
+    const at = state.y * state.width + state.x;
+    if (charted || this.compassAt !== at) { this.compass = stairCompass(state); this.compassAt = at; }
     const signature = JSON.stringify([state.x, state.y,
       this.party.map(ally => [ally.x, ally.y, ally.name]), this.markers.map(ping => [ping.x, ping.y])]);
     if (!changed && signature === this.renderSignature) return;
@@ -116,7 +121,10 @@ export class GameMap {
   /** The overview matches the compact canvas pixel for pixel: the whole floor across the panel. */
   sizeOverview() {
     const { width, height } = this.state, canvas = this.compact;
-    const css = canvas.clientWidth || canvas.getBoundingClientRect().width;
+    // Measured once and on resize: reading layout here after the HUD's own writes
+    // forced a reflow on every turn.
+    this.compactWidth ||= canvas.clientWidth || canvas.getBoundingClientRect().width;
+    const css = this.compactWidth;
     const pixels = Math.max(width * 2, Math.round((css || width * 6) * Math.min(2, devicePixelRatio || 1)));
     const rows = Math.round(pixels * height / width);
     // A pixel or two of rounding (a height-driven width on short screens) is not a new size.
@@ -197,8 +205,9 @@ export class GameMap {
   /** The whole floor at once. The map never scrolls; the player's marker moves across it. */
   drawCompact() {
     const { width, height } = this.state, canvas = this.compact;
-    Object.assign(canvas.dataset, { originX: "0", originY: "0", columns: String(width), rows: String(height), cols: String(width), x0: "0", y0: "0",
-      compass: JSON.stringify(this.compass.map(({ direction, x, y, angle }) => ({ direction, x, y, angle: Math.round(angle * 180 / Math.PI) }))) });
+    const compass = JSON.stringify(this.compass.map(({ direction, x, y, angle }) => ({ direction, x, y, angle: Math.round(angle * 180 / Math.PI) })));
+    if (canvas.dataset.columns !== String(width) || canvas.dataset.rows !== String(height) || canvas.dataset.compass !== compass)
+      Object.assign(canvas.dataset, { originX: "0", originY: "0", columns: String(width), rows: String(height), cols: String(width), x0: "0", y0: "0", compass });
     const ctx = canvas.getContext("2d"); ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(this.overview, 0, 0);
     const cell = canvas.width / width, unit = Math.min(2, devicePixelRatio || 1);
@@ -249,7 +258,7 @@ export class GameMap {
     this.viewport.scrollLeft = (this.state.x + .5) * CELL * this.scale - this.viewport.clientWidth / 2;
     this.viewport.scrollTop = (this.state.y + .5) * CELL * this.scale - this.viewport.clientHeight / 2;
   }
-  resize() { if (this.state) { this.renderSignature = ""; this.update(this.state); } }
+  resize() { this.compactWidth = 0; if (this.state) { this.renderSignature = ""; this.update(this.state); } }
   select(event, canvas) {
     if (!this.state) return;
     const bounds = canvas.getBoundingClientRect();

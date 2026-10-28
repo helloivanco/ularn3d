@@ -66,7 +66,6 @@ function loadProp(name) {
   return pieces.get(name);
 }
 /** Start fetching every prop; resolves once all are ready. */
-export const preloadProps = () => Promise.all(Object.keys(PROPS).map(loadProp));
 let chestGeometry = null;
 loadProp("chest").then((geometry) => { chestGeometry = geometry; }).catch(() => {});
 /** The pack chest once it has loaded, or null so the caller keeps its own. */

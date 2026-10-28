@@ -2,7 +2,7 @@
 
 Generated with the built-in image generation tool on September 17, 2026.
 
-Asset: `public/art/monsters/lemming.png` (transparent PNG).
+Original: `docs/art/lemming.png` (transparent PNG, 1254×1254). The game ships `public/art/monsters/lemming.webp`, scaled to 256 px by `node scripts/bake-item-art.mjs`.
 
 This is a presentation-only replacement for monster species 1 in the 3D game. The original engine's lemming name, attributes, behavior, spawn rules, and classic artwork remain unchanged. The image is loaded once and shared between lemmings; the existing facing logic mirrors it.
 

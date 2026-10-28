@@ -50,8 +50,6 @@ export function spellProfile(spell = {}) {
 }
 
 const FILES = {
-  town: "/audio/town.mp3",
-  cave: "/audio/cave.mp3",
   step: "/audio/step.mp3",
   swing: "/audio/swing.mp3",
   hit: "/audio/hit.mp3",

@@ -107,11 +107,15 @@ test("town stays within a web GPU budget after the poly and light cuts", async (
   page,
 }) => {
   await start(page);
+  // Count the hero's 4.7k triangles too.
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().heroVisible)).toBe(true);
   await page.waitForTimeout(400);
   const metrics = await page.evaluate(() => ularnGraphics.metrics());
   console.log("Town graphics", metrics);
   expect(metrics.drawCalls).toBeLessThan(500);
-  expect(metrics.triangles).toBeLessThan(30000);
+  // Each new game lays out a different town: 15 towns measured 28.3k–35.2k
+  // in 1.8.1 and 1.8.2 alike (KayKit dressing and rigged heroes since 1.6.0).
+  expect(metrics.triangles).toBeLessThan(38000);
   expect(metrics.lights).toBeLessThanOrEqual(6);
   expect(metrics.environment).toBe(false);
   expect(metrics.bloom).toBe(false);

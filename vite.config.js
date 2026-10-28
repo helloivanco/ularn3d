@@ -102,10 +102,18 @@ export default defineConfig({
     injectAppVersion(),
   ],
   build: {
-    rollupOptions: {
+    // three's core alone is about 620 KB before gzip.
+    chunkSizeWarningLimit: 750,
+    rolldownOptions: {
       input: {
         main: resolve(rootDir, "index.html"),
         play: resolve(rootDir, "play/index.html"),
+      },
+      output: {
+        // three's core changes only when three does, so returning players keep
+        // it cached across releases. Its addons stay with the code that uses
+        // them, which keeps the Cinematic-only ones out of the first load.
+        codeSplitting: { groups: [{ name: "three", test: /[\\/]node_modules[\\/]three[\\/]build[\\/]/ }] },
       },
     },
   },

@@ -61,7 +61,6 @@ export const beginRun = async ({ mode, roomId, engineVersion, difficulty = 0 }) 
     p_engine_version: engineVersion,
   });
 
-export const configureRoomCharacter = (roomId, character) => rpc("configure_room_character", { p_room_id: roomId, p_character_class: character });
 export const syncRoom = (roomId, after = 0) => rpc("sync_room", { p_room_id: roomId, p_after: after });
 export const resumeRoom = (roomId) => rpc("resume_room", { p_room_id: roomId });
 export const sendRoomAction = (roomId, requestId, input) => rpc("send_room_action", { p_room_id: roomId, p_request_id: requestId, p_input: input });
@@ -69,8 +68,6 @@ export const leaveRoom = (roomId) => rpc("leave_room", { p_room_id: roomId });
 export const finishRoom = (roomId) => rpc("finish_room", { p_room_id: roomId });
 export const kickMember = (roomId, userId) => rpc("kick_member", { p_room_id: roomId, p_user_id: userId });
 export const transferHost = (roomId, userId) => rpc("transfer_host", { p_room_id: roomId, p_user_id: userId });
-
-export const claimAbandonedHost = async (roomId) => rpc("claim_host", { p_room_id: roomId });
 
 export const markReady = async (roomId, ready) =>
   rpc("set_ready", { p_room_id: roomId, p_ready: ready });

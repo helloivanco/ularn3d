@@ -1,7 +1,4 @@
 node_modules/
-.env
-.env.local
-.env.*.local
 dist/
 .vercel/
 test-results/
@@ -14,10 +11,12 @@ public/engine/score-config.json
 .env*
 !.env.example
 supabase/.temp/
-.vercel
 
 # Locally staged desktop download; do not commit binaries.
 public/downloads/*.exe
 
 # Finder metadata is kept in recovery snapshots, not application commits.
 .DS_Store
+
+# Local Claude Code session config (preview launcher, worktrees).
+.claude/

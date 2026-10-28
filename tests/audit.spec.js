@@ -281,7 +281,8 @@ test("quality switching, WebGL loss and restoration preserve gameplay", async ({
   expect(await page.evaluate(() => ularnGraphics.metrics().quality)).toBe(
     "cinematic",
   );
-  expect(await page.evaluate(() => ularnGraphics.metrics().bloom)).toBe(true);
+  // Cinematic's post-processing is fetched on first use, so bloom follows shortly.
+  await expect.poll(() => page.evaluate(() => ularnGraphics.metrics().bloom)).toBe(true);
   await page.locator("#resume-game").click();
   await page.screenshot({ path: "test-results/cinematic-town.png" });
   await page.evaluate(() => {
@@ -336,10 +337,41 @@ test("all creature and item models render; level changes release GPU resources",
     paint();
   });
   await page.screenshot({ path: "test-results/volcano-models.png" });
+  // three counts a geometry only once it is first drawn, and undead swap in
+  // rigged bodies as they load. Read only after a few frames and about a second
+  // of unchanged counts, or a body still loading looks like a leak.
+  async function settle(frames) {
+    let previous = null, same = 0;
+    await expect
+      .poll(async () => {
+        const m = await page.evaluate(() => ularnGraphics.metrics());
+        const reading = `${m.geometries}:${m.textures}`;
+        same = reading === previous ? same + 1 : 0;
+        previous = reading;
+        return m.renderedFrames >= frames + 3 && same >= 3;
+      }, { timeout: 15000, intervals: [300] })
+      .toBe(true);
+  }
+  await settle(0);
   async function cycle() {
+    const frames = await page.evaluate(() => ularnGraphics.metrics().renderedFrames);
     await page.evaluate(() => {
+      // Revisiting a floor adds random monsters (classic sethp), so each cycle
+      // would draw a bigger cast. Keep every floor's cast as first seen, so the
+      // counts compare the same scenes.
+      const cast = (window.__cycleCast ||= {});
       for (const l of [0, 1, 16, 20]) {
         newcavelevel(l);
+        const keys = [];
+        for (let x = 0; x < MAXX; x++)
+          for (let y = 0; y < MAXY; y++) {
+            const monster = monsterAt(x, y);
+            if (!monster) continue;
+            const key = `${x},${y},${monster.arg}`;
+            if (cast[l] && !cast[l].includes(key)) setMonster(x, y, null);
+            else keys.push(key);
+          }
+        cast[l] ||= keys;
         paint();
       }
     });
@@ -348,6 +380,7 @@ test("all creature and item models render; level changes release GPU resources",
         timeout: 15000,
       })
       .toBeGreaterThan(40);
+    await settle(frames);
     return page.evaluate(() => ularnGraphics.metrics());
   }
   await cycle();

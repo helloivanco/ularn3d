@@ -206,7 +206,7 @@ test("potion and scroll duration effects still accumulate", () => {
 });
 
 test("undiscovered potions share one art path", () => {
-  assert.match(itemArt, /UNKNOWN_POTION_ART = "\/art\/items\/potion-unknown\.png"/);
+  assert.match(itemArt, /UNKNOWN_POTION_ART = "\/art\/items\/potion-unknown\.webp"/);
   assert.match(itemArt, /if \(!known\) return UNKNOWN_POTION_ART/);
 });
 

@@ -55,8 +55,6 @@ test("bundled audio stays local and small", () => {
   assert.equal(audio.includes("https://"), false);
   assert.equal(audio.includes("prefers-reduced-motion"), false);
   const files = {
-    "public/audio/town.mp3": 260_000,
-    "public/audio/cave.mp3": 260_000,
     "public/audio/step.mp3": 20_000,
     "public/audio/swing.mp3": 20_000,
     "public/audio/hit.mp3": 20_000,

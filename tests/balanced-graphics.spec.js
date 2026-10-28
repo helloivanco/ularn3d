@@ -174,8 +174,8 @@ test("gold and items brighten the sprite they already use", () => {
   installDocument();
   const gold = itemSprite({ id: 18, name: "gold", arg: 40 });
   const gem = itemSprite({ id: 50, name: "diamond", arg: 0 });
-  expect(gold.userData.artPath).toBe("/art/items/gold-pile.png");
-  expect(gem.userData.artPath).toBe("/art/items/diamond.png");
+  expect(gold.userData.artPath).toBe("/art/items/gold-pile.webp");
+  expect(gem.userData.artPath).toBe("/art/items/diamond.webp");
   const goldColor = gold.userData.artwork.material.color;
   const gemColor = gem.userData.artwork.material.color;
   expect(gold.userData.artwork.material.type).toBe("MeshBasicMaterial");

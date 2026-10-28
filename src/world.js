@@ -1,13 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
-import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { VignetteShader, CAVE_LIGHT, OCCLUDER_LAYER, caveEnvironmentScene } from "./cave-light.js";
+import { CAVE_LIGHT, OCCLUDER_LAYER, caveEnvironmentScene } from "./cave-light.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { mat, matBasic, surface, surfaceLambert, surfaceBasic, noise, shiftedTexture, placedTexture, tileScatter, worldMasonry, glowMap, stoneTint, releaseMaterialResources } from "./materials.js";
 import { pixelAlignWorld } from "./pixel-align.js";
@@ -18,15 +11,15 @@ import { CombatEffects } from "./combat-effects.js";
 import { ImpactEffects, forgetFlashMeshes } from "./impact-effects.js";
 import { Trauma, PresentationClock } from "./feedback.js";
 import { StaticTiles } from "./static-world.js";
-import { TerrainGrid, ChunkedTerrainMesh } from "./terrain-grid.js";
+import { ChunkedTerrainMesh } from "./terrain-grid.js";
 import { creature, faceCreature, animateCreature, creatureMetrics, releaseCreatureResources } from "./creatures.js";
-import { compact, percentile, sample, releaseCompactMaterials, bakeWallRelief } from "./graphics-utils.js";
-import { HeroAnimation, WALK_SETTLE_MS, walkProgress } from "./hero-animation.js";
+import { percentile, sample, releaseCompactMaterials, bakeWallRelief } from "./graphics-utils.js";
+import { HeroAnimation } from "./hero-animation.js";
 import { heroBody, creatureBody, CharacterRig } from "./hero-skin.js";
 import { SetDressing, chestModel } from "./set-dressing.js";
-import { TorchLighting, stabilizeShadow, TOWN_LIGHT, townSkyScene } from "./lighting.js";
+import { TorchLighting, stabilizeShadow, TOWN_LIGHT } from "./lighting.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { wallHeight, hidesFocus, FOCUS_REACH, wallLip, WALL_CUT, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
+import { wallHeight, hidesFocus, FOCUS_REACH, wallLip, WALL_CUT, WALL_FULL, WALL_TILE_SIZE, WALL_BASE_Y, FLOOR_HEIGHT, FLOOR_CENTER_Y, groundSlab } from "./wall-cut.js";
 import { AmbientRats, AMBIENT_RAT_POOL } from "./ambient-rats.js";
 import { auraControl } from "./cooperation-aura.js";
 import {
@@ -40,7 +33,6 @@ import {
   orb,
   tree,
   hero,
-  equipHero,
   releaseModelResources,
   cone,
   building,
@@ -103,6 +95,14 @@ const TOWN_BLOOM = Object.freeze({ strength: 0.1, radius: 0.4, threshold: 1.45 }
  * density are skipped. The reached tier is remembered on this device.
  */
 const AUTO_TIER_KEY = "ularn3d.autoTier";
+// Post-processing and the town sky are Cinematic-only: fetched on first use,
+// and at startup when Cinematic is the saved quality. A failed fetch keeps
+// plain rendering, and the next Cinematic request tries again.
+let cinematicKit = null, cinematicLoad = null;
+const loadCinematic = () => (cinematicLoad ||= import("./cinematic.js").then(
+  (module) => { cinematicKit = module; },
+  () => { cinematicLoad = null; },
+));
 const EMBER_COLOR = 0xff7a3c;
 /* Cinematic vignette strength: deeper in the caves, faint in town. */
 const VIGNETTE = { town: 0.16, caves: 0.12, volcano: 0.14 };
@@ -290,6 +290,7 @@ export class World {
     try {
       this.quality = localStorage.getItem("ularn3d.quality") || this.quality;
     } catch {}
+    if (this.quality === "cinematic") loadCinematic();
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x112c32);
     this.scene.fog = new THREE.FogExp2(0x112c32, 0.022);
@@ -790,7 +791,7 @@ export class World {
         wallInstances: this.walls.count,
         shadowUpdates: this.shadowUpdates,
         shadowTexelSize: (this.sun.shadow.camera.right-this.sun.shadow.camera.left)/this.sun.shadow.mapSize.x,
-        torchReassignments:this.lighting.reassignments,
+        torchReassignments:this.lighting.reassignments, torchShadowPasses: this.torchShadowPasses || 0,
         antialiasing:this.cinematicRendering() ? "SMAA" : this.msaa ? "MSAA" : "none",
         caveLit: !!this.floor.material?.userData?.caveLit, caveRelief: !!(this.floor.material?.userData?.caveLit && this.floor.material.normalMap), vignette: !!(this.vignette && this.composer && this.cinematicRendering()),
         lanternShadow: !!(this.playerLight.visible && this.playerLight.castShadow), torchShadows: this.torchLights.filter((l) => l.visible && l.castShadow).length,
@@ -850,8 +851,10 @@ export class World {
         const map = art.userData.artwork?.material?.map;
         const image = map?.image;
         let cornerAlpha = null;
-        if (image?.getContext) {
-          const ctx = image.getContext("2d");
+        if (image?.width && (image.getContext || image.complete)) {
+          const canvas = Object.assign(document.createElement("canvas"), { width: image.width, height: 1 });
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0);
           const a = ctx.getImageData(0, 0, 1, 1).data[3];
           const b = ctx.getImageData(image.width - 1, 0, 1, 1).data[3];
           cornerAlpha = Math.max(a, b);
@@ -1524,7 +1527,8 @@ export class World {
   }
   /** The town's reflections and fill: the same sky the sun shines from. */
   buildEnvironment() {
-    const pmrem = new THREE.PMREMGenerator(this.renderer), sky = townSkyScene();
+    if (!cinematicKit) return;
+    const pmrem = new THREE.PMREMGenerator(this.renderer), sky = cinematicKit.townSkyScene();
     this.environment?.dispose();
     this.environment = pmrem.fromScene(sky, 0.02);
     sky.traverse((object) => { object.geometry?.dispose(); object.material?.dispose(); });
@@ -1545,44 +1549,38 @@ export class World {
     this.composer.passes.forEach((pass) => pass.dispose());
     this.composer.dispose();
     this.composer = null;
-    this.bloom = null;
-    this.vignette = null;
+    this.bloom = this.ao = this.antialias = this.vignette = null;
   }
   ensureComposer() {
     if (this.composer) return;
+    if (!cinematicKit) {
+      // Plain rendering until the Cinematic code arrives; then the quality applies again.
+      if (!this.cinematicPending) {
+        this.cinematicPending = true;
+        loadCinematic().then(() => {
+          this.cinematicPending = false;
+          if (cinematicKit && !this.disposed && this.cinematicRendering()) this.applyQuality();
+        });
+      }
+      return;
+    }
     const width = this.container.clientWidth || innerWidth;
     const height = this.container.clientHeight || innerHeight;
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    // Half-res + weaker bloom: full-size UnrealBloomPass lags typical GPUs.
-    this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(Math.max(1, width * 0.5), Math.max(1, height * 0.5)),
-      TOWN_BLOOM.strength,
-      TOWN_BLOOM.radius,
-      TOWN_BLOOM.threshold,
-    );
-    this.ao = new SSAOPass(this.scene, this.camera, width / 2, height / 2);
-    // Contact shading at tile scale (world units), not an 8-tile smear.
-    this.ao.kernelRadius=1.2; this.ao.minDistance=.0005; this.ao.maxDistance=.01;
-    // The composer sizes every pass at full resolution; AO stays at half.
-    const aoSize = this.ao.setSize.bind(this.ao);
-    this.ao.setSize = (w, h) => aoSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
-    this.composer.addPass(this.ao);
-    this.composer.addPass(this.bloom);
-    this.antialias=new SMAAPass(); this.composer.addPass(this.antialias);
-    this.vignette = new ShaderPass(VignetteShader); this.composer.addPass(this.vignette);
-    this.composer.addPass(new OutputPass());
+    Object.assign(this, cinematicKit.createComposer(this.renderer, this.scene, this.camera, width, height, TOWN_BLOOM));
   }
   applyLevelLighting() {
     const cinematic = this.cinematicRendering();
     const town = !this.state || this.state.level === 0;
     const volcano = this.state?.level > 15;
     const lit = cinematic && !town;
+    // New lights or reflections mean new shaders, see-through ones included.
+    for (const mesh of this.cutawayBuildings || []) mesh.userData.cutawayWarm = false;
+    this.cutawaysCold = !!this.cutawayBuildings?.length;
     // The studio reflection suits daylight. Set per floor, not only on a quality
     // change, or a cave entered from town kept lighting its stone like a studio.
     if (cinematic && town) {
       if (!this.environment) this.buildEnvironment();
-      this.scene.environment = this.environment.texture;
+      this.scene.environment = this.environment?.texture ?? null;
       this.scene.environmentIntensity = TOWN_LIGHT.sky.intensity;
     } else if (lit) {
       if (!this.caveEnvironment) this.buildCaveEnvironment();
@@ -1668,7 +1666,7 @@ export class World {
     this.renderer.toneMappingExposure = cinematic ? 1.15 : 1;
     if (cinematic) {
       this.ensureComposer();
-      this.bloom.enabled = true;
+      if (this.bloom) this.bloom.enabled = true;
     } else this.disposeComposer();
     this.torchBudget = 0;
     this.disablePointLights();
@@ -1730,15 +1728,15 @@ export class World {
   applyFloorMaterials() {
     const tint = stoneTint(this.state?.level ?? 0);
     // Course joints fall on whole tiles, so a joint meets the floor at every wall's foot.
-    const courses = shiftedTexture("stone", "masonry", 0.37, 0);
+    const masonry = shiftedTexture("stone", "masonry", 0.37, 0);
     // Floors turn per tile; walls and caps are laid in world space, so their
     // courses run on from block to block (worldMasonry).
     const volcano = (this.state?.level ?? 0) > 15;
     const laid = (material) => worldMasonry(material, WALL_BASE_Y);
     this.floor.material = this.floorSurface(volcano ? "basalt" : "flags", tint.floor, undefined, tileScatter);
     this.grassFloor.material = this.floorSurface("grass", 0xffffff, undefined, tileScatter);
-    this.walls.material = this.floorSurface("stone", tint.wall, { map: courses, vertexColors:true }, laid);
-    this.caps.material = this.floorSurface("stone", tint.cap, { map: courses, vertexColors:true }, laid);
+    this.walls.material = this.floorSurface("stone", tint.wall, { map: masonry, vertexColors:true }, laid);
+    this.caps.material = this.floorSurface("stone", tint.cap, { map: masonry, vertexColors:true }, laid);
   }
   floorVariation(level, grass, x, y) {
     const n = noise(x, y);
@@ -1777,6 +1775,7 @@ export class World {
    */
   renderTorchShadows() {
     this.torchShadowsDirty = false;
+    this.torchShadowPasses = (this.torchShadowPasses || 0) + 1;
     const camera = this.camera, mask = camera.layers.mask, lantern = this.playerLight.shadow, follows = lantern.autoUpdate;
     // A lantern update asked for this frame still belongs to the main pass.
     const pending = this.renderer.shadowMap.needsUpdate;
@@ -2535,6 +2534,7 @@ export class World {
       }
       if (fountain?.userData.drainStartedAt) this.draining.push(fountain);
     }
+    this.cutawaysCold = this.cutawayBuildings.some((mesh) => !mesh.userData.cutawayWarm);
     this.walls.count = this.caps.count = this.wallCells.length;
     // Seed rats from the new wall set before the first cutaway pass.
     this.ambientRats.setLayout(this.wallCells, state.level, this.wallHeightAt);
@@ -2747,9 +2747,15 @@ export class World {
     // Walls also lower in front of anything the player knows is there, not only
     // the hero: creatures, loot, stairs, chests and fountains stand shorter than
     // a wall and were hidden behind it. Doors sit in the walls and need nothing.
-    const focus = town ? [] : (this.state.tiles || []).filter((t) => (t.monster || (t.id && !t.wall && t.doorFacing == null)) &&
-      (t.x !== this.state.x || t.y !== this.state.y) &&
-      Math.max(Math.abs(t.x - this.state.x), Math.abs(t.y - this.state.y)) <= FOCUS_REACH);
+    // This runs every frame; the focus only changes with a new snapshot.
+    if (this.wallFocusOf !== this.state) {
+      this.wallFocusOf = this.state;
+      this.wallFocus = town ? [] : (this.state.tiles || []).filter((t) => (t.monster || (t.id && !t.wall && t.doorFacing == null)) &&
+        (t.x !== this.state.x || t.y !== this.state.y) &&
+        Math.max(Math.abs(t.x - this.state.x), Math.abs(t.y - this.state.y)) <= FOCUS_REACH);
+      this.wallFocusKey = this.wallFocus.map((t) => t.y * 64 + t.x).join(",");
+    }
+    const focus = this.wallFocus;
     // Town heights never change. Skip player/orbit from the cache key so a
     // plaza walk does not rebuild every wall matrix.
     const viewKey = town
@@ -2760,23 +2766,27 @@ export class World {
           Math.round(toward.x * 50),
           Math.round(toward.z * 50),
           this.wallLayout,
-          focus.map((t) => t.y * 64 + t.x).join(","),
+          this.wallFocusKey,
         ].join(":");
     if (this.wallView === viewKey) return;
     this.wallView = viewKey;
     const layoutChanged = this.wallLayoutKey !== this.wallLayout;
     this.wallLayoutKey = this.wallLayout;
     if (layoutChanged) this.wallHeightAt.length = 0;
-    let changed = 0;
+    let changed = 0, nearTorch = false;
     for (let i = 0; i < this.wallCells.length; i++) {
       const t = this.wallCells[i],
         dx = t.x - this.state.x,
         dz = t.y - this.state.y;
+      // Nothing beyond the focus reach can be cut; walls standing there stay as they are.
+      if (!layoutChanged && this.wallHeightAt[i] === WALL_FULL && Math.max(Math.abs(dx), Math.abs(dz)) > FOCUS_REACH + 3) continue;
       const h = !town && focus.some((f) => hidesFocus(t.x - f.x, t.y - f.y, toward.x, toward.z))
         ? WALL_CUT : wallHeight(dx, dz, toward.x, toward.z, town);
       if (!layoutChanged && this.wallHeightAt[i] === h) continue;
       this.wallHeightAt[i] = h;
       changed++;
+      nearTorch ||= this.torchLights.some((light) => light.visible && light.castShadow &&
+        (light.position.x - t.x) ** 2 + (light.position.z - t.y) ** 2 <= light.distance ** 2);
       this.scratchPosition.set(t.x, h / 2 + WALL_BASE_Y, t.y);
       this.scratchScale.set(WALL_TILE_SIZE, h, WALL_TILE_SIZE);
       // Blocks stand square: a turned block turned its baked side shading with it.
@@ -2821,9 +2831,10 @@ export class World {
       if (layoutChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       if (layoutChanged) mesh.computeBoundingSphere();
     }
-    // A lowered wall must stop casting its full-height torch shadow too.
     if (layoutChanged) { this.markShadowUpdate(); this.refreshTorchShadows(); }
-    else this.refreshTorchShadows();
+    // A wall lowered or raised within a torch's reach must cast its new shadow,
+    // once the view holds still: orbiting changes the cut every degree or so.
+    else if (nearTorch) this.torchShadowsStale = true;
   }
 
   pick(e) {
@@ -3278,12 +3289,17 @@ export class World {
       if(tile)this.marker.position.set(tile.x,0,tile.y);
       this.onHover(tile,this.hoverPointer); this.hoverDirty=false;
     }
+    if (this.cutawaysCold) this.warmCutaways();
     if (this.state?.level === 0) this.updateCutaways(Math.min(elapsed, .1));
     if (this.qualityPending) this.applyQualityWhenSettled();
     // DOM overlays (damage numbers, nameplates) follow the camera of this frame.
     for (const hook of this.frameHooks) hook(this);
     this.applyPixelGrid();
     try {
+      if (this.torchShadowsStale && !this.cameraLive && !this.cameraTween && !this.viewEasing && !this.followLive()) {
+        this.torchShadowsStale = false;
+        this.refreshTorchShadows();
+      }
       if (this.torchShadowsDirty && this.cinematicRendering()) this.renderTorchShadows();
       if (this.composer && this.cinematicRendering()) {
         if (this.vignette) this.aimVignette();
@@ -3336,6 +3352,21 @@ export class World {
       if (this.cutawayHits.length) return true;
     }
     return false;
+  }
+  /**
+   * A fading building draws with the see-through variant of its shaders. Compile
+   * those with the scene's current lights before the first fade, which otherwise
+   * stalls on the frame the hero first walks behind a building.
+   */
+  warmCutaways() {
+    this.cutawaysCold = false;
+    const cold = this.cutawayBuildings.filter((mesh) => !mesh.userData.cutawayWarm);
+    const parts = cold.flatMap((mesh) => mesh.userData.buildingOccluders).filter((part) => !part.material.transparent);
+    cold.forEach((mesh) => { mesh.userData.cutawayWarm = true; });
+    if (!parts.length) return;
+    parts.forEach((part) => { part.material.transparent = true; });
+    this.renderer.compile(this.props, this.camera, this.scene);
+    parts.forEach((part) => { part.material.transparent = false; part.material.needsUpdate = true; });
   }
   updateCutaways(dt) {
     if (!this.state) return;

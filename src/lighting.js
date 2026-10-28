@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { Sky } from "three/addons/objects/Sky.js";
 
 /*
  * Cinematic town sun: late afternoon from the south-west, about 35° up, so
@@ -7,6 +6,8 @@ import { Sky } from "three/addons/objects/Sky.js";
  * its fixed overhead sun; only this stabilized, shadow-casting sun moves.
  */
 const OFFSET = new THREE.Vector3(-16, 14, 12);
+/** Where the sun sits relative to what it lights; the Cinematic sky shines from here too. */
+export const SUN_OFFSET = OFFSET;
 const FORWARD = OFFSET.clone().normalize();
 const RIGHT = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), FORWARD).normalize();
 const UP = new THREE.Vector3().crossVectors(FORWARD, RIGHT);
@@ -35,24 +36,6 @@ export const TOWN_LIGHT = Object.freeze({
   // from every side on top of the sun, and the knight's silver read white.
   sky: { intensity: 0.15, turbidity: 4.5, rayleigh: 1.5, mie: 0.004 },
 });
-
-/**
- * The sky the town's PBR surfaces see: atmospheric scattering lit from the
- * same direction as the sun, without the sun's disc (the light itself makes
- * the highlights). Water and glass reflect it, and shade takes its blue.
- */
-export function townSkyScene() {
-  const scene = new THREE.Scene(), sky = new Sky(), { sky: look } = TOWN_LIGHT;
-  sky.scale.setScalar(100);
-  const uniforms = sky.material.uniforms;
-  uniforms.turbidity.value = look.turbidity;
-  uniforms.rayleigh.value = look.rayleigh;
-  uniforms.mieCoefficient.value = look.mie;
-  uniforms.sunPosition.value.copy(OFFSET).normalize();
-  uniforms.showSunDisc.value = 0;
-  scene.add(sky);
-  return scene;
-}
 
 // Slots keep their lamp identity across nearest-distance ties. A replacement
 // fades to zero before moving, then fades in at the new static source.

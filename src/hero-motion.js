@@ -286,10 +286,6 @@ const restArm = [
   { t: 0, x: 0, y: 0, z: 0 },
   { t: 1, x: 0, y: 0, z: 0 },
 ];
-const restFore = [
-  { t: 0, x: FOREARM_REST },
-  { t: 1, x: FOREARM_REST },
-];
 const noGrip = [
   { t: 0, x: 0 },
   { t: 1, x: 0 },

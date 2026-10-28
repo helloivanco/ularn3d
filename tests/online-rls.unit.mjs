@@ -11,21 +11,28 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const database = "ularn_online_test";
 
-const psqlAdmin = (args, sql) =>
-  execFileSync("sudo", ["-u", "postgres", "psql", ...args], {
-    input: sql,
-    encoding: "utf8",
-  });
+// -n: fail instead of waiting at a sudo password prompt.
+const psql = (args, options = {}) =>
+  execFileSync("sudo", ["-n", "-u", "postgres", "psql", ...args], { encoding: "utf8", ...options });
+
+// Needs a local Postgres reachable as the postgres user without a password;
+// anywhere else the test skips and says why.
+const unavailable = (() => {
+  try {
+    psql(["-Atc", "select 1"], { stdio: ["ignore", "pipe", "pipe"] });
+    return false;
+  } catch (error) {
+    return `local Postgres unavailable: ${String(error.stderr || error.message).trim().split("\n")[0]}`;
+  }
+})();
+
+const psqlAdmin = (args, sql) => psql(args, { input: sql });
 
 const apply = (file) => {
-  execFileSync(
-    "sudo",
-    ["-u", "postgres", "psql", "-d", database, "-v", "ON_ERROR_STOP=1", "-f", join(root, file)],
-    { encoding: "utf8" }
-  );
+  psql(["-d", database, "-v", "ON_ERROR_STOP=1", "-f", join(root, file)]);
 };
 
-test("online rooms migration enforces auth, passwords, chat, and realtime RLS", () => {
+test("online rooms migration enforces auth, passwords, chat, and realtime RLS", { skip: unavailable }, () => {
   psqlAdmin(["-d", "postgres", "-v", "ON_ERROR_STOP=1"], `
     select pg_terminate_backend(pid) from pg_stat_activity
     where datname = '${database}' and pid <> pg_backend_pid();
@@ -64,8 +71,4 @@ test("online rooms migration enforces auth, passwords, chat, and realtime RLS", 
 });
 
 const applyAndCapture = (file) =>
-  execFileSync(
-    "sudo",
-    ["-u", "postgres", "psql", "-d", database, "-v", "ON_ERROR_STOP=1", "-f", join(root, file)],
-    { encoding: "utf8" }
-  );
+  psql(["-d", database, "-v", "ON_ERROR_STOP=1", "-f", join(root, file)]);

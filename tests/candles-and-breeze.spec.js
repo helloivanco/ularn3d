@@ -28,6 +28,10 @@ const besideCandle = (page) => page.evaluate(async () => {
 });
 
 test("Cinematic candles burn on every wick and light the hero's corner", async ({ page }) => {
+  // Entering a lit cave compiles every lit shader; under software GL that is slow
+  // for real, so give it time and a smaller frame, as the building-fade test does.
+  test.slow();
+  await page.setViewportSize({ width: 720, height: 540 });
   await begin(page, "cinematic");
   const candles = await besideCandle(page);
   expect(candles).toBeGreaterThan(0);
